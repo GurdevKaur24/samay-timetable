@@ -1,0 +1,666 @@
+{
+  "id": "city-arts",
+  "name": "City Arts and Science College",
+  "place": "Amritsar",
+  "term": "Semester I, 2026–27",
+  "kind": "Arts, Science and Commerce",
+  "scheme": {
+    "days": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat"
+    ],
+    "periods": [
+      {
+        "label": "P1",
+        "start": "08:30",
+        "end": "09:15"
+      },
+      {
+        "label": "P2",
+        "start": "09:15",
+        "end": "10:00"
+      },
+      {
+        "label": "P3",
+        "start": "10:15",
+        "end": "11:00"
+      },
+      {
+        "label": "P4",
+        "start": "11:00",
+        "end": "11:45"
+      },
+      {
+        "label": "P5",
+        "start": "12:30",
+        "end": "13:15"
+      },
+      {
+        "label": "P6",
+        "start": "13:15",
+        "end": "14:00"
+      }
+    ],
+    "breaks": [
+      {
+        "after": 2,
+        "label": "Tea"
+      },
+      {
+        "after": 4,
+        "label": "Lunch"
+      }
+    ],
+    "theory_room_type": "classroom",
+    "lab_block": 2,
+    "lab_prefix": "G",
+    "rules": {
+      "lectures_per_week": 4,
+      "lab_sessions_per_week": 1,
+      "max_same_subject_per_day": 1,
+      "teacher_max_per_day": 4
+    }
+  },
+  "departments": [
+    {
+      "id": "CS",
+      "name": "Computer Science",
+      "status": "ready"
+    },
+    {
+      "id": "PHY",
+      "name": "Physics",
+      "status": "ready"
+    },
+    {
+      "id": "COM",
+      "name": "Commerce",
+      "status": "review"
+    },
+    {
+      "id": "GEN",
+      "name": "Maths and English",
+      "status": "ready"
+    }
+  ],
+  "courses": [
+    {
+      "id": "BSC-CS",
+      "name": "B.Sc. Computer Science",
+      "dept": "CS",
+      "years": 3
+    },
+    {
+      "id": "BSC-PHY",
+      "name": "B.Sc. Physics",
+      "dept": "PHY",
+      "years": 3
+    },
+    {
+      "id": "BCOM",
+      "name": "B.Com",
+      "dept": "COM",
+      "years": 3
+    }
+  ],
+  "sections": [
+    {
+      "id": "BSc CS-I",
+      "dept": "CS",
+      "course": "BSC-CS",
+      "sem": 1,
+      "strength": 66,
+      "lab_groups": [
+        {
+          "label": "G1",
+          "strength": 22
+        },
+        {
+          "label": "G2",
+          "strength": 22
+        },
+        {
+          "label": "G3",
+          "strength": 22
+        }
+      ]
+    },
+    {
+      "id": "BSc Phy-I",
+      "dept": "PHY",
+      "course": "BSC-PHY",
+      "sem": 1,
+      "strength": 60,
+      "lab_groups": [
+        {
+          "label": "G1",
+          "strength": 20
+        },
+        {
+          "label": "G2",
+          "strength": 20
+        },
+        {
+          "label": "G3",
+          "strength": 20
+        }
+      ]
+    },
+    {
+      "id": "BCom-II",
+      "dept": "COM",
+      "course": "BCOM",
+      "sem": 3,
+      "strength": 70,
+      "lab_groups": []
+    }
+  ],
+  "teachers": [
+    {
+      "id": "C1",
+      "name": "Dr. Neha Bansal",
+      "dept": "CS",
+      "max_per_day": 4,
+      "unavailable": []
+    },
+    {
+      "id": "C2",
+      "name": "Mr. Arjun Mehta",
+      "dept": "CS",
+      "max_per_day": 4,
+      "unavailable": [
+        [
+          "Sat",
+          5
+        ],
+        [
+          "Sat",
+          6
+        ]
+      ]
+    },
+    {
+      "id": "C3",
+      "name": "Ms. Simran Kohli",
+      "dept": "CS",
+      "max_per_day": 4,
+      "unavailable": []
+    },
+    {
+      "id": "P1",
+      "name": "Dr. Rajiv Saini",
+      "dept": "PHY",
+      "max_per_day": 4,
+      "unavailable": []
+    },
+    {
+      "id": "P2",
+      "name": "Ms. Tanya Joshi",
+      "dept": "PHY",
+      "max_per_day": 4,
+      "unavailable": []
+    },
+    {
+      "id": "P3",
+      "name": "Dr. Manpreet Sandhu",
+      "dept": "PHY",
+      "max_per_day": 4,
+      "unavailable": [
+        [
+          "Mon",
+          1
+        ],
+        [
+          "Mon",
+          2
+        ]
+      ]
+    },
+    {
+      "id": "M1",
+      "name": "Prof. Kavita Rao",
+      "dept": "GEN",
+      "max_per_day": 4,
+      "unavailable": []
+    },
+    {
+      "id": "E1",
+      "name": "Ms. Pooja Anand",
+      "dept": "GEN",
+      "max_per_day": 4,
+      "unavailable": []
+    },
+    {
+      "id": "B1",
+      "name": "Mr. Vikram Ahuja",
+      "dept": "COM",
+      "max_per_day": 4,
+      "unavailable": []
+    },
+    {
+      "id": "B2",
+      "name": "Dr. Ritu Sethi",
+      "dept": "COM",
+      "max_per_day": 4,
+      "unavailable": []
+    }
+  ],
+  "rooms": [
+    {
+      "id": "Room 1",
+      "type": "classroom",
+      "capacity": 75,
+      "owner": "CS"
+    },
+    {
+      "id": "Room 2",
+      "type": "classroom",
+      "capacity": 75,
+      "owner": "PHY"
+    },
+    {
+      "id": "Room 3",
+      "type": "classroom",
+      "capacity": 75,
+      "owner": "COM"
+    },
+    {
+      "id": "Auditorium",
+      "type": "classroom",
+      "capacity": 200,
+      "owner": "Shared"
+    },
+    {
+      "id": "Comp Lab A",
+      "type": "computer_lab",
+      "capacity": 25,
+      "owner": "CS"
+    },
+    {
+      "id": "Comp Lab B",
+      "type": "computer_lab",
+      "capacity": 25,
+      "owner": "CS"
+    },
+    {
+      "id": "Comp Lab C",
+      "type": "computer_lab",
+      "capacity": 25,
+      "owner": "Shared"
+    },
+    {
+      "id": "Sci Lab 1",
+      "type": "science_lab",
+      "capacity": 25,
+      "owner": "PHY"
+    },
+    {
+      "id": "Sci Lab 2",
+      "type": "science_lab",
+      "capacity": 25,
+      "owner": "PHY"
+    },
+    {
+      "id": "Sci Lab 3",
+      "type": "science_lab",
+      "capacity": 25,
+      "owner": "PHY"
+    }
+  ],
+  "subjects": [
+    {
+      "id": "CS101",
+      "short": "Python",
+      "name": "Programming in Python",
+      "kind": "theory",
+      "dept": "CS"
+    },
+    {
+      "id": "CS102",
+      "short": "Web Tech",
+      "name": "Web Technologies",
+      "kind": "theory",
+      "dept": "CS"
+    },
+    {
+      "id": "CS103",
+      "short": "DBMS",
+      "name": "Database Concepts",
+      "kind": "theory",
+      "dept": "CS"
+    },
+    {
+      "id": "MT101",
+      "short": "Calculus",
+      "name": "Calculus",
+      "kind": "theory",
+      "dept": "GEN"
+    },
+    {
+      "id": "EN101",
+      "short": "English",
+      "name": "General English",
+      "kind": "tutorial",
+      "dept": "GEN"
+    },
+    {
+      "id": "CS101L",
+      "short": "Python Lab",
+      "name": "Python Lab",
+      "kind": "lab",
+      "dept": "CS",
+      "room_type": "computer_lab"
+    },
+    {
+      "id": "CS102L",
+      "short": "Web Lab",
+      "name": "Web Technologies Lab",
+      "kind": "lab",
+      "dept": "CS",
+      "room_type": "computer_lab"
+    },
+    {
+      "id": "CS103L",
+      "short": "DBMS Lab",
+      "name": "Database Lab",
+      "kind": "lab",
+      "dept": "CS",
+      "room_type": "computer_lab"
+    },
+    {
+      "id": "PH101",
+      "short": "Mechanics",
+      "name": "Mechanics",
+      "kind": "theory",
+      "dept": "PHY"
+    },
+    {
+      "id": "PH102",
+      "short": "Optics",
+      "name": "Optics",
+      "kind": "theory",
+      "dept": "PHY"
+    },
+    {
+      "id": "PH103",
+      "short": "Electronics",
+      "name": "Basic Electronics",
+      "kind": "theory",
+      "dept": "PHY"
+    },
+    {
+      "id": "PH101L",
+      "short": "Mech. Lab",
+      "name": "Mechanics Lab",
+      "kind": "lab",
+      "dept": "PHY",
+      "room_type": "science_lab"
+    },
+    {
+      "id": "PH102L",
+      "short": "Optics Lab",
+      "name": "Optics Lab",
+      "kind": "lab",
+      "dept": "PHY",
+      "room_type": "science_lab"
+    },
+    {
+      "id": "PH103L",
+      "short": "Elec. Lab",
+      "name": "Electronics Lab",
+      "kind": "lab",
+      "dept": "PHY",
+      "room_type": "science_lab"
+    },
+    {
+      "id": "BC201",
+      "short": "Accounts",
+      "name": "Corporate Accounting",
+      "kind": "theory",
+      "dept": "COM"
+    },
+    {
+      "id": "BC202",
+      "short": "Bus. Law",
+      "name": "Business Law",
+      "kind": "theory",
+      "dept": "COM"
+    },
+    {
+      "id": "BC203",
+      "short": "Tax",
+      "name": "Income Tax",
+      "kind": "theory",
+      "dept": "COM"
+    },
+    {
+      "id": "BC204",
+      "short": "Bus. Stats",
+      "name": "Business Statistics",
+      "kind": "theory",
+      "dept": "COM"
+    },
+    {
+      "id": "BC205",
+      "short": "Bus. Comm.",
+      "name": "Business Communication",
+      "kind": "tutorial",
+      "dept": "COM"
+    }
+  ],
+  "assignments": [
+    {
+      "id": "A01",
+      "subject": "CS101",
+      "group": "BSc CS-I",
+      "teacher": "C1"
+    },
+    {
+      "id": "A02",
+      "subject": "CS102",
+      "group": "BSc CS-I",
+      "teacher": "C2"
+    },
+    {
+      "id": "A03",
+      "subject": "CS103",
+      "group": "BSc CS-I",
+      "teacher": "C3"
+    },
+    {
+      "id": "A04",
+      "subject": "MT101",
+      "group": "BSc CS-I",
+      "teacher": "M1"
+    },
+    {
+      "id": "A05",
+      "subject": "EN101",
+      "group": "BSc CS-I",
+      "teacher": "E1",
+      "periods": 2
+    },
+    {
+      "id": "A06",
+      "subject": "CS101L",
+      "group": "BSc CS-I/G1",
+      "teacher": "C1"
+    },
+    {
+      "id": "A07",
+      "subject": "CS102L",
+      "group": "BSc CS-I/G1",
+      "teacher": "C2"
+    },
+    {
+      "id": "A08",
+      "subject": "CS103L",
+      "group": "BSc CS-I/G1",
+      "teacher": "C3"
+    },
+    {
+      "id": "A09",
+      "subject": "CS101L",
+      "group": "BSc CS-I/G2",
+      "teacher": "C1"
+    },
+    {
+      "id": "A10",
+      "subject": "CS102L",
+      "group": "BSc CS-I/G2",
+      "teacher": "C2"
+    },
+    {
+      "id": "A11",
+      "subject": "CS103L",
+      "group": "BSc CS-I/G2",
+      "teacher": "C3"
+    },
+    {
+      "id": "A12",
+      "subject": "CS101L",
+      "group": "BSc CS-I/G3",
+      "teacher": "C1"
+    },
+    {
+      "id": "A13",
+      "subject": "CS102L",
+      "group": "BSc CS-I/G3",
+      "teacher": "C2"
+    },
+    {
+      "id": "A14",
+      "subject": "CS103L",
+      "group": "BSc CS-I/G3",
+      "teacher": "C3"
+    },
+    {
+      "id": "A15",
+      "subject": "PH101",
+      "group": "BSc Phy-I",
+      "teacher": "P1"
+    },
+    {
+      "id": "A16",
+      "subject": "PH102",
+      "group": "BSc Phy-I",
+      "teacher": "P2"
+    },
+    {
+      "id": "A17",
+      "subject": "PH103",
+      "group": "BSc Phy-I",
+      "teacher": "P3"
+    },
+    {
+      "id": "A18",
+      "subject": "MT101",
+      "group": "BSc Phy-I",
+      "teacher": "M1"
+    },
+    {
+      "id": "A19",
+      "subject": "CS101",
+      "group": "BSc Phy-I",
+      "teacher": "C1"
+    },
+    {
+      "id": "A20",
+      "subject": "EN101",
+      "group": "BSc Phy-I",
+      "teacher": "E1",
+      "periods": 2
+    },
+    {
+      "id": "A21",
+      "subject": "PH101L",
+      "group": "BSc Phy-I/G1",
+      "teacher": "P1"
+    },
+    {
+      "id": "A22",
+      "subject": "PH102L",
+      "group": "BSc Phy-I/G1",
+      "teacher": "P2"
+    },
+    {
+      "id": "A23",
+      "subject": "PH103L",
+      "group": "BSc Phy-I/G1",
+      "teacher": "P3"
+    },
+    {
+      "id": "A24",
+      "subject": "PH101L",
+      "group": "BSc Phy-I/G2",
+      "teacher": "P1"
+    },
+    {
+      "id": "A25",
+      "subject": "PH102L",
+      "group": "BSc Phy-I/G2",
+      "teacher": "P2"
+    },
+    {
+      "id": "A26",
+      "subject": "PH103L",
+      "group": "BSc Phy-I/G2",
+      "teacher": "P3"
+    },
+    {
+      "id": "A27",
+      "subject": "PH101L",
+      "group": "BSc Phy-I/G3",
+      "teacher": "P1"
+    },
+    {
+      "id": "A28",
+      "subject": "PH102L",
+      "group": "BSc Phy-I/G3",
+      "teacher": "P2"
+    },
+    {
+      "id": "A29",
+      "subject": "PH103L",
+      "group": "BSc Phy-I/G3",
+      "teacher": "P3"
+    },
+    {
+      "id": "A30",
+      "subject": "BC201",
+      "group": "BCom-II",
+      "teacher": "B1",
+      "periods": 5
+    },
+    {
+      "id": "A31",
+      "subject": "BC202",
+      "group": "BCom-II",
+      "teacher": "B2"
+    },
+    {
+      "id": "A32",
+      "subject": "BC203",
+      "group": "BCom-II",
+      "teacher": "B1"
+    },
+    {
+      "id": "A33",
+      "subject": "BC204",
+      "group": "BCom-II",
+      "teacher": "M1",
+      "periods": 3
+    },
+    {
+      "id": "A34",
+      "subject": "BC205",
+      "group": "BCom-II",
+      "teacher": "E1",
+      "periods": 3
+    }
+  ]
+}

@@ -19,7 +19,7 @@ Backend (API on port 8000):
 cd backend
 python -m venv .venv
 .\.venv\Scripts\python -m pip install -r requirements.txt
-.\.venv\Scripts\python -m uvicorn app:app --reload --port 8000
+.\.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
 ```
 
 Frontend (app on http://localhost:5173):
@@ -37,7 +37,9 @@ cd backend
 
 ## Project structure
 ```
-backend/   FastAPI app, solver/ (CP-SAT model and validator), data/ (sample college), tests/
+backend/   app/ (FastAPI app and data schema), solver/ (CP-SAT generator, clash checker, scorecard),
+           data/colleges/ (demo colleges), tests/
+prototype/ clickable prototype of the whole product (open index.html)
 frontend/  React + Vite + TypeScript + Tailwind UI
 docs/      requirements and roadmap
 ```

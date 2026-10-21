@@ -4,12 +4,16 @@ Web app that generates **clash-free** weekly timetables for any college (Hackath
 Full product plan and roadmap: `docs/requirements.md`.
 
 ## Stack
-- **backend/**: Python 3.12, FastAPI, Google OR-Tools (CP-SAT), pytest. Data is in `backend/data/*.json` for now (no DB yet).
+- **backend/**: Python 3.12, FastAPI, Google OR-Tools (CP-SAT), pytest.
+  - `app/schema.py`: the one data format for a college (Pydantic), with plain-English field and cross-reference checks.
+  - `solver/`: generator, clash checker, scorecard. Pure Python; reads college dicts in the schema format.
+  - `data/colleges/*.json`: seed colleges (demo-eng, city-arts), exported from the prototype. No database yet.
+- **prototype/**: single-page clickable prototype of the whole product (in-browser data and a simple generator).
 - **frontend/**: React + Vite + TypeScript + Tailwind v4. Calls the API through the Vite proxy at `/api`.
 
 ## Run
 ```
-cd backend; .\.venv\Scripts\activate; uvicorn app:app --reload --port 8000
+cd backend; .\.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
 cd backend; .\.venv\Scripts\python -m pytest
 cd frontend; npm run dev            # http://localhost:5173
 ```

@@ -1,134 +1,192 @@
 {
-  "institution": "Demo Engineering College",
+  "id": "demo-eng",
+  "name": "Demo Engineering College",
+  "place": "Ludhiana",
   "term": "Odd Semester 2026",
-  "days": [
-    "Mon",
-    "Tue",
-    "Wed",
-    "Thu",
-    "Fri"
-  ],
-  "periods": [
-    {
-      "id": 1,
-      "label": "P1",
-      "start": "09:00",
-      "end": "09:50"
-    },
-    {
-      "id": 2,
-      "label": "P2",
-      "start": "09:50",
-      "end": "10:40"
-    },
-    {
-      "id": 3,
-      "label": "P3",
-      "start": "10:40",
-      "end": "11:30"
-    },
-    {
-      "id": 4,
-      "label": "P4",
-      "start": "11:30",
-      "end": "12:20"
-    },
-    {
-      "id": 5,
-      "label": "P5",
-      "start": "13:00",
-      "end": "13:50"
-    },
-    {
-      "id": 6,
-      "label": "P6",
-      "start": "13:50",
-      "end": "14:40"
-    },
-    {
-      "id": 7,
-      "label": "P7",
-      "start": "14:40",
-      "end": "15:30"
+  "kind": "Engineering (B.Tech)",
+  "scheme": {
+    "days": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+    ],
+    "periods": [
+      {
+        "label": "P1",
+        "start": "09:00",
+        "end": "09:50"
+      },
+      {
+        "label": "P2",
+        "start": "09:50",
+        "end": "10:40"
+      },
+      {
+        "label": "P3",
+        "start": "10:40",
+        "end": "11:30"
+      },
+      {
+        "label": "P4",
+        "start": "11:30",
+        "end": "12:20"
+      },
+      {
+        "label": "P5",
+        "start": "13:00",
+        "end": "13:50"
+      },
+      {
+        "label": "P6",
+        "start": "13:50",
+        "end": "14:40"
+      },
+      {
+        "label": "P7",
+        "start": "14:40",
+        "end": "15:30"
+      }
+    ],
+    "breaks": [
+      {
+        "after": 4,
+        "label": "Lunch"
+      }
+    ],
+    "theory_room_type": "lecture",
+    "lab_block": 2,
+    "lab_prefix": "section",
+    "rules": {
+      "lectures_per_week": 3,
+      "lab_sessions_per_week": 1,
+      "max_same_subject_per_day": 1,
+      "teacher_max_per_day": 5
     }
-  ],
-  "breaks_after": [
-    4
-  ],
-  "break_label": "Lunch 12:20–13:00",
-  "rules": {
-    "lectures_per_week": 3,
-    "lab_sessions_per_week": 1,
-    "max_same_subject_per_day": 1
   },
   "departments": [
     {
       "id": "CSE",
-      "name": "Computer Science and Engineering"
+      "name": "Computer Science and Engg.",
+      "status": "ready"
     },
     {
       "id": "ECE",
-      "name": "Electronics and Communication Engineering"
+      "name": "Electronics and Comm. Engg.",
+      "status": "ready"
     },
     {
       "id": "AS",
-      "name": "Applied Sciences"
+      "name": "Applied Sciences",
+      "status": "ready"
     }
   ],
-  "rooms": [
+  "courses": [
     {
-      "id": "LH-101",
-      "type": "lecture",
-      "capacity": 70,
-      "owner": "CSE"
+      "id": "BTECH-CSE",
+      "name": "B.Tech Computer Science and Engg.",
+      "dept": "CSE",
+      "years": 4
     },
     {
-      "id": "LH-102",
-      "type": "lecture",
-      "capacity": 70,
-      "owner": "CSE"
+      "id": "MCA",
+      "name": "Master of Computer Applications",
+      "dept": "CSE",
+      "years": 2
     },
     {
-      "id": "LH-201",
-      "type": "lecture",
-      "capacity": 70,
-      "owner": "ECE"
+      "id": "BTECH-ECE",
+      "name": "B.Tech Electronics and Comm. Engg.",
+      "dept": "ECE",
+      "years": 4
+    }
+  ],
+  "sections": [
+    {
+      "id": "CSE-3A",
+      "dept": "CSE",
+      "course": "BTECH-CSE",
+      "sem": 3,
+      "strength": 60,
+      "lab_groups": [
+        {
+          "label": "A1",
+          "strength": 30
+        },
+        {
+          "label": "A2",
+          "strength": 30
+        }
+      ]
     },
     {
-      "id": "LH-202",
-      "type": "lecture",
-      "capacity": 70,
-      "owner": "ECE"
+      "id": "CSE-3B",
+      "dept": "CSE",
+      "course": "BTECH-CSE",
+      "sem": 3,
+      "strength": 60,
+      "lab_groups": [
+        {
+          "label": "B1",
+          "strength": 30
+        },
+        {
+          "label": "B2",
+          "strength": 30
+        }
+      ]
     },
     {
-      "id": "Seminar Hall",
-      "type": "lecture",
-      "capacity": 120,
-      "owner": "SHARED"
+      "id": "CSE-5A",
+      "dept": "CSE",
+      "course": "BTECH-CSE",
+      "sem": 5,
+      "strength": 56,
+      "lab_groups": [
+        {
+          "label": "A1",
+          "strength": 28
+        },
+        {
+          "label": "A2",
+          "strength": 28
+        }
+      ]
     },
     {
-      "id": "CL-1",
-      "type": "computer_lab",
-      "capacity": 35,
-      "owner": "SHARED"
+      "id": "ECE-3A",
+      "dept": "ECE",
+      "course": "BTECH-ECE",
+      "sem": 3,
+      "strength": 60,
+      "lab_groups": [
+        {
+          "label": "A1",
+          "strength": 30
+        },
+        {
+          "label": "A2",
+          "strength": 30
+        }
+      ]
     },
     {
-      "id": "CL-2",
-      "type": "computer_lab",
-      "capacity": 35,
-      "owner": "SHARED"
-    },
-    {
-      "id": "EL-1",
-      "type": "electronics_lab",
-      "capacity": 35,
-      "owner": "ECE"
-    },
-    {
-      "id": "EL-2",
-      "type": "electronics_lab",
-      "capacity": 35,
-      "owner": "ECE"
+      "id": "ECE-5A",
+      "dept": "ECE",
+      "course": "BTECH-ECE",
+      "sem": 5,
+      "strength": 52,
+      "lab_groups": [
+        {
+          "label": "A1",
+          "strength": 26
+        },
+        {
+          "label": "A2",
+          "strength": 26
+        }
+      ]
     }
   ],
   "teachers": [
@@ -280,81 +338,60 @@
       "unavailable": []
     }
   ],
-  "sections": [
+  "rooms": [
     {
-      "id": "CSE-3A",
-      "dept": "CSE",
-      "strength": 60,
-      "subsections": [
-        {
-          "id": "CSE-3A1",
-          "strength": 30
-        },
-        {
-          "id": "CSE-3A2",
-          "strength": 30
-        }
-      ]
+      "id": "LH-101",
+      "type": "lecture",
+      "capacity": 70,
+      "owner": "CSE"
     },
     {
-      "id": "CSE-3B",
-      "dept": "CSE",
-      "strength": 60,
-      "subsections": [
-        {
-          "id": "CSE-3B1",
-          "strength": 30
-        },
-        {
-          "id": "CSE-3B2",
-          "strength": 30
-        }
-      ]
+      "id": "LH-102",
+      "type": "lecture",
+      "capacity": 70,
+      "owner": "CSE"
     },
     {
-      "id": "CSE-5A",
-      "dept": "CSE",
-      "strength": 56,
-      "subsections": [
-        {
-          "id": "CSE-5A1",
-          "strength": 28
-        },
-        {
-          "id": "CSE-5A2",
-          "strength": 28
-        }
-      ]
+      "id": "LH-201",
+      "type": "lecture",
+      "capacity": 70,
+      "owner": "ECE"
     },
     {
-      "id": "ECE-3A",
-      "dept": "ECE",
-      "strength": 60,
-      "subsections": [
-        {
-          "id": "ECE-3A1",
-          "strength": 30
-        },
-        {
-          "id": "ECE-3A2",
-          "strength": 30
-        }
-      ]
+      "id": "LH-202",
+      "type": "lecture",
+      "capacity": 70,
+      "owner": "ECE"
     },
     {
-      "id": "ECE-5A",
-      "dept": "ECE",
-      "strength": 52,
-      "subsections": [
-        {
-          "id": "ECE-5A1",
-          "strength": 26
-        },
-        {
-          "id": "ECE-5A2",
-          "strength": 26
-        }
-      ]
+      "id": "Seminar Hall",
+      "type": "lecture",
+      "capacity": 120,
+      "owner": "Shared"
+    },
+    {
+      "id": "CL-1",
+      "type": "computer_lab",
+      "capacity": 35,
+      "owner": "Shared"
+    },
+    {
+      "id": "CL-2",
+      "type": "computer_lab",
+      "capacity": 35,
+      "owner": "Shared"
+    },
+    {
+      "id": "EL-1",
+      "type": "electronics_lab",
+      "capacity": 35,
+      "owner": "ECE"
+    },
+    {
+      "id": "EL-2",
+      "type": "electronics_lab",
+      "capacity": 35,
+      "owner": "ECE"
     }
   ],
   "subjects": [
@@ -362,161 +399,177 @@
       "id": "CS301",
       "short": "DBMS",
       "name": "Database Management Systems",
-      "kind": "theory"
+      "kind": "theory",
+      "dept": "CSE"
     },
     {
       "id": "CS302",
       "short": "OS",
       "name": "Operating Systems",
-      "kind": "theory"
+      "kind": "theory",
+      "dept": "CSE"
     },
     {
       "id": "CS303",
       "short": "DS",
       "name": "Data Structures",
-      "kind": "theory"
+      "kind": "theory",
+      "dept": "CSE"
     },
     {
       "id": "MA301",
       "short": "Maths-III",
       "name": "Engineering Mathematics III",
-      "kind": "theory"
+      "kind": "theory",
+      "dept": "AS"
     },
     {
       "id": "HU301",
       "short": "Comm. Skills",
       "name": "Communication Skills",
-      "kind": "theory"
+      "kind": "tutorial",
+      "dept": "AS"
     },
     {
       "id": "CS301L",
       "short": "DBMS Lab",
       "name": "DBMS Lab",
       "kind": "lab",
-      "room_type": "computer_lab",
-      "block": 2
+      "dept": "CSE",
+      "room_type": "computer_lab"
     },
     {
       "id": "CS303L",
       "short": "DS Lab",
       "name": "Data Structures Lab",
       "kind": "lab",
-      "room_type": "computer_lab",
-      "block": 2
+      "dept": "CSE",
+      "room_type": "computer_lab"
     },
     {
       "id": "CS501",
       "short": "CN",
       "name": "Computer Networks",
-      "kind": "theory"
+      "kind": "theory",
+      "dept": "CSE"
     },
     {
       "id": "CS502",
       "short": "AI",
       "name": "Artificial Intelligence",
-      "kind": "theory"
+      "kind": "theory",
+      "dept": "CSE"
     },
     {
       "id": "CS503",
       "short": "SE",
       "name": "Software Engineering",
-      "kind": "theory"
+      "kind": "theory",
+      "dept": "CSE"
     },
     {
       "id": "CS504",
       "short": "TOC",
       "name": "Theory of Computation",
-      "kind": "theory"
+      "kind": "theory",
+      "dept": "CSE"
     },
     {
       "id": "CS501L",
       "short": "CN Lab",
       "name": "Computer Networks Lab",
       "kind": "lab",
-      "room_type": "computer_lab",
-      "block": 2
+      "dept": "CSE",
+      "room_type": "computer_lab"
     },
     {
       "id": "CS502L",
       "short": "AI Lab",
       "name": "AI Lab",
       "kind": "lab",
-      "room_type": "computer_lab",
-      "block": 2
+      "dept": "CSE",
+      "room_type": "computer_lab"
     },
     {
       "id": "EC301",
       "short": "S&S",
       "name": "Signals and Systems",
-      "kind": "theory"
+      "kind": "theory",
+      "dept": "ECE"
     },
     {
       "id": "EC302",
       "short": "Analog",
       "name": "Analog Electronics",
-      "kind": "theory"
+      "kind": "theory",
+      "dept": "ECE"
     },
     {
       "id": "EC303",
       "short": "Digital",
       "name": "Digital Electronics",
-      "kind": "theory"
+      "kind": "theory",
+      "dept": "ECE"
     },
     {
       "id": "EC302L",
       "short": "Analog Lab",
       "name": "Analog Electronics Lab",
       "kind": "lab",
-      "room_type": "electronics_lab",
-      "block": 2
+      "dept": "ECE",
+      "room_type": "electronics_lab"
     },
     {
       "id": "EC303L",
       "short": "Digital Lab",
       "name": "Digital Electronics Lab",
       "kind": "lab",
-      "room_type": "electronics_lab",
-      "block": 2
+      "dept": "ECE",
+      "room_type": "electronics_lab"
     },
     {
       "id": "EC501",
       "short": "MPMC",
       "name": "Microprocessors and Microcontrollers",
-      "kind": "theory"
+      "kind": "theory",
+      "dept": "ECE"
     },
     {
       "id": "EC502",
       "short": "Comm. Sys",
       "name": "Communication Systems",
-      "kind": "theory"
+      "kind": "theory",
+      "dept": "ECE"
     },
     {
       "id": "EC503",
       "short": "Control",
       "name": "Control Systems",
-      "kind": "theory"
+      "kind": "theory",
+      "dept": "ECE"
     },
     {
       "id": "EC504",
       "short": "VLSI",
       "name": "VLSI Design",
-      "kind": "theory"
+      "kind": "theory",
+      "dept": "ECE"
     },
     {
       "id": "EC501L",
       "short": "MPMC Lab",
       "name": "Microprocessors Lab",
       "kind": "lab",
-      "room_type": "electronics_lab",
-      "block": 2
+      "dept": "ECE",
+      "room_type": "electronics_lab"
     },
     {
       "id": "EC502L",
       "short": "Comm. Lab",
       "name": "Communication Systems Lab",
       "kind": "lab",
-      "room_type": "electronics_lab",
-      "block": 2
+      "dept": "ECE",
+      "room_type": "electronics_lab"
     }
   ],
   "assignments": [
@@ -554,25 +607,25 @@
     {
       "id": "A06",
       "subject": "CS301L",
-      "group": "CSE-3A1",
+      "group": "CSE-3A/A1",
       "teacher": "T07"
     },
     {
       "id": "A07",
       "subject": "CS303L",
-      "group": "CSE-3A1",
+      "group": "CSE-3A/A1",
       "teacher": "T08"
     },
     {
       "id": "A08",
       "subject": "CS301L",
-      "group": "CSE-3A2",
+      "group": "CSE-3A/A2",
       "teacher": "T07"
     },
     {
       "id": "A09",
       "subject": "CS303L",
-      "group": "CSE-3A2",
+      "group": "CSE-3A/A2",
       "teacher": "T08"
     },
     {
@@ -609,25 +662,25 @@
     {
       "id": "A15",
       "subject": "CS301L",
-      "group": "CSE-3B1",
+      "group": "CSE-3B/B1",
       "teacher": "T07"
     },
     {
       "id": "A16",
       "subject": "CS303L",
-      "group": "CSE-3B1",
+      "group": "CSE-3B/B1",
       "teacher": "T08"
     },
     {
       "id": "A17",
       "subject": "CS301L",
-      "group": "CSE-3B2",
+      "group": "CSE-3B/B2",
       "teacher": "T07"
     },
     {
       "id": "A18",
       "subject": "CS303L",
-      "group": "CSE-3B2",
+      "group": "CSE-3B/B2",
       "teacher": "T08"
     },
     {
@@ -657,25 +710,25 @@
     {
       "id": "A23",
       "subject": "CS501L",
-      "group": "CSE-5A1",
+      "group": "CSE-5A/A1",
       "teacher": "T04"
     },
     {
       "id": "A24",
       "subject": "CS502L",
-      "group": "CSE-5A1",
+      "group": "CSE-5A/A1",
       "teacher": "T05"
     },
     {
       "id": "A25",
       "subject": "CS501L",
-      "group": "CSE-5A2",
+      "group": "CSE-5A/A2",
       "teacher": "T04"
     },
     {
       "id": "A26",
       "subject": "CS502L",
-      "group": "CSE-5A2",
+      "group": "CSE-5A/A2",
       "teacher": "T05"
     },
     {
@@ -704,74 +757,80 @@
     },
     {
       "id": "A31",
-      "subject": "EC302L",
-      "group": "ECE-3A1",
-      "teacher": "T12"
+      "subject": "CS303",
+      "group": "ECE-3A",
+      "teacher": "T03"
     },
     {
       "id": "A32",
-      "subject": "EC303L",
-      "group": "ECE-3A1",
-      "teacher": "T13"
-    },
-    {
-      "id": "A33",
       "subject": "EC302L",
-      "group": "ECE-3A2",
+      "group": "ECE-3A/A1",
       "teacher": "T12"
     },
     {
-      "id": "A34",
+      "id": "A33",
       "subject": "EC303L",
-      "group": "ECE-3A2",
+      "group": "ECE-3A/A1",
       "teacher": "T13"
     },
     {
+      "id": "A34",
+      "subject": "EC302L",
+      "group": "ECE-3A/A2",
+      "teacher": "T12"
+    },
+    {
       "id": "A35",
+      "subject": "EC303L",
+      "group": "ECE-3A/A2",
+      "teacher": "T13"
+    },
+    {
+      "id": "A36",
       "subject": "EC501",
       "group": "ECE-5A",
       "teacher": "T14"
     },
     {
-      "id": "A36",
+      "id": "A37",
       "subject": "EC502",
       "group": "ECE-5A",
       "teacher": "T15"
     },
     {
-      "id": "A37",
+      "id": "A38",
       "subject": "EC503",
       "group": "ECE-5A",
       "teacher": "T11"
     },
     {
-      "id": "A38",
+      "id": "A39",
       "subject": "EC504",
       "group": "ECE-5A",
       "teacher": "T16"
     },
     {
-      "id": "A39",
-      "subject": "EC501L",
-      "group": "ECE-5A1",
-      "teacher": "T14"
-    },
-    {
       "id": "A40",
-      "subject": "EC502L",
-      "group": "ECE-5A1",
-      "teacher": "T15"
+      "subject": "EC501L",
+      "group": "ECE-5A/A1",
+      "teacher": "T14"
     },
     {
       "id": "A41",
-      "subject": "EC501L",
-      "group": "ECE-5A2",
-      "teacher": "T14"
+      "subject": "EC502L",
+      "group": "ECE-5A/A1",
+      "teacher": "T15"
     },
     {
       "id": "A42",
+      "subject": "EC501L",
+      "group": "ECE-5A/A2",
+      "teacher": "T14"
+    },
+    {
+      "id": "A43",
       "subject": "EC502L",
-      "group": "ECE-5A2",
+      "group": "ECE-5A/A2",
       "teacher": "T15"
     }
   ]

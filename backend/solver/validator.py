@@ -46,7 +46,7 @@ def validate(data: dict, entries: list[dict]) -> list[dict]:
         if room["type"] != c.room_type(a["id"]):
             add("room_type", f"{c.describe(a['id'])} needs a {c.room_type(a['id']).replace('_', ' ')} but is in {room_id} ({room['type'].replace('_', ' ')}) on {slot}.")
         if room["capacity"] < group.strength:
-            add("capacity", f"{room_id} holds {room['capacity']} but {group.id} has {group.strength} students ({slot}).")
+            add("capacity", f"{room_id} holds {room['capacity']} but {c.group_label(group.id)} has {group.strength} students ({slot}).")
         if (day, period) in c.unavailable.get(teacher["id"], set()):
             add("unavailable", f"{teacher['name']} is unavailable on {slot} but teaches {c.describe(a['id'])}.")
 
@@ -79,10 +79,10 @@ def validate(data: dict, entries: list[dict]) -> list[dict]:
             add("group_clash", f"{section} has two classes on {slot}: " + " and ".join(c.describe(i["assignment"]) for i in whole) + ".")
         if whole and by_sub:
             subs = ", ".join(c.describe(i["assignment"]) for v in by_sub.values() for i in v)
-            add("group_clash", f"{section} has {c.describe(whole[0]['assignment'])} on {slot} while sub-section classes also run ({subs}).")
+            add("group_clash", f"{section} has {c.describe(whole[0]['assignment'])} on {slot} while lab group classes also run ({subs}).")
         for sub_id, sub_items in by_sub.items():
             if len(sub_items) > 1:
-                add("group_clash", f"{sub_id} has two classes on {slot}: " + " and ".join(c.describe(i["assignment"]) for i in sub_items) + ".")
+                add("group_clash", f"{c.group_label(sub_id)} has two classes on {slot}: " + " and ".join(c.describe(i["assignment"]) for i in sub_items) + ".")
 
     for aid, a in c.assignments.items():
         got = len(per_assignment.get(aid, []))

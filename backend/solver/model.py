@@ -32,7 +32,7 @@ def solve(data: dict, time_limit: float = 20.0, workers: int = 8) -> dict:
         group = c.groups[a["group"]]
         rooms = [r for r in c.rooms.values() if r["type"] == c.room_type(aid) and r["capacity"] >= group.strength]
         if not rooms:
-            return _fail(started, f"No {c.room_type(aid).replace('_', ' ')} is big enough for {group.id} ({group.strength} students).")
+            return _fail(started, f"No {c.room_type(aid).replace('_', ' ')} is big enough for {c.group_label(group.id)} ({group.strength} students).")
         unavailable = c.unavailable.get(a["teacher"], set())
 
         for day in c.days:
