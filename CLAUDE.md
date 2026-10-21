@@ -35,6 +35,12 @@ cd frontend; npm run dev            # http://localhost:5173
 ## Soft rules (objective)
 Spread a subject across days (≤ 1 theory period of a subject per day where possible), few idle gaps, A1/A2 labs side by side.
 
+## Multi-college privacy (non-negotiable)
+- Every user belongs to exactly one college. They see only that college's data and never learn which other colleges exist.
+- The API takes the college from the signed-in user, never from a URL or request field. There is no "list all colleges"
+  endpoint for college users; only the platform owner (super admin) can list colleges.
+- Every stored record carries `college_id`, and every query filters on it. Tests must prove college A can't read college B.
+
 ## Conventions
 - The **validator is the source of truth** for "0 clashes". Never mark a timetable valid without it.
 - Solver and validator are pure Python (no FastAPI imports) and must have tests.

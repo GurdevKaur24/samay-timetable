@@ -13,6 +13,11 @@ teaching loads and empty rooms. Samay generates a clash-free, readable timetable
 | Teacher | View own timetable, set unavailability and preferences |
 | Student / viewer | Read-only section timetable (public link, mobile) |
 
+## Privacy between colleges
+Many colleges use Samay, but each one is completely separate. A coordinator, HOD, teacher or student signs in to their
+own college and sees only its teachers, rooms, scheme and timetables. Colleges can't see each other's data, or even which
+other colleges use Samay. Only the platform owner can see the list of colleges, for support and billing.
+
 ## Core features
 1. Institution setup: departments, time grid (days, periods, lunch and breaks)
 2. Master data: rooms (type, capacity, shared or department), teachers (max load, unavailability),
