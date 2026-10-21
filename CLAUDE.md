@@ -12,7 +12,9 @@ Full product plan and roadmap: `docs/requirements.md`.
     sessions, college_data (one validated JSON document per college), timetables.
   - `app/auth.py`: `current_user` is the only source of a college id. Sign-in cookie `samay_session` (httpOnly,
     SameSite=Lax; set `SAMAY_COOKIE_SECURE=1` behind HTTPS). Passwords use scrypt; only token hashes are stored.
-  - Demo accounts (one coordinator per seed college) are in `data/demo_users.json`.
+  - Demo accounts (one coordinator per seed college) are in `data/demo_users.json`. While `SAMAY_DEMO_LOGIN=1`
+    (default) the sign-in page offers one-click demo sign-in (`/api/auth/demo-accounts`, `/api/auth/demo`), limited to
+    those accounts. It must be off (`SAMAY_DEMO_LOGIN=0`) for any real deployment, since it lists the demo colleges.
   - `app/jobs.py`: generation runs in a background thread (one run per college at a time, time limit
     `SAMAY_SOLVE_SECONDS`, default 30). A timetable is saved only if the clash checker finds 0 problems; versions are
     numbered per college and store the data they were built from.

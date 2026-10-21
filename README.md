@@ -28,7 +28,8 @@ python -m venv .venv
 .\.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
 ```
 On first start it creates a local database (`backend/data/samay.db`) with two demo colleges and one coordinator account
-for each; their sign-in details are in `backend/data/demo_users.json`. To start fresh: `.\.venv\Scripts\python -m app.seed --reset`.
+for each. The sign-in page has one-click **demo account** buttons (their passwords are in `backend/data/demo_users.json`).
+Turn demo sign-in off for a real launch with `SAMAY_DEMO_LOGIN=0`. To start fresh: `.\.venv\Scripts\python -m app.seed --reset`.
 
 API so far (each signed-in user only ever sees their own college):
 

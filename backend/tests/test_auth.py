@@ -1,4 +1,7 @@
+from fastapi.testclient import TestClient
+
 from app.auth import COOKIE_NAME
+from app.main import create_app
 
 from .conftest import DEMO, sign_in
 
@@ -61,6 +64,29 @@ def test_too_many_wrong_passwords_are_slowed_down(make_client):
         assert sign_in(client, "demo-eng", password="wrong").status_code == 401
     r = sign_in(client, "demo-eng")  # even the right password waits now
     assert r.status_code == 429
+
+
+def test_demo_accounts_sign_in_with_one_click(make_client):
+    client = make_client()
+    accounts = client.get("/api/auth/demo-accounts").json()["accounts"]
+    assert {a["college"] for a in accounts} == {"Demo Engineering College", "City Arts and Science College"}
+    assert all("password" not in a for a in accounts)
+    r = client.post("/api/auth/demo", json={"email": accounts[0]["email"]})
+    assert r.status_code == 200 and COOKIE_NAME in client.cookies
+    assert client.get("/api/college").json()["name"] == accounts[0]["college"]
+
+
+def test_demo_sign_in_only_works_for_demo_accounts(app, make_client):
+    app.state.db.add_user("real.person@college.example", "Real Person", "coordinator", "demo-eng", "a-real-password")
+    r = make_client().post("/api/auth/demo", json={"email": "real.person@college.example"})
+    assert r.status_code == 404
+
+
+def test_demo_sign_in_is_completely_off_when_switched_off(tmp_path):
+    client = TestClient(create_app(db_path=tmp_path / "prod.db", demo_login=False))
+    assert client.get("/api/health").json()["demo_login"] is False
+    assert client.get("/api/auth/demo-accounts").status_code == 404
+    assert client.post("/api/auth/demo", json={"email": DEMO["demo-eng"]["email"]}).status_code == 404
 
 
 def test_passwords_and_session_tokens_are_not_stored_in_plain_text(app, eng):

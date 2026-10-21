@@ -12,8 +12,10 @@ from .routers import auth, college, timetables
 from .seed import seed
 
 
-def create_app(db_path: str | Path | None = None, seed_if_empty: bool = True, solve_seconds: float | None = None) -> FastAPI:
+def create_app(db_path: str | Path | None = None, seed_if_empty: bool = True, solve_seconds: float | None = None,
+               demo_login: bool | None = None) -> FastAPI:
     app = FastAPI(title="Samay Timetable API")
+    app.state.demo_login = config.DEMO_LOGIN if demo_login is None else demo_login
     app.state.db = Database(db_path or config.DB_PATH)
     app.state.jobs = JobRunner(app.state.db, time_limit=solve_seconds or config.SOLVE_SECONDS)
     app.state.login_limiter = LoginLimiter()
@@ -34,7 +36,7 @@ def create_app(db_path: str | Path | None = None, seed_if_empty: bool = True, so
 
     @app.get("/api/health")
     def health():
-        return {"status": "ok", "app": "samay"}
+        return {"status": "ok", "app": "samay", "demo_login": app.state.demo_login}
 
     # The web page: same origin as the API, so the sign-in cookie just works. Mounted last so /api routes win.
     if config.WEB_DIR.is_dir():
