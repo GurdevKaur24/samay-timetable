@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] } } } }</script>
 <style>
   .vtext { writing-mode: vertical-rl; transform: rotate(180deg); }
@@ -40,7 +41,7 @@ const COLLEGES = [
       periods: [['P1', '09:00', '09:50'], ['P2', '09:50', '10:40'], ['P3', '10:40', '11:30'], ['P4', '11:30', '12:20'],
                 ['P5', '13:00', '13:50'], ['P6', '13:50', '14:40'], ['P7', '14:40', '15:30']],
       breaks: [{ after: 4, label: 'Lunch', time: '12:20–13:00' }],
-      theoryRoomType: 'lecture', labGroups: 'A1, A2 (2 per section)', labBlock: 2,
+      theoryRoomType: 'lecture', labGroups: 'A1, A2 (2 per section)', labPrefix: 'section', labBlock: 2,
       rules: { lecturesPerWeek: 3, labSessionsPerWeek: 1, maxSameSubjectPerDay: 1, teacherMaxPerDay: 5 },
     },
     departments: [
@@ -127,7 +128,7 @@ const COLLEGES = [
       periods: [['P1', '08:30', '09:15'], ['P2', '09:15', '10:00'], ['P3', '10:15', '11:00'], ['P4', '11:00', '11:45'],
                 ['P5', '12:30', '13:15'], ['P6', '13:15', '14:00']],
       breaks: [{ after: 2, label: 'Tea', time: '10:00–10:15' }, { after: 4, label: 'Lunch', time: '11:45–12:30' }],
-      theoryRoomType: 'classroom', labGroups: 'G1, G2, G3 (3 per section)', labBlock: 2,
+      theoryRoomType: 'classroom', labGroups: 'G1, G2, G3 (3 per section)', labPrefix: 'G', labBlock: 2,
       rules: { lecturesPerWeek: 4, labSessionsPerWeek: 1, maxSameSubjectPerDay: 1, teacherMaxPerDay: 4 },
     },
     departments: [
@@ -492,7 +493,7 @@ function signIn(i) {
   render(); toast(`Signed in to ${col().name}.`);
 }
 function signOut() {
-  Object.assign(state, { ci: null, preview: null, history: [], applied: null, sim: null, drawer: false, menu: false });
+  Object.assign(state, { ci: null, preview: null, history: [], applied: null, sim: null, drawer: false, menu: false, modal: null });
   render();
 }
 function setView(v) { state.view = v; state.key = null; render(); }
@@ -658,6 +659,7 @@ function layout() {
     </main>
   </div>
   ${state.drawer ? drawer() : ''}
+  ${state.modal ? modal() : ''}
   ${state.generating !== null ? overlay() : ''}
   ${state.toast ? `<div class="no-print fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm text-white shadow-lg fade-in">${state.toast}</div>` : ''}`;
 }
@@ -912,8 +914,526 @@ function drawer() {
 }
 const bubble = html => `<div class="rounded-lg bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">${html}</div>`;
 
+/* ==========================================================================
+   DATA ENTRY: add / edit / delete records, and import from Excel or CSV.
+   Every save goes through the same checks (validateValues), whether it comes
+   from a form or from an imported row.
+=========================================================================== */
+const esc = v => String(v ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+const ENT = {
+  sections: { label: 'Sections', one: 'section' },
+  teachers: { label: 'Teachers', one: 'teacher' },
+  rooms: { label: 'Rooms', one: 'room' },
+  subjects: { label: 'Subjects', one: 'subject' },
+  assignments: { label: 'Teaching assignments', one: 'teaching assignment' },
+};
+// Spreadsheet columns for import and for the downloadable template.
+const COLUMNS = {
+  sections: [['Section', 'name'], ['Department', 'dept'], ['Students', 'strength'], ['Lab groups', 'groups']],
+  teachers: [['Name', 'name'], ['Department', 'dept'], ['Max periods a day', 'max'], ['Unavailable', 'off']],
+  rooms: [['Room', 'name'], ['Type', 'type'], ['Capacity', 'cap'], ['Owner', 'owner']],
+  subjects: [['Code', 'code'], ['Name', 'name'], ['Short name', 'short'], ['Type', 'kind'], ['Room needed', 'room'], ['Lectures per week', 'perWeek']],
+  assignments: [['Subject code', 'subject'], ['Taught to', 'group'], ['Teacher', 'teacher'], ['Periods per week', 'periods']],
+};
+
+const intOrNull = v => (String(v ?? '').trim() === '' ? null : Number(String(v).trim()));
+const isInt = (n, lo, hi) => Number.isInteger(n) && n >= lo && n <= hi;
+const roomTypes = c => [...new Set([c.scheme.theoryRoomType, ...c.rooms.map(r => r.type), ...Object.values(c.subjects).map(s => s.room).filter(Boolean)])];
+const labRoomTypes = c => roomTypes(c).filter(t => t !== c.scheme.theoryRoomType);
+const labLabels = (c, sectionId, n) => {
+  const letter = /[A-Za-z]$/.test(sectionId) ? sectionId.slice(-1).toUpperCase() : 'G';
+  const prefix = c.scheme.labPrefix === 'section' ? letter : (c.scheme.labPrefix || 'G');
+  return Array.from({ length: n }, (_, i) => `${prefix}${i + 1}`);
+};
+const assignmentsOf = (c, pred) => c.assignments.filter(pred).length;
+
+function dataChanged(c, message) {
+  delete c._ix; delete c._A;
+  const hadTimetable = !!state.gen[c.id];
+  delete state.gen[c.id];
+  Object.assign(state, { preview: null, history: [], applied: null, sim: null, modal: null });
+  toast(hadTimetable ? `${message} Generate again to include the change in the timetable.` : message);
+}
+
+/* ---- current record → form values (strings, as typed) ---- */
+function toValues(c, entity, ref) {
+  if (entity === 'sections') {
+    const s = ref != null ? c.sections[ref] : null;
+    return s ? { name: s.id, dept: s.dept, strength: String(s.strength), groups: String(s.subs.length) }
+             : { name: '', dept: c.departments[0].id, strength: '', groups: String(c.sections[0]?.subs.length ?? 2) };
+  }
+  if (entity === 'teachers') {
+    const t = ref != null ? c.teachers[ref] : null;
+    return t ? { name: t.name, dept: t.dept, max: String(tMax(c, t)), off: (t.off || []).map(x => [...x]) }
+             : { name: '', dept: c.departments[0].id, max: String(c.scheme.rules.teacherMaxPerDay), off: [] };
+  }
+  if (entity === 'rooms') {
+    const r = ref != null ? c.rooms[ref] : null;
+    return r ? { name: r.id, type: r.type, cap: String(r.cap), owner: r.owner }
+             : { name: '', type: c.scheme.theoryRoomType, cap: '', owner: 'Shared' };
+  }
+  if (entity === 'subjects') {
+    const s = ref != null ? c.subjects[ref] : null;
+    return s ? { code: ref, name: s.name, short: s.short, kind: s.kind, room: s.room || '', perWeek: s.perWeek != null ? String(s.perWeek) : '' }
+             : { code: '', name: '', short: '', kind: 'theory', room: '', perWeek: '' };
+  }
+  const a = ref != null ? c.assignments[ref] : null;
+  return a ? { subject: a[0], group: a[1], teacher: a[2], periods: a[3] != null ? String(a[3]) : '' }
+           : { subject: '', group: '', teacher: '', periods: '' };
+}
+
+/* ---- the one place where every rule for good data lives ---- */
+function validateValues(c, entity, v, ref, seen = new Set()) {
+  const ix = idx(c), err = {}, S = c.scheme;
+  const deptIds = c.departments.map(d => d.id);
+  const taken = (list, val) => list.some(x => x.toLowerCase() === String(val).toLowerCase()) || seen.has(String(val).toLowerCase());
+  let record = null;
+
+  if (entity === 'sections') {
+    const name = String(v.name || '').trim(), strength = intOrNull(v.strength), groups = intOrNull(v.groups) ?? 0;
+    if (!name) err.name = 'Enter a section name, like CSE-3A.';
+    else if (name.includes('/')) err.name = 'A section name can\'t contain "/".';
+    else if (taken(c.sections.filter((_, i) => i !== ref).map(s => s.id), name)) err.name = `${name} already exists.`;
+    if (!deptIds.includes(v.dept)) err.dept = v.dept ? `No department "${v.dept}". Use one of: ${deptIds.join(', ')}.` : 'Choose a department.';
+    if (!isInt(strength, 1, 1000)) err.strength = 'Enter the number of students (1–1000).';
+    if (!isInt(groups, 0, 6)) err.groups = 'Lab groups must be between 0 and 6.';
+    if (ref != null && !err.groups && groups < c.sections[ref].subs.length) {
+      const old = c.sections[ref];
+      const removed = old.subs.slice(groups).map(u => `${old.id}/${u.label}`);
+      const used = assignmentsOf(c, a => removed.includes(a[1]));
+      if (used) err.groups = `Lab groups ${removed.map(g => g.split('/')[1]).join(', ')} still have ${used} lab class(es). Remove those first.`;
+    }
+    if (!Object.keys(err).length) {
+      // Editing keeps the existing lab group names (A1, A2…) even if the section is renamed.
+      const oldSubs = ref != null ? c.sections[ref].subs : [];
+      const prefix = oldSubs.length ? oldSubs[0].label.replace(/\d+$/, '') : null;
+      const labels = prefix ? Array.from({ length: groups }, (_, i) => `${prefix}${i + 1}`) : labLabels(c, name, groups), base = Math.floor(strength / Math.max(groups, 1)), extra = strength - base * groups;
+      record = { id: name, dept: v.dept, strength, subs: labels.map((label, i) => ({ label, strength: base + (i < extra ? 1 : 0) })) };
+    }
+  }
+
+  if (entity === 'teachers') {
+    const name = String(v.name || '').trim(), max = intOrNull(v.max);
+    if (!name) err.name = 'Enter the teacher\'s name.';
+    else if (taken(c.teachers.filter((_, i) => i !== ref).map(t => t.name), name)) err.name = `${name} is already in the list.`;
+    if (!deptIds.includes(v.dept)) err.dept = v.dept ? `No department "${v.dept}". Use one of: ${deptIds.join(', ')}.` : 'Choose a department.';
+    if (!isInt(max, 1, ix.P.length)) err.max = `Enter 1–${ix.P.length} periods.`;
+    if (v.offError) err.off = v.offError;
+    if (!Object.keys(err).length) {
+      let id = ref != null ? c.teachers[ref].id : null;
+      for (let n = c.teachers.length + 1; !id; n++) if (!ix.teachers[`T${n}`]) id = `T${n}`;
+      record = { id, name, dept: v.dept, max, off: v.off.length ? v.off : undefined };
+    }
+  }
+
+  if (entity === 'rooms') {
+    const name = String(v.name || '').trim(), cap = intOrNull(v.cap);
+    if (!name) err.name = 'Enter a room name, like LH-103.';
+    else if (taken(c.rooms.filter((_, i) => i !== ref).map(r => r.id), name)) err.name = `${name} already exists.`;
+    if (!roomTypes(c).includes(v.type)) err.type = `Unknown room type "${v.type}". Use one of: ${roomTypes(c).map(typeName).join(', ')}.`;
+    if (!isInt(cap, 1, 1000)) err.cap = 'Enter how many students fit (1–1000).';
+    if (v.owner !== 'Shared' && !deptIds.includes(v.owner)) err.owner = `Owner must be "Shared" or a department: ${deptIds.join(', ')}.`;
+    if (!Object.keys(err).length) record = { id: name, type: v.type, cap, owner: v.owner };
+  }
+
+  if (entity === 'subjects') {
+    const code = String(v.code || '').trim().toUpperCase(), name = String(v.name || '').trim(), per = intOrNull(v.perWeek);
+    const maxWeek = S.days.length * S.rules.maxSameSubjectPerDay;
+    if (!code) err.code = 'Enter a subject code, like CS305.';
+    else if (!/^[A-Z0-9-]+$/.test(code)) err.code = 'Use letters, numbers and "-" only.';
+    else if (taken(Object.keys(c.subjects).filter(k => k !== ref), code)) err.code = `${code} already exists.`;
+    if (!name) err.name = 'Enter the subject name.';
+    if (!KIND[v.kind]) err.kind = 'Type must be Lecture, Tutorial or Lab.';
+    if (v.kind === 'lab' && !labRoomTypes(c).includes(v.room)) err.room = `Choose the lab it needs: ${labRoomTypes(c).map(typeName).join(', ')}.`;
+    if (per !== null && v.kind !== 'lab' && !isInt(per, 1, maxWeek)) err.perWeek = `Enter 1–${maxWeek}, or leave blank to use the college rule.`;
+    if (per !== null && v.kind === 'lab' && !isInt(per, 1, 20)) err.perWeek = 'Enter a whole number of periods, or leave blank.';
+    if (!Object.keys(err).length) {
+      record = { code, subject: { short: String(v.short || '').trim() || name.slice(0, 14), name, kind: v.kind } };
+      if (v.kind === 'lab') record.subject.room = v.room;
+      if (per !== null) record.subject.perWeek = per;
+    }
+  }
+
+  if (entity === 'assignments') {
+    const s = c.subjects[v.subject], G = ix.groups[v.group], per = intOrNull(v.periods);
+    if (!v.subject) err.subject = 'Choose a subject.';
+    else if (!s) err.subject = `No subject with code "${v.subject}".`;
+    if (!v.group) err.group = 'Choose who it is taught to.';
+    else if (!G) err.group = `No section or lab group called "${v.group}".`;
+    else if (s && s.kind === 'lab' && !G.isSub) err.group = `${s.short} is a lab, so choose a lab group (like ${ix.subsOf[G.section][0] ? gLabel(c, ix.subsOf[G.section][0]) : 'A1'}).`;
+    else if (s && s.kind !== 'lab' && G.isSub) err.group = 'Lectures and tutorials are taught to the whole section.';
+    if (!v.teacher) err.teacher = 'Choose a teacher.';
+    else if (!ix.teachers[v.teacher]) err.teacher = `No teacher called "${v.teacher}".`;
+    if (s && G && c.assignments.some((a, i) => i !== ref && a[0] === v.subject && a[1] === v.group)) err.subject = `${s.short} is already assigned to ${gLabel(c, v.group)}.`;
+    if (s && G && seen.has(`${v.subject}|${v.group}`.toLowerCase())) err.subject = `${s.short} for ${gLabel(c, v.group)} appears twice in this file.`;
+    if (per !== null && !isInt(per, 1, S.days.length * ix.P.length)) err.periods = 'Enter a whole number of periods, or leave blank.';
+    if (per !== null && s?.kind === 'lab' && per % S.labBlock) err.periods = `Labs run in blocks of ${S.labBlock} periods, so use a multiple of ${S.labBlock}.`;
+    if (!Object.keys(err).length) record = per === null ? [v.subject, v.group, v.teacher] : [v.subject, v.group, v.teacher, per];
+  }
+  return { errors: err, record };
+}
+const uniqueKey = (entity, record) => ({
+  sections: () => record.id, teachers: () => record.name, rooms: () => record.id,
+  subjects: () => record.code, assignments: () => `${record[0]}|${record[1]}`,
+}[entity]().toLowerCase());
+
+/* ---- write a checked record into the college (handles renames) ---- */
+function saveRecord(c, entity, record, ref) {
+  if (entity === 'sections') {
+    if (ref == null) { c.sections.push(record); return; }
+    const old = c.sections[ref];
+    c.assignments.forEach(a => {
+      if (a[1] === old.id) a[1] = record.id;
+      const i = old.subs.findIndex(u => a[1] === `${old.id}/${u.label}`);
+      if (i >= 0) a[1] = `${record.id}/${record.subs[i].label}`;
+    });
+    c.sections[ref] = record;
+  } else if (entity === 'teachers') {
+    ref == null ? c.teachers.push(record) : (c.teachers[ref] = record);
+  } else if (entity === 'rooms') {
+    ref == null ? c.rooms.push(record) : (c.rooms[ref] = record);
+  } else if (entity === 'subjects') {
+    if (ref != null && ref !== record.code) {
+      const rebuilt = {};
+      Object.entries(c.subjects).forEach(([k, s]) => rebuilt[k === ref ? record.code : k] = k === ref ? record.subject : s);
+      c.subjects = rebuilt;
+      c.assignments.forEach(a => { if (a[0] === ref) a[0] = record.code; });
+    } else c.subjects[record.code] = record.subject;
+  } else {
+    ref == null ? c.assignments.push(record) : (c.assignments[ref] = record);
+  }
+}
+
+function deleteBlockReason(c, entity, ref) {
+  if (entity === 'sections') {
+    const s = c.sections[ref], n = assignmentsOf(c, a => a[1] === s.id || a[1].startsWith(`${s.id}/`));
+    return n ? `${s.id} has ${n} teaching assignment(s). Delete those first.` : null;
+  }
+  if (entity === 'teachers') {
+    const t = c.teachers[ref], n = assignmentsOf(c, a => a[2] === t.id);
+    return n ? `${t.name} teaches ${n} class(es). Give them to another teacher or delete them first.` : null;
+  }
+  if (entity === 'subjects') {
+    const n = assignmentsOf(c, a => a[0] === ref);
+    return n ? `${c.subjects[ref].short} is taught in ${n} class(es). Delete those first.` : null;
+  }
+  return null;
+}
+const recordName = (c, entity, ref) => ({
+  sections: () => c.sections[ref].id, teachers: () => c.teachers[ref].name, rooms: () => c.rooms[ref].id,
+  subjects: () => `${ref} ${c.subjects[ref].name}`,
+  assignments: () => { const a = c.assignments[ref]; return `${c.subjects[a[0]].short} for ${gLabel(c, a[1])}`; },
+}[entity]());
+
+/* ---- modal actions ---- */
+function openForm(entity, ref = null) {
+  const c = col();
+  state.modal = { kind: 'form', entity, ref, values: toValues(c, entity, ref), errors: {} };
+  render();
+}
+function mv(field, value, rerender) {
+  state.modal.values[field] = value;
+  if (field === 'subject' && state.modal.entity === 'assignments') state.modal.values.group = '';
+  if (rerender) render();
+}
+function toggleOff(day, period) {
+  const off = state.modal.values.off, i = off.findIndex(([d, p]) => d === day && p === period);
+  i >= 0 ? off.splice(i, 1) : off.push([day, period]);
+}
+function saveForm() {
+  const c = col(), m = state.modal;
+  const { errors, record } = validateValues(c, m.entity, m.values, m.ref);
+  if (!record) { m.errors = errors; render(); return; }
+  saveRecord(c, m.entity, record, m.ref);
+  dataChanged(c, `${ENT[m.entity].one[0].toUpperCase() + ENT[m.entity].one.slice(1)} ${m.ref == null ? 'added' : 'saved'}.`);
+}
+function askDelete(entity, ref) {
+  const c = col();
+  state.modal = { kind: 'confirm', entity, ref, name: recordName(c, entity, ref), blocked: deleteBlockReason(c, entity, ref) };
+  render();
+}
+function confirmDelete() {
+  const c = col(), { entity, ref, name } = state.modal;
+  if (entity === 'subjects') delete c.subjects[ref];
+  else c[entity].splice(ref, 1);
+  dataChanged(c, `Deleted ${name}.`);
+}
+function closeModal() { state.modal = null; render(); }
+
+/* ---- import: Excel (.xlsx) or CSV ---- */
+function openImport(entity) { state.modal = { kind: 'import', entity, results: null, file: null }; render(); }
+function setImportEntity(entity) { state.modal = { kind: 'import', entity, results: null, file: null }; render(); }
+
+function downloadTemplate(entity) {
+  const c = col(), cols = COLUMNS[entity];
+  const rows = [cols.map(([h]) => h), ...exampleRows(c, entity).slice(0, 2).map(r => cols.map(([h]) => r[h] ?? ''))];
+  const name = `samay-${entity}-template`;
+  if (window.XLSX) {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), ENT[entity].label.slice(0, 31));
+    XLSX.writeFile(wb, `${name}.xlsx`);
+  } else {
+    const csv = rows.map(r => r.map(x => `"${String(x).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })), download: `${name}.csv` });
+    a.click();
+  }
+  toast('Template downloaded. Fill it in, then upload it here.');
+}
+
+function parseCsv(text) {
+  const rows = [], re = /("([^"]|"")*"|[^,\r\n]*)(,|\r?\n|$)/g;
+  let row = [], m;
+  while ((m = re.exec(text)) && m[0] !== '') {
+    row.push(m[1].startsWith('"') ? m[1].slice(1, -1).replace(/""/g, '"') : m[1]);
+    if (m[3] !== ',') { rows.push(row); row = []; }
+  }
+  const [head = [], ...body] = rows.filter(r => r.some(x => x.trim() !== ''));
+  return body.map(r => Object.fromEntries(head.map((h, i) => [h, r[i] ?? ''])));
+}
+
+async function readImport(file) {
+  if (!file) return;
+  let rows;
+  try {
+    if (window.XLSX) {
+      const wb = XLSX.read(await file.arrayBuffer());
+      rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '', raw: false });
+    } else rows = parseCsv(await file.text());
+  } catch (e) {
+    state.modal.results = null; state.modal.fileError = 'This file couldn\'t be read. Save it as .xlsx or .csv and try again.'; render(); return;
+  }
+  state.modal.file = file.name; state.modal.fileError = null;
+  checkImportRows(rows);
+}
+
+// Turns spreadsheet text into form values: accepts names as well as codes ("Dr. A. Kumar", "Computer lab", "CSE-3A A1").
+function normalizeRow(c, entity, raw) {
+  const ix = idx(c), get = h => {
+    const k = Object.keys(raw).find(x => x.trim().toLowerCase() === h.toLowerCase());
+    return k ? String(raw[k]).trim() : '';
+  };
+  const v = {};
+  COLUMNS[entity].forEach(([h, f]) => v[f] = get(h));
+  const dept = x => c.departments.find(d => d.id.toLowerCase() === x.toLowerCase() || d.name.toLowerCase() === x.toLowerCase())?.id ?? x;
+  if ('dept' in v) v.dept = dept(v.dept);
+  if (entity === 'rooms') {
+    v.type = roomTypes(c).find(t => t === v.type || typeName(t).toLowerCase() === v.type.toLowerCase()) ?? v.type;
+    v.owner = !v.owner || v.owner.toLowerCase() === 'shared' ? 'Shared' : dept(v.owner);
+  }
+  if (entity === 'sections' && v.groups === '') v.groups = '0';
+  if (entity === 'teachers') {
+    if (v.max === '') v.max = String(c.scheme.rules.teacherMaxPerDay);
+    const text = v.off;
+    v.off = [];
+    text.split(/[;,]/).map(x => x.trim()).filter(Boolean).forEach(part => {
+      const m = part.match(/^(\w{3})\w*\s*P?(\d+)(?:\s*[-–]\s*P?(\d+))?$/i);
+      const day = m && c.scheme.days.find(d => d.toLowerCase() === m[1].toLowerCase());
+      if (!m || !day) { v.offError = `Can't read "${part}". Write it like "Mon P1; Wed P5-P7".`; return; }
+      for (let p = +m[2]; p <= +(m[3] || m[2]); p++) {
+        if (!ix.P.includes(p)) { v.offError = `There is no period P${p}.`; return; }
+        v.off.push([day, p]);
+      }
+    });
+  }
+  if (entity === 'subjects') {
+    const k = v.kind.toLowerCase();
+    v.kind = k === 'lecture' || k === 'theory' ? 'theory' : k === 'tutorial' ? 'tutorial' : k === 'lab' || k === 'practical' ? 'lab' : v.kind;
+    v.room = labRoomTypes(c).find(t => t === v.room || typeName(t).toLowerCase() === v.room.toLowerCase()) ?? v.room;
+  }
+  if (entity === 'assignments') {
+    v.subject = v.subject.toUpperCase();
+    const g = v.group.replace(/\s+/g, ' ');
+    v.group = Object.keys(ix.groups).find(id => id.toLowerCase() === g.toLowerCase() || gLabel(c, id).toLowerCase() === g.toLowerCase()) ?? v.group;
+    v.teacher = c.teachers.find(t => t.name.toLowerCase() === v.teacher.toLowerCase() || t.id.toLowerCase() === v.teacher.toLowerCase())?.id ?? v.teacher;
+  }
+  return v;
+}
+
+function checkImportRows(rows) {
+  const c = col(), m = state.modal, seen = new Set();
+  m.results = rows.map((raw, i) => {
+    const values = normalizeRow(c, m.entity, raw);
+    const { errors, record } = validateValues(c, m.entity, values, null, seen);
+    if (record) seen.add(uniqueKey(m.entity, record));
+    return { row: i + 2, raw, record, errors: Object.values(errors) };
+  });
+  render();
+}
+
+function exampleRows(c, entity) {
+  const d = c.departments[0].id, s0 = c.sections[0], t0 = c.teachers[0], sub0 = Object.entries(c.subjects)[0];
+  const labGroup = c.sections.find(s => s.subs.length);
+  return {
+    sections: [
+      { Section: `${s0.dept}-7A`, Department: s0.dept, Students: 58, 'Lab groups': 2 },
+      { Section: `${s0.dept}-7B`, Department: s0.dept, Students: 60, 'Lab groups': 2 },
+      { Section: s0.id, Department: s0.dept, Students: 60, 'Lab groups': 2 },
+      { Section: `${s0.dept}-7C`, Department: 'Mechanical', Students: 'sixty', 'Lab groups': 2 },
+    ],
+    teachers: [
+      { Name: 'Dr. Jaspreet Kaur', Department: d, 'Max periods a day': 4, Unavailable: `${c.scheme.days[0]} P1` },
+      { Name: 'Mr. Rohit Bhalla', Department: d, 'Max periods a day': 5, Unavailable: '' },
+      { Name: t0.name, Department: t0.dept, 'Max periods a day': 4, Unavailable: '' },
+      { Name: 'Ms. Anjali Verma', Department: d, 'Max periods a day': 5, Unavailable: 'Someday P9' },
+      { Name: '', Department: d, 'Max periods a day': 4, Unavailable: '' },
+    ],
+    rooms: [
+      { Room: 'New Block 1', Type: typeName(c.scheme.theoryRoomType), Capacity: 72, Owner: 'Shared' },
+      { Room: 'New Lab 1', Type: typeName(labRoomTypes(c)[0]), Capacity: 30, Owner: d },
+      { Room: c.rooms[0].id, Type: typeName(c.rooms[0].type), Capacity: 70, Owner: 'Shared' },
+      { Room: 'Old Hall', Type: 'Basement', Capacity: 0, Owner: 'Shared' },
+    ],
+    subjects: [
+      { Code: 'XX401', Name: 'Machine Learning', 'Short name': 'ML', Type: 'Lecture', 'Room needed': '', 'Lectures per week': '' },
+      { Code: 'XX401L', Name: 'Machine Learning Lab', 'Short name': 'ML Lab', Type: 'Lab', 'Room needed': typeName(labRoomTypes(c)[0]), 'Lectures per week': '' },
+      { Code: sub0[0], Name: sub0[1].name, 'Short name': sub0[1].short, Type: 'Lecture', 'Room needed': '', 'Lectures per week': '' },
+      { Code: 'XX402', Name: 'Ethics', 'Short name': 'Ethics', Type: 'Seminar', 'Room needed': '', 'Lectures per week': 9 },
+    ],
+    assignments: [
+      { 'Subject code': Object.keys(c.subjects).find(k => c.subjects[k].kind === 'tutorial') || sub0[0], 'Taught to': c.sections.at(-1).id, Teacher: c.teachers.at(-1).name, 'Periods per week': '' },
+      { 'Subject code': sub0[0], 'Taught to': s0.id, Teacher: t0.name, 'Periods per week': '' },
+      { 'Subject code': Object.keys(c.subjects).find(k => c.subjects[k].kind === 'lab'), 'Taught to': labGroup ? labGroup.id : s0.id, Teacher: t0.name, 'Periods per week': '' },
+      { 'Subject code': sub0[0], 'Taught to': s0.id, Teacher: 'Dr. Nobody', 'Periods per week': '' },
+    ],
+  }[entity];
+}
+function tryExample() { state.modal.file = 'Example rows'; checkImportRows(exampleRows(col(), state.modal.entity)); }
+
+function commitImport() {
+  const c = col(), m = state.modal, good = m.results.filter(r => r.record);
+  good.forEach(r => saveRecord(c, m.entity, r.record, null));
+  const skipped = m.results.length - good.length;
+  dataChanged(c, `Imported ${good.length} ${good.length === 1 ? ENT[m.entity].one : ENT[m.entity].label.toLowerCase()}${skipped ? `, skipped ${skipped} row(s) with problems` : ''}.`);
+}
+
+/* ---- modal rendering ---- */
+const fieldErr = (m, f) => m.errors?.[f] ? `<p class="mt-1 text-xs text-red-600">${esc(m.errors[f])}</p>` : '';
+const inputCls = bad => `w-full rounded-lg border ${bad ? 'border-red-400' : 'border-slate-200'} bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500`;
+function fInput(m, f, label, { type = 'text', placeholder = '', hint = '' } = {}) {
+  return `<label class="block"><span class="mb-1 block text-sm font-medium text-slate-700">${label}</span>
+    <input type="${type}" value="${esc(m.values[f])}" placeholder="${esc(placeholder)}" oninput="mv('${f}', this.value)" class="${inputCls(m.errors?.[f])}"/>
+    ${hint ? `<p class="mt-1 text-xs text-slate-500">${hint}</p>` : ''}${fieldErr(m, f)}</label>`;
+}
+function fSelect(m, f, label, options, { rerender = false, hint = '' } = {}) {
+  return `<label class="block"><span class="mb-1 block text-sm font-medium text-slate-700">${label}</span>
+    <select onchange="mv('${f}', this.value, ${rerender})" class="${inputCls(m.errors?.[f])}">
+      ${m.values[f] === '' ? '<option value="" selected disabled>Choose…</option>' : ''}
+      ${options.map(([v, l]) => `<option value="${esc(v)}" ${String(v) === String(m.values[f]) ? 'selected' : ''}>${esc(l)}</option>`).join('')}
+    </select>${hint ? `<p class="mt-1 text-xs text-slate-500">${hint}</p>` : ''}${fieldErr(m, f)}</label>`;
+}
+
+function formBody(c, m) {
+  const ix = idx(c), v = m.values, depts = c.departments.map(d => [d.id, `${d.id} · ${d.name}`]);
+  if (m.entity === 'sections') {
+    const n = intOrNull(v.groups) ?? 0, old = m.ref != null ? c.sections[m.ref].subs : [];
+    const labels = old.length ? Array.from({ length: n }, (_, i) => `${old[0].label.replace(/\d+$/, '')}${i + 1}`) : labLabels(c, v.name || 'A', n);
+    return `${fInput(m, 'name', 'Section name', { placeholder: 'CSE-3C' })}
+      <div class="grid grid-cols-2 gap-3">${fSelect(m, 'dept', 'Department', depts)}${fInput(m, 'strength', 'Students', { type: 'number', placeholder: '60' })}</div>
+      ${fSelect(m, 'groups', 'Lab groups', [0, 1, 2, 3, 4].map(k => [k, k === 0 ? 'None (no labs)' : `${k} group${k > 1 ? 's' : ''}`]), { rerender: true,
+        hint: n ? `Labs will be taught to ${labels.join(', ')}. Students are split evenly between them.` : 'Choose this if the section has no labs.' })}`;
+  }
+  if (m.entity === 'teachers') {
+    const isOff = (d, p) => v.off.some(([od, op]) => od === d && op === p);
+    return `${fInput(m, 'name', 'Full name', { placeholder: 'Dr. Jaspreet Kaur' })}
+      <div class="grid grid-cols-2 gap-3">${fSelect(m, 'dept', 'Department', depts)}${fInput(m, 'max', 'Max periods a day', { type: 'number' })}</div>
+      <div><span class="mb-1 block text-sm font-medium text-slate-700">When can't they teach?</span>
+        <p class="mb-2 text-xs text-slate-500">Tick the periods this teacher is not available. The generator will never place a class there.</p>
+        <div class="overflow-x-auto rounded-lg border border-slate-200 p-2"><table class="text-xs"><thead><tr><th></th>
+          ${ix.P.map(p => `<th class="px-1 pb-1 font-medium text-slate-500">${pLabel(c, p)}</th>`).join('')}</tr></thead><tbody>
+          ${c.scheme.days.map(d => `<tr><th class="pr-2 text-left font-medium text-slate-600">${d}</th>${ix.P.map(p => `<td class="px-1 text-center">
+            <input type="checkbox" ${isOff(d, p) ? 'checked' : ''} onchange="toggleOff('${d}', ${p})" class="h-4 w-4 accent-indigo-600" aria-label="${d} ${pLabel(c, p)}"/></td>`).join('')}</tr>`).join('')}
+        </tbody></table></div>${fieldErr(m, 'off')}</div>`;
+  }
+  if (m.entity === 'rooms') {
+    return `${fInput(m, 'name', 'Room name', { placeholder: 'LH-103' })}
+      <div class="grid grid-cols-2 gap-3">${fSelect(m, 'type', 'Type', roomTypes(c).map(t => [t, typeName(t)]))}${fInput(m, 'cap', 'Seats', { type: 'number', placeholder: '70' })}</div>
+      ${fSelect(m, 'owner', 'Belongs to', [['Shared', 'Shared by all departments'], ...depts], { hint: 'Shared rooms (seminar halls, computer labs) are shared fairly across departments.' })}`;
+  }
+  if (m.entity === 'subjects') {
+    return `<div class="grid grid-cols-2 gap-3">${fInput(m, 'code', 'Code', { placeholder: 'CS305' })}${fInput(m, 'short', 'Short name', { placeholder: 'ML', hint: 'Shown in timetable cells.' })}</div>
+      ${fInput(m, 'name', 'Full name', { placeholder: 'Machine Learning' })}
+      <div class="grid grid-cols-2 gap-3">${fSelect(m, 'kind', 'Type', [['theory', 'Lecture'], ['tutorial', 'Tutorial'], ['lab', 'Lab']], { rerender: true })}
+      ${v.kind === 'lab' ? fSelect(m, 'room', 'Lab it needs', labRoomTypes(c).map(t => [t, typeName(t)])) : '<div></div>'}</div>
+      ${fInput(m, 'perWeek', v.kind === 'lab' ? 'Lab periods a week' : 'Lectures a week', { type: 'number',
+        placeholder: v.kind === 'lab' ? `College rule: ${c.scheme.rules.labSessionsPerWeek * c.scheme.labBlock}` : `College rule: ${c.scheme.rules.lecturesPerWeek}`,
+        hint: 'Leave blank to follow your college rule.' })}`;
+  }
+  const s = c.subjects[v.subject];
+  const groups = !s ? [] : s.kind === 'lab'
+    ? Object.values(ix.groups).filter(g => g.isSub).map(g => [g.id, gLabel(c, g.id)])
+    : c.sections.map(x => [x.id, x.id]);
+  const def = s ? weekly(c, v.subject) : null;
+  return `${fSelect(m, 'subject', 'Subject', Object.entries(c.subjects).map(([k, x]) => [k, `${k} · ${x.name} (${KIND[x.kind].label})`]), { rerender: true })}
+    ${s ? fSelect(m, 'group', s.kind === 'lab' ? 'Lab group' : 'Section', groups, { hint: s.kind === 'lab' ? 'Labs are taught to one lab group at a time.' : 'Lectures are taught to the whole section.' }) : ''}
+    ${fSelect(m, 'teacher', 'Teacher', c.teachers.map(t => [t.id, `${t.name} (${t.dept})`]))}
+    ${s ? fInput(m, 'periods', 'Periods a week', { type: 'number', placeholder: `Default: ${def}`, hint: `Leave blank to use ${def} (from the ${s.perWeek != null ? 'subject' : 'college rule'}).` }) : ''}`;
+}
+
+function modal() {
+  const c = col(), m = state.modal;
+  const shell = (title, body, foot, wide = false) => `
+    <div class="no-print fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onclick="if (event.target === this) closeModal()">
+      <div class="flex max-h-[90vh] w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} flex-col rounded-xl bg-white shadow-xl fade-in" role="dialog" aria-modal="true">
+        <div class="flex items-center justify-between border-b border-slate-200 px-5 py-3"><div class="font-semibold">${title}</div>
+          <button onclick="closeModal()" class="rounded-md p-1 text-slate-500 hover:bg-slate-100" aria-label="Close">${icon('x')}</button></div>
+        <div class="space-y-4 overflow-y-auto px-5 py-4">${body}</div>
+        <div class="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">${foot}</div>
+      </div></div>`;
+
+  if (m.kind === 'form') {
+    return shell(`${m.ref == null ? 'Add' : 'Edit'} ${ENT[m.entity].one}`, formBody(c, m),
+      `${btn('Cancel', 'closeModal()')}${btn(m.ref == null ? `Add ${ENT[m.entity].one}` : 'Save changes', 'saveForm()', 'primary', 'check')}`);
+  }
+  if (m.kind === 'confirm') {
+    return m.blocked
+      ? shell(`Can't delete ${esc(m.name)}`, `<p class="text-sm text-slate-600">${esc(m.blocked)}</p>`, btn('OK', 'closeModal()', 'primary'))
+      : shell(`Delete ${esc(m.name)}?`, `<p class="text-sm text-slate-600">This removes it from ${esc(c.name)}. You'll need to generate the timetable again.</p>`,
+          `${btn('Cancel', 'closeModal()')}${btn('Delete', 'confirmDelete()', 'danger')}`);
+  }
+  // import
+  const cols = COLUMNS[m.entity], res = m.results;
+  const good = res ? res.filter(r => r.record).length : 0, bad = res ? res.length - good : 0;
+  const body = `
+    <div class="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+      <label class="block"><span class="mb-1 block text-sm font-medium text-slate-700">What are you importing?</span>
+        <select onchange="setImportEntity(this.value)" class="${inputCls(false)}">${Object.entries(ENT).map(([k, e]) => `<option value="${k}" ${k === m.entity ? 'selected' : ''}>${e.label}</option>`).join('')}</select></label>
+      ${btn('Download template', `downloadTemplate('${m.entity}')`, 'secondary')}
+    </div>
+    <div class="rounded-lg bg-slate-50 p-3 text-xs text-slate-600">Columns: ${cols.map(([h]) => `<b>${h}</b>`).join(', ')}.
+      ${m.entity === 'teachers' ? 'Write unavailable periods like <b>Mon P1; Wed P5-P7</b>.' : ''}
+      ${m.entity === 'assignments' ? 'Teachers can be written by name. Lab groups like <b>CSE-3A A1</b>. Leave periods blank to use the college rule.' : ''}
+      ${m.entity === 'sections' ? `Lab groups are named for you (${labLabels(c, c.sections[0]?.id || 'A', 2).join(', ')}…).` : ''}</div>
+    <label class="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 px-4 py-6 text-center hover:border-indigo-400 hover:bg-indigo-50/30">
+      ${icon('table', 'w-6 h-6 text-slate-400')}
+      <span class="mt-2 text-sm font-medium text-slate-700">${m.file ? `Loaded: ${esc(m.file)}. Choose another file` : 'Choose an Excel or CSV file'}</span>
+      <span class="text-xs text-slate-500">.xlsx or .csv, first sheet, one row per ${ENT[m.entity].one}</span>
+      <input type="file" accept=".xlsx,.xls,.csv" class="hidden" onchange="readImport(this.files[0])"/>
+    </label>
+    <div class="text-center text-xs text-slate-500">No file handy? <button onclick="tryExample()" class="font-medium text-indigo-600 hover:underline">Try with example rows</button> (includes some mistakes on purpose).</div>
+    ${m.fileError ? `<div class="rounded-lg bg-red-50 p-3 text-sm text-red-800">${esc(m.fileError)}</div>` : ''}
+    ${res ? `
+      <div class="flex flex-wrap gap-2 text-sm">
+        <span class="rounded-md bg-emerald-50 px-2 py-1 font-medium text-emerald-700">${good} ready to import</span>
+        ${bad ? `<span class="rounded-md bg-red-50 px-2 py-1 font-medium text-red-700">${bad} with problems</span>` : ''}
+      </div>
+      <div class="overflow-x-auto rounded-lg border border-slate-200"><table class="w-full text-sm">
+        <thead class="bg-slate-50"><tr><th class="px-3 py-2 text-left text-xs font-medium text-slate-500">Row</th>
+          ${cols.map(([h]) => `<th class="px-3 py-2 text-left text-xs font-medium text-slate-500">${h}</th>`).join('')}
+          <th class="px-3 py-2 text-left text-xs font-medium text-slate-500">Check</th></tr></thead>
+        <tbody class="divide-y divide-slate-100">${res.map(r => `<tr class="${r.record ? '' : 'bg-red-50/50'}">
+          <td class="px-3 py-2 text-slate-500">${r.row}</td>
+          ${cols.map(([h]) => `<td class="px-3 py-2">${esc(Object.entries(r.raw).find(([k]) => k.trim().toLowerCase() === h.toLowerCase())?.[1] ?? '')}</td>`).join('')}
+          <td class="px-3 py-2">${r.record ? '<span class="font-medium text-emerald-700">OK</span>' : `<span class="text-red-700">${r.errors.map(esc).join(' ')}</span>`}</td></tr>`).join('')}
+        </tbody></table></div>
+      ${bad ? '<p class="text-xs text-slate-500">Rows with problems will be skipped. Fix them in your file and import again.</p>' : ''}` : ''}`;
+  return shell('Import from Excel or CSV', body,
+    `${btn('Cancel', 'closeModal()')}${good ? btn(`Import ${good} row${good > 1 ? 's' : ''}`, 'commitImport()', 'primary', 'check') : ''}`, true);
+}
+
+/* ---- the Data page ---- */
 function dataPage() {
   const c = col(), g = current(), ix = idx(c);
+  const tab = state.dataTab || 'sections';
   const load = {};
   A(c).forEach(a => load[a.teacher] = (load[a.teacher] || 0) + a.periods);
   const use = {};
@@ -921,24 +1441,38 @@ function dataPage() {
   const slots = c.scheme.days.length * ix.P.length;
   const th = h => `<th class="px-3 py-2 text-left text-xs font-medium text-slate-500">${h}</th>`;
   const td = (v, cls = '') => `<td class="px-3 py-2 text-sm ${cls}">${v}</td>`;
-  const table = (title, heads, rows, note) => card(`
-    <div class="mb-3 flex items-center justify-between"><div class="font-medium">${title}</div><span class="text-xs text-slate-500">${note}</span></div>
-    <div class="overflow-x-auto"><table class="w-full"><thead class="border-b border-slate-100"><tr>${heads.map(th).join('')}</tr></thead>
-    <tbody class="divide-y divide-slate-100">${rows.join('')}</tbody></table></div>`, 'mb-4');
+  const actions = ref => `<td class="whitespace-nowrap px-3 py-2 text-right text-sm">
+    <button onclick="openForm('${tab}', ${JSON.stringify(ref).replace(/"/g, '&quot;')})" class="rounded-md px-2 py-1 font-medium text-indigo-600 hover:bg-indigo-50">Edit</button>
+    <button onclick="askDelete('${tab}', ${JSON.stringify(ref).replace(/"/g, '&quot;')})" class="rounded-md px-2 py-1 text-slate-500 hover:bg-red-50 hover:text-red-700">Delete</button></td>`;
+  const counts = { sections: c.sections.length, teachers: c.teachers.length, rooms: c.rooms.length, subjects: Object.keys(c.subjects).length, assignments: c.assignments.length };
+
+  const views = {
+    sections: () => [['Section', 'Department', 'Students', 'Lab groups'], c.sections.map((s, i) => `<tr>${td(esc(s.id), 'font-medium')}${td(esc(s.dept))}${td(s.strength)}${td(s.subs.length ? s.subs.map(u => `<span class="mr-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs">${esc(u.label)} · ${u.strength}</span>`).join('') : '<span class="text-xs text-slate-400">None (no labs)</span>')}${actions(i)}</tr>`)],
+    teachers: () => [['Name', 'Department', 'Periods a week', 'Max a day', 'Unavailable'], c.teachers.map((t, i) => `<tr>${td(esc(t.name), 'font-medium')}${td(esc(t.dept))}${td(load[t.id] || 0)}${td(tMax(c, t))}${td(t.off ? fmtOff(t.off) : '<span class="text-slate-400">–</span>')}${actions(i)}</tr>`)],
+    rooms: () => [['Room', 'Type', 'Seats', 'Belongs to', 'Used'], c.rooms.map((r, i) => `<tr>${td(esc(r.id), 'font-medium')}${td(typeName(r.type))}${td(r.cap)}${td(r.owner === 'Shared' ? '<span class="rounded bg-indigo-50 px-1.5 py-0.5 text-xs text-indigo-700">Shared</span>' : esc(r.owner))}${td(g ? Math.round(100 * (use[r.id] || 0) / slots) + '%' : '–')}${actions(i)}</tr>`)],
+    subjects: () => [['Code', 'Subject', 'Type', 'Room needed', 'Per week'], Object.entries(c.subjects).map(([code, s]) => `<tr>${td(esc(code), 'font-mono text-xs')}${td(`${esc(s.name)} <span class="text-xs text-slate-400">${esc(s.short)}</span>`)}${td(`<span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-sm ${KIND[s.kind].dot}"></span>${KIND[s.kind].label}</span>`)}${td(typeName(s.room || c.scheme.theoryRoomType))}${td(`${weekly(c, code)} <span class="text-xs ${s.perWeek != null ? 'text-amber-700' : 'text-slate-400'}">${s.perWeek != null ? 'set for subject' : 'college rule'}</span>`)}${actions(code)}</tr>`)],
+    assignments: () => [['Subject', 'Taught to', 'Teacher', 'Periods a week'], A(c).map(a => {
+      const own = c.assignments[a.i][3] != null;
+      return `<tr>${td(`${esc(subj(c, a).name)} <span class="text-xs text-slate-400">${KIND[subj(c, a).kind].label}</span>`)}${td(esc(gLabel(c, a.group)))}${td(esc(ix.teachers[a.teacher].name))}${td(`${a.periods} <span class="text-xs ${own ? 'text-amber-700' : 'text-slate-400'}">${own ? 'set here' : 'default'}</span>`)}${actions(a.i)}</tr>`;
+    })],
+  };
+  const [heads, rows] = views[tab]();
   return `
   <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-    <h1 class="text-2xl font-semibold tracking-tight">Data</h1>
-    <div class="flex gap-2"><button disabled class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-400">Import from Excel · coming soon</button>
-    <button disabled class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-400">Add · coming soon</button></div>
+    <div><h1 class="text-2xl font-semibold tracking-tight">Data</h1>
+    <p class="text-sm text-slate-500">Everything the generator needs. Add records one by one, or import a whole sheet at once.</p></div>
+    <div class="flex gap-2">${btn('Import from Excel', `openImport('${tab}')`, 'secondary', 'table')}${btn(`Add ${ENT[tab].one}`, `openForm('${tab}')`, 'primary')}</div>
   </div>
-  ${table('Sections and lab groups', ['Section', 'Department', 'Students', 'Lab groups'], c.sections.map(s => `<tr>${td(s.id, 'font-medium')}${td(s.dept)}${td(s.strength)}${td(s.subs.length ? s.subs.map(u => `<span class="mr-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs">${u.label} · ${u.strength}</span>`).join('') : '<span class="text-xs text-slate-400">None (no labs)</span>')}</tr>`), `${c.sections.length} sections`)}
-  ${table('Teachers', ['Name', 'Department', 'Periods a week', 'Max a day', 'Unavailable'], c.teachers.map(t => `<tr>${td(t.name, 'font-medium')}${td(t.dept)}${td(load[t.id] || 0)}${td(tMax(c, t))}${td(t.off ? fmtOff(t.off) : '<span class="text-slate-400">–</span>')}</tr>`), `${c.teachers.length} teachers`)}
-  ${table('Rooms', ['Room', 'Type', 'Capacity', 'Owner', 'Used'], c.rooms.map(r => `<tr>${td(r.id, 'font-medium')}${td(typeName(r.type))}${td(r.cap)}${td(r.owner === 'Shared' ? '<span class="rounded bg-indigo-50 px-1.5 py-0.5 text-xs text-indigo-700">Shared</span>' : r.owner)}${td(g ? Math.round(100 * (use[r.id] || 0) / slots) + '%' : '–')}</tr>`), `${c.rooms.length} rooms`)}
-  ${table('Teaching assignments', ['Subject', 'Taught to', 'Teacher', 'Periods a week'], A(c).map(a => {
-    const own = c.assignments[a.i][3] != null;
-    return `<tr>${td(`${subj(c, a).name} <span class="text-xs text-slate-400">${KIND[subj(c, a).kind].label}</span>`)}${td(gLabel(c, a.group))}${td(ix.teachers[a.teacher].name)}${td(`${a.periods} <span class="text-xs ${own ? 'text-amber-700' : 'text-slate-400'}">${own ? 'set for this subject' : 'college rule'}</span>`)}</tr>`;
-  }), `Default: ${c.scheme.rules.lecturesPerWeek} lectures a week per subject`)}
-  ${table('Subjects', ['Code', 'Subject', 'Type', 'Room needed'], Object.entries(c.subjects).map(([code, s]) => `<tr>${td(code, 'font-mono text-xs')}${td(s.name)}${td(`<span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-sm ${KIND[s.kind].dot}"></span>${KIND[s.kind].label}</span>`)}${td(typeName(s.room || c.scheme.theoryRoomType))}</tr>`), `${Object.keys(c.subjects).length} subjects`)}`;
+  <div class="mb-3 flex gap-1 overflow-x-auto border-b border-slate-200">
+    ${Object.entries(ENT).map(([k, e]) => `<button onclick="state.dataTab='${k}'; render()" class="-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm ${k === tab ? 'border-indigo-600 font-medium text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-700'}">
+      ${e.label} <span class="ml-1 rounded-full bg-slate-100 px-1.5 text-xs text-slate-600">${counts[k]}</span></button>`).join('')}
+  </div>
+  ${tab === 'assignments' ? `<p class="mb-3 text-sm text-slate-500">Who teaches what to whom. Lectures go to a whole section; labs go to one lab group. Default: ${c.scheme.rules.lecturesPerWeek} lectures a week per subject.</p>` : ''}
+  ${rows.length ? card(`<div class="overflow-x-auto"><table class="w-full"><thead class="border-b border-slate-100"><tr>${heads.map(th).join('')}<th></th></tr></thead>
+    <tbody class="divide-y divide-slate-100">${rows.join('')}</tbody></table></div>`)
+    : card(`<div class="py-10 text-center"><div class="font-medium">No ${ENT[tab].label.toLowerCase()} yet</div>
+      <p class="mt-1 text-sm text-slate-500">Add them one by one or import a spreadsheet.</p>
+      <div class="mt-4 flex justify-center gap-2">${btn('Import from Excel', `openImport('${tab}')`)}${btn(`Add ${ENT[tab].one}`, `openForm('${tab}')`, 'primary')}</div></div>`)}`;
 }
 
 function precheckPage() {
