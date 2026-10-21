@@ -1,0 +1,962 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Samay · Timetable Optimizer (Prototype)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com/3.4.16"></script>
+<script>tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] } } } }</script>
+<style>
+  .vtext { writing-mode: vertical-rl; transform: rotate(180deg); }
+  .print-only { display: none; }
+  .fade-in { animation: fadein .25s ease-out; }
+  @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  @media print {
+    @page { size: A4 landscape; margin: 8mm; }
+    .no-print { display: none !important; }
+    .print-only { display: block !important; }
+    body { background: #fff; }
+    main { padding: 0 !important; margin: 0 !important; }
+    .tt-cell { break-inside: avoid; }
+  }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-900 font-sans antialiased">
+<div id="app"></div>
+
+<script>
+/* ------------------------------------------------------------------
+   Demo data: two colleges with DIFFERENT schemes (days, periods,
+   breaks, lab groups, room types, rules). Nothing below is hard-coded
+   to one college; every screen reads the selected college's scheme.
+------------------------------------------------------------------- */
+const COLLEGES = [
+  {
+    id: 'demo-eng', name: 'Demo Engineering College', place: 'Ludhiana', term: 'Odd Semester 2026', kind: 'Engineering (B.Tech)',
+    scheme: {
+      days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+      periods: [['P1', '09:00', '09:50'], ['P2', '09:50', '10:40'], ['P3', '10:40', '11:30'], ['P4', '11:30', '12:20'],
+                ['P5', '13:00', '13:50'], ['P6', '13:50', '14:40'], ['P7', '14:40', '15:30']],
+      breaks: [{ after: 4, label: 'Lunch', time: '12:20–13:00' }],
+      theoryRoomType: 'lecture', labGroups: 'A1, A2 (2 per section)', labBlock: 2,
+      rules: { maxSameSubjectPerDay: 1, teacherMaxPerDay: 5 },
+    },
+    departments: [
+      { id: 'CSE', name: 'Computer Science and Engg.', status: 'ready' },
+      { id: 'ECE', name: 'Electronics and Comm. Engg.', status: 'ready' },
+      { id: 'AS', name: 'Applied Sciences', status: 'ready' },
+    ],
+    rooms: [
+      { id: 'LH-101', type: 'lecture', cap: 70, owner: 'CSE' }, { id: 'LH-102', type: 'lecture', cap: 70, owner: 'CSE' },
+      { id: 'LH-201', type: 'lecture', cap: 70, owner: 'ECE' }, { id: 'LH-202', type: 'lecture', cap: 70, owner: 'ECE' },
+      { id: 'Seminar Hall', type: 'lecture', cap: 120, owner: 'Shared' },
+      { id: 'CL-1', type: 'computer_lab', cap: 35, owner: 'Shared' }, { id: 'CL-2', type: 'computer_lab', cap: 35, owner: 'Shared' },
+      { id: 'EL-1', type: 'electronics_lab', cap: 35, owner: 'ECE' }, { id: 'EL-2', type: 'electronics_lab', cap: 35, owner: 'ECE' },
+    ],
+    teachers: [
+      { id: 'T01', name: 'Dr. A. Kumar', dept: 'CSE', max: 5, off: [['Mon', 1], ['Mon', 2]] },
+      { id: 'T02', name: 'Prof. S. Kaur', dept: 'CSE', max: 5 },
+      { id: 'T03', name: 'Dr. R. Sharma', dept: 'CSE', max: 5 },
+      { id: 'T04', name: 'Prof. M. Gill', dept: 'CSE', max: 5 },
+      { id: 'T05', name: 'Dr. P. Verma', dept: 'CSE', max: 5, off: [['Wed', 5], ['Wed', 6], ['Wed', 7]] },
+      { id: 'T06', name: 'Prof. N. Arora', dept: 'CSE', max: 5 },
+      { id: 'T07', name: 'Ms. K. Bedi', dept: 'CSE', max: 6 },
+      { id: 'T08', name: 'Mr. J. Singh', dept: 'CSE', max: 6 },
+      { id: 'T09', name: 'Dr. H. Dhillon', dept: 'AS', max: 5, off: [['Fri', 5], ['Fri', 6], ['Fri', 7]] },
+      { id: 'T10', name: 'Ms. R. Malhotra', dept: 'AS', max: 4 },
+      { id: 'T11', name: 'Dr. V. Rao', dept: 'ECE', max: 5 },
+      { id: 'T12', name: 'Prof. D. Sidhu', dept: 'ECE', max: 5 },
+      { id: 'T13', name: 'Dr. L. Batra', dept: 'ECE', max: 5 },
+      { id: 'T14', name: 'Prof. G. Chawla', dept: 'ECE', max: 5 },
+      { id: 'T15', name: 'Dr. S. Menon', dept: 'ECE', max: 5 },
+      { id: 'T16', name: 'Ms. A. Grewal', dept: 'ECE', max: 5 },
+    ],
+    sections: [
+      { id: 'CSE-3A', dept: 'CSE', strength: 60, subs: [{ label: 'A1', strength: 30 }, { label: 'A2', strength: 30 }] },
+      { id: 'CSE-3B', dept: 'CSE', strength: 60, subs: [{ label: 'B1', strength: 30 }, { label: 'B2', strength: 30 }] },
+      { id: 'CSE-5A', dept: 'CSE', strength: 56, subs: [{ label: 'A1', strength: 28 }, { label: 'A2', strength: 28 }] },
+      { id: 'ECE-3A', dept: 'ECE', strength: 60, subs: [{ label: 'A1', strength: 30 }, { label: 'A2', strength: 30 }] },
+      { id: 'ECE-5A', dept: 'ECE', strength: 52, subs: [{ label: 'A1', strength: 26 }, { label: 'A2', strength: 26 }] },
+    ],
+    subjects: {
+      CS301: { short: 'DBMS', name: 'Database Management Systems', kind: 'theory' },
+      CS302: { short: 'OS', name: 'Operating Systems', kind: 'theory' },
+      CS303: { short: 'DS', name: 'Data Structures', kind: 'theory' },
+      MA301: { short: 'Maths-III', name: 'Engineering Mathematics III', kind: 'theory' },
+      HU301: { short: 'Comm. Skills', name: 'Communication Skills', kind: 'tutorial' },
+      CS301L: { short: 'DBMS Lab', name: 'DBMS Lab', kind: 'lab', room: 'computer_lab' },
+      CS303L: { short: 'DS Lab', name: 'Data Structures Lab', kind: 'lab', room: 'computer_lab' },
+      CS501: { short: 'CN', name: 'Computer Networks', kind: 'theory' },
+      CS502: { short: 'AI', name: 'Artificial Intelligence', kind: 'theory' },
+      CS503: { short: 'SE', name: 'Software Engineering', kind: 'theory' },
+      CS504: { short: 'TOC', name: 'Theory of Computation', kind: 'theory' },
+      CS501L: { short: 'CN Lab', name: 'Computer Networks Lab', kind: 'lab', room: 'computer_lab' },
+      CS502L: { short: 'AI Lab', name: 'AI Lab', kind: 'lab', room: 'computer_lab' },
+      EC301: { short: 'S&S', name: 'Signals and Systems', kind: 'theory' },
+      EC302: { short: 'Analog', name: 'Analog Electronics', kind: 'theory' },
+      EC303: { short: 'Digital', name: 'Digital Electronics', kind: 'theory' },
+      EC302L: { short: 'Analog Lab', name: 'Analog Electronics Lab', kind: 'lab', room: 'electronics_lab' },
+      EC303L: { short: 'Digital Lab', name: 'Digital Electronics Lab', kind: 'lab', room: 'electronics_lab' },
+      EC501: { short: 'MPMC', name: 'Microprocessors and Microcontrollers', kind: 'theory' },
+      EC502: { short: 'Comm. Sys', name: 'Communication Systems', kind: 'theory' },
+      EC503: { short: 'Control', name: 'Control Systems', kind: 'theory' },
+      EC504: { short: 'VLSI', name: 'VLSI Design', kind: 'theory' },
+      EC501L: { short: 'MPMC Lab', name: 'Microprocessors Lab', kind: 'lab', room: 'electronics_lab' },
+      EC502L: { short: 'Comm. Lab', name: 'Communication Systems Lab', kind: 'lab', room: 'electronics_lab' },
+    },
+    // [subject, group, teacher, periods per week]. Theory → whole section; labs → one lab group (A1/A2).
+    assignments: [
+      ['CS301', 'CSE-3A', 'T01', 4], ['CS302', 'CSE-3A', 'T02', 4], ['CS303', 'CSE-3A', 'T03', 4], ['MA301', 'CSE-3A', 'T09', 4], ['HU301', 'CSE-3A', 'T10', 2],
+      ['CS301L', 'CSE-3A/A1', 'T07', 2], ['CS303L', 'CSE-3A/A1', 'T08', 2], ['CS301L', 'CSE-3A/A2', 'T07', 2], ['CS303L', 'CSE-3A/A2', 'T08', 2],
+      ['CS301', 'CSE-3B', 'T01', 4], ['CS302', 'CSE-3B', 'T02', 4], ['CS303', 'CSE-3B', 'T03', 4], ['MA301', 'CSE-3B', 'T09', 4], ['HU301', 'CSE-3B', 'T10', 2],
+      ['CS301L', 'CSE-3B/B1', 'T07', 2], ['CS303L', 'CSE-3B/B1', 'T08', 2], ['CS301L', 'CSE-3B/B2', 'T07', 2], ['CS303L', 'CSE-3B/B2', 'T08', 2],
+      ['CS501', 'CSE-5A', 'T04', 4], ['CS502', 'CSE-5A', 'T05', 4], ['CS503', 'CSE-5A', 'T06', 3], ['CS504', 'CSE-5A', 'T06', 3],
+      ['CS501L', 'CSE-5A/A1', 'T04', 2], ['CS502L', 'CSE-5A/A1', 'T05', 2], ['CS501L', 'CSE-5A/A2', 'T04', 2], ['CS502L', 'CSE-5A/A2', 'T05', 2],
+      ['EC301', 'ECE-3A', 'T11', 4], ['EC302', 'ECE-3A', 'T12', 4], ['EC303', 'ECE-3A', 'T13', 4], ['MA301', 'ECE-3A', 'T09', 4],
+      ['EC302L', 'ECE-3A/A1', 'T12', 2], ['EC303L', 'ECE-3A/A1', 'T13', 2], ['EC302L', 'ECE-3A/A2', 'T12', 2], ['EC303L', 'ECE-3A/A2', 'T13', 2],
+      ['EC501', 'ECE-5A', 'T14', 4], ['EC502', 'ECE-5A', 'T15', 4], ['EC503', 'ECE-5A', 'T11', 3], ['EC504', 'ECE-5A', 'T16', 3],
+      ['EC501L', 'ECE-5A/A1', 'T14', 2], ['EC502L', 'ECE-5A/A1', 'T15', 2], ['EC501L', 'ECE-5A/A2', 'T14', 2], ['EC502L', 'ECE-5A/A2', 'T15', 2],
+    ],
+  },
+  {
+    id: 'city-arts', name: 'City Arts and Science College', place: 'Amritsar', term: 'Semester I, 2026–27', kind: 'Arts, Science and Commerce',
+    scheme: {
+      days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+      periods: [['P1', '08:30', '09:15'], ['P2', '09:15', '10:00'], ['P3', '10:15', '11:00'], ['P4', '11:00', '11:45'],
+                ['P5', '12:30', '13:15'], ['P6', '13:15', '14:00']],
+      breaks: [{ after: 2, label: 'Tea', time: '10:00–10:15' }, { after: 4, label: 'Lunch', time: '11:45–12:30' }],
+      theoryRoomType: 'classroom', labGroups: 'G1, G2, G3 (3 per section)', labBlock: 2,
+      rules: { maxSameSubjectPerDay: 1, teacherMaxPerDay: 4 },
+    },
+    departments: [
+      { id: 'CS', name: 'Computer Science', status: 'ready' },
+      { id: 'PHY', name: 'Physics', status: 'ready' },
+      { id: 'COM', name: 'Commerce', status: 'review' },
+      { id: 'GEN', name: 'Maths and English', status: 'ready' },
+    ],
+    rooms: [
+      { id: 'Room 1', type: 'classroom', cap: 75, owner: 'CS' }, { id: 'Room 2', type: 'classroom', cap: 75, owner: 'PHY' },
+      { id: 'Room 3', type: 'classroom', cap: 75, owner: 'COM' }, { id: 'Auditorium', type: 'classroom', cap: 200, owner: 'Shared' },
+      { id: 'Comp Lab A', type: 'computer_lab', cap: 25, owner: 'CS' }, { id: 'Comp Lab B', type: 'computer_lab', cap: 25, owner: 'CS' },
+      { id: 'Comp Lab C', type: 'computer_lab', cap: 25, owner: 'Shared' },
+      { id: 'Sci Lab 1', type: 'science_lab', cap: 25, owner: 'PHY' }, { id: 'Sci Lab 2', type: 'science_lab', cap: 25, owner: 'PHY' },
+      { id: 'Sci Lab 3', type: 'science_lab', cap: 25, owner: 'PHY' },
+    ],
+    teachers: [
+      { id: 'C1', name: 'Dr. Neha Bansal', dept: 'CS', max: 4 },
+      { id: 'C2', name: 'Mr. Arjun Mehta', dept: 'CS', max: 4, off: [['Sat', 5], ['Sat', 6]] },
+      { id: 'C3', name: 'Ms. Simran Kohli', dept: 'CS', max: 4 },
+      { id: 'P1', name: 'Dr. Rajiv Saini', dept: 'PHY', max: 4 },
+      { id: 'P2', name: 'Ms. Tanya Joshi', dept: 'PHY', max: 4 },
+      { id: 'P3', name: 'Dr. Manpreet Sandhu', dept: 'PHY', max: 4, off: [['Mon', 1], ['Mon', 2]] },
+      { id: 'M1', name: 'Prof. Kavita Rao', dept: 'GEN', max: 4 },
+      { id: 'E1', name: 'Ms. Pooja Anand', dept: 'GEN', max: 4 },
+      { id: 'B1', name: 'Mr. Vikram Ahuja', dept: 'COM', max: 4 },
+      { id: 'B2', name: 'Dr. Ritu Sethi', dept: 'COM', max: 4 },
+    ],
+    sections: [
+      { id: 'BSc CS-I', dept: 'CS', strength: 66, subs: [{ label: 'G1', strength: 22 }, { label: 'G2', strength: 22 }, { label: 'G3', strength: 22 }] },
+      { id: 'BSc Phy-I', dept: 'PHY', strength: 60, subs: [{ label: 'G1', strength: 20 }, { label: 'G2', strength: 20 }, { label: 'G3', strength: 20 }] },
+      { id: 'BCom-II', dept: 'COM', strength: 70, subs: [] },
+    ],
+    subjects: {
+      CS101: { short: 'Python', name: 'Programming in Python', kind: 'theory' },
+      CS102: { short: 'Web Tech', name: 'Web Technologies', kind: 'theory' },
+      CS103: { short: 'DBMS', name: 'Database Concepts', kind: 'theory' },
+      MT101: { short: 'Calculus', name: 'Calculus', kind: 'theory' },
+      EN101: { short: 'English', name: 'General English', kind: 'tutorial' },
+      CS101L: { short: 'Python Lab', name: 'Python Lab', kind: 'lab', room: 'computer_lab' },
+      CS102L: { short: 'Web Lab', name: 'Web Technologies Lab', kind: 'lab', room: 'computer_lab' },
+      CS103L: { short: 'DBMS Lab', name: 'Database Lab', kind: 'lab', room: 'computer_lab' },
+      PH101: { short: 'Mechanics', name: 'Mechanics', kind: 'theory' },
+      PH102: { short: 'Optics', name: 'Optics', kind: 'theory' },
+      PH103: { short: 'Electronics', name: 'Basic Electronics', kind: 'theory' },
+      PH101L: { short: 'Mech. Lab', name: 'Mechanics Lab', kind: 'lab', room: 'science_lab' },
+      PH102L: { short: 'Optics Lab', name: 'Optics Lab', kind: 'lab', room: 'science_lab' },
+      PH103L: { short: 'Elec. Lab', name: 'Electronics Lab', kind: 'lab', room: 'science_lab' },
+      BC201: { short: 'Accounts', name: 'Corporate Accounting', kind: 'theory' },
+      BC202: { short: 'Bus. Law', name: 'Business Law', kind: 'theory' },
+      BC203: { short: 'Tax', name: 'Income Tax', kind: 'theory' },
+      BC204: { short: 'Bus. Stats', name: 'Business Statistics', kind: 'theory' },
+      BC205: { short: 'Bus. Comm.', name: 'Business Communication', kind: 'tutorial' },
+    },
+    assignments: [
+      ['CS101', 'BSc CS-I', 'C1', 4], ['CS102', 'BSc CS-I', 'C2', 4], ['CS103', 'BSc CS-I', 'C3', 4], ['MT101', 'BSc CS-I', 'M1', 4], ['EN101', 'BSc CS-I', 'E1', 2],
+      ['CS101L', 'BSc CS-I/G1', 'C1', 2], ['CS102L', 'BSc CS-I/G1', 'C2', 2], ['CS103L', 'BSc CS-I/G1', 'C3', 2],
+      ['CS101L', 'BSc CS-I/G2', 'C1', 2], ['CS102L', 'BSc CS-I/G2', 'C2', 2], ['CS103L', 'BSc CS-I/G2', 'C3', 2],
+      ['CS101L', 'BSc CS-I/G3', 'C1', 2], ['CS102L', 'BSc CS-I/G3', 'C2', 2], ['CS103L', 'BSc CS-I/G3', 'C3', 2],
+      ['PH101', 'BSc Phy-I', 'P1', 4], ['PH102', 'BSc Phy-I', 'P2', 4], ['PH103', 'BSc Phy-I', 'P3', 4], ['MT101', 'BSc Phy-I', 'M1', 4], ['EN101', 'BSc Phy-I', 'E1', 2],
+      ['PH101L', 'BSc Phy-I/G1', 'P1', 2], ['PH102L', 'BSc Phy-I/G1', 'P2', 2], ['PH103L', 'BSc Phy-I/G1', 'P3', 2],
+      ['PH101L', 'BSc Phy-I/G2', 'P1', 2], ['PH102L', 'BSc Phy-I/G2', 'P2', 2], ['PH103L', 'BSc Phy-I/G2', 'P3', 2],
+      ['PH101L', 'BSc Phy-I/G3', 'P1', 2], ['PH102L', 'BSc Phy-I/G3', 'P2', 2], ['PH103L', 'BSc Phy-I/G3', 'P3', 2],
+      ['BC201', 'BCom-II', 'B1', 5], ['BC202', 'BCom-II', 'B2', 4], ['BC203', 'BCom-II', 'B1', 4], ['BC204', 'BCom-II', 'M1', 3], ['BC205', 'BCom-II', 'E1', 3],
+    ],
+  },
+];
+
+const ROOM_TYPE = { lecture: 'Lecture hall', classroom: 'Classroom', computer_lab: 'Computer lab', electronics_lab: 'Electronics lab', science_lab: 'Science lab' };
+const KIND = {
+  theory: { label: 'Lecture', cls: 'bg-sky-50 border-sky-200 text-sky-950', dot: 'bg-sky-400' },
+  tutorial: { label: 'Tutorial', cls: 'bg-amber-50 border-amber-200 text-amber-950', dot: 'bg-amber-400' },
+  lab: { label: 'Lab', cls: 'bg-emerald-50 border-emerald-200 text-emerald-950', dot: 'bg-emerald-500' },
+};
+
+/* ------------------------------ helpers ------------------------------ */
+const typeName = t => ROOM_TYPE[t] || t;
+const key = (...k) => k.join('|');
+const rotate = (arr, n) => arr.map((_, i) => arr[(i + n) % arr.length]);
+
+function idx(c) {
+  if (c._ix) return c._ix;
+  const groups = {}, subsOf = {};
+  c.sections.forEach(s => {
+    groups[s.id] = { id: s.id, section: s.id, label: s.id, strength: s.strength, isSub: false };
+    subsOf[s.id] = [];
+    (s.subs || []).forEach(u => {
+      const id = `${s.id}/${u.label}`;
+      groups[id] = { id, section: s.id, label: u.label, strength: u.strength, isSub: true };
+      subsOf[s.id].push(id);
+    });
+  });
+  c._ix = {
+    groups, subsOf,
+    teachers: Object.fromEntries(c.teachers.map(t => [t.id, t])),
+    rooms: Object.fromEntries(c.rooms.map(r => [r.id, r])),
+    P: c.scheme.periods.map((_, i) => i + 1),
+    breaksAfter: new Map(c.scheme.breaks.map(b => [b.after, b])),
+  };
+  return c._ix;
+}
+function A(c) { return c._A || (c._A = c.assignments.map((a, i) => ({ i, subject: a[0], group: a[1], teacher: a[2], periods: a[3] }))); }
+const subj = (c, a) => c.subjects[a.subject];
+const blockOf = (c, a) => subj(c, a).kind === 'lab' ? c.scheme.labBlock : 1;
+const roomTypeOf = (c, a) => subj(c, a).room || c.scheme.theoryRoomType;
+const gLabel = (c, g) => { const G = idx(c).groups[g]; return G.isSub ? `${G.section} ${G.label}` : g; };
+const pLabel = (c, p) => c.scheme.periods[p - 1][0];
+const desc = (c, e) => { const a = A(c)[e.a]; return `${gLabel(c, a.group)} ${subj(c, a).short}`; };
+const tMax = (c, t) => t.max || c.scheme.rules.teacherMaxPerDay;
+function fmtOff(off) {
+  const byDay = {};
+  off.forEach(([d, p]) => (byDay[d] ||= []).push(p));
+  return Object.entries(byDay).map(([d, ps]) => `${d} P${Math.min(...ps)}${ps.length > 1 ? '–P' + Math.max(...ps) : ''}`).join(', ');
+}
+
+/* ----------------------------------------------------------------------
+   In-browser demo generator (greedy). The real app runs Google OR-Tools
+   CP-SAT on the server; this keeps the prototype a single file.
+----------------------------------------------------------------------- */
+function generate(c) {
+  const ix = idx(c), S = c.scheme, days = S.days, P = ix.P;
+  const AS = A(c);
+  const busy = new Set(), entries = [], tLoad = {}, usedDay = new Set(), dayLoad = {}, unplaced = [];
+  const roomsFor = a => c.rooms.filter(r => r.type === roomTypeOf(c, a) && r.cap >= ix.groups[a.group].strength);
+
+  function groupFree(g, d, p) {
+    const G = ix.groups[g];
+    if (busy.has(key('g', G.section, d, p))) return false;
+    return G.isSub ? !busy.has(key('g', g, d, p)) : !ix.subsOf[g].some(s => busy.has(key('g', s, d, p)));
+  }
+  function can(a, d, s, r) {
+    const b = blockOf(c, a), T = ix.teachers[a.teacher];
+    if (s + b - 1 > P.length) return false;
+    for (let q = s; q < s + b - 1; q++) if (ix.breaksAfter.has(q)) return false;
+    if (usedDay.has(key(a.i, d))) return false;
+    if ((tLoad[key(a.teacher, d)] || 0) + b > tMax(c, T)) return false;
+    for (let p = s; p < s + b; p++) {
+      if ((T.off || []).some(([od, op]) => od === d && op === p)) return false;
+      if (busy.has(key('t', a.teacher, d, p)) || busy.has(key('r', r.id, d, p)) || !groupFree(a.group, d, p)) return false;
+    }
+    return true;
+  }
+  function put(a, d, s, r) {
+    const b = blockOf(c, a), sec = ix.groups[a.group].section, placed = [];
+    for (let p = s; p < s + b; p++) {
+      busy.add(key('t', a.teacher, d, p)); busy.add(key('r', r.id, d, p)); busy.add(key('g', a.group, d, p));
+      const e = { a: a.i, day: d, period: p, room: r.id };
+      entries.push(e); placed.push(e);
+    }
+    tLoad[key(a.teacher, d)] = (tLoad[key(a.teacher, d)] || 0) + b;
+    dayLoad[key(sec, d)] = (dayLoad[key(sec, d)] || 0) + b;
+    usedDay.add(key(a.i, d));
+    return { a, d, s, r, placed };
+  }
+  function undo(m) {
+    const { a, d, s, r, placed } = m, b = blockOf(c, a), sec = ix.groups[a.group].section;
+    for (let p = s; p < s + b; p++) { busy.delete(key('t', a.teacher, d, p)); busy.delete(key('r', r.id, d, p)); busy.delete(key('g', a.group, d, p)); }
+    placed.forEach(e => entries.splice(entries.indexOf(e), 1));
+    tLoad[key(a.teacher, d)] -= b; dayLoad[key(sec, d)] -= b; usedDay.delete(key(a.i, d));
+  }
+
+  const remaining = new Map(AS.map(a => [a.i, a.periods / blockOf(c, a)]));
+
+  // 1) Labs: lab groups of a section go to different labs at the same time (rotation A1→Lab X, A2→Lab Y …).
+  c.sections.forEach((sec, si) => {
+    const subs = ix.subsOf[sec.id];
+    if (!subs.length) return;
+    const labs = subs.map(g => AS.filter(a => a.group === g && subj(c, a).kind === 'lab'));
+    const rounds = Math.max(0, ...labs.map(l => l.length));
+    for (let k = 0; k < rounds; k++) {
+      const items = labs.map((l, i) => l.length ? l[(i + k) % l.length] : null).filter(a => a && remaining.get(a.i) > 0);
+      let done = false;
+      for (const d of rotate(days, (si * 2 + k * 2) % days.length)) {
+        for (const s of rotate(P, (si + k) % P.length)) {
+          const moves = [];
+          let ok = true;
+          for (const a of items) {
+            const r = roomsFor(a).find(r => can(a, d, s, r));
+            if (!r) { ok = false; break; }
+            moves.push(put(a, d, s, r));
+          }
+          if (ok) { items.forEach(a => remaining.set(a.i, remaining.get(a.i) - 1)); done = true; break; }
+          moves.reverse().forEach(undo);
+        }
+        if (done) break;
+      }
+    }
+  });
+
+  // 2) Everything left (lectures, tutorials, any lab that couldn't pair): least-busy day first, morning first.
+  const order = AS.filter(a => remaining.get(a.i) > 0).sort((x, y) => blockOf(c, y) - blockOf(c, x) || y.periods - x.periods);
+  for (const a of order) {
+    const sec = ix.groups[a.group].section;
+    for (let left = remaining.get(a.i); left > 0; left--) {
+      const ds = [...days].sort((d1, d2) => (dayLoad[key(sec, d1)] || 0) - (dayLoad[key(sec, d2)] || 0) || days.indexOf(d1) - days.indexOf(d2));
+      let placed = false;
+      for (const d of ds) {
+        for (const s of P) {
+          const r = roomsFor(a).find(r => can(a, d, s, r));
+          if (r) { put(a, d, s, r); placed = true; break; }
+        }
+        if (placed) break;
+      }
+      if (!placed) { unplaced.push(a); break; }
+    }
+  }
+  return { entries, unplaced, at: new Date() };
+}
+
+/* ------------------- independent validator (hard rules) ------------------- */
+function validate(c, entries) {
+  const ix = idx(c), AS = A(c), messages = [], bad = new Set(), pairs = [];
+  const group = fn => { const m = new Map(); entries.forEach((e, i) => { if (e.ghost) return; const k = fn(e); (m.get(k) || m.set(k, []).get(k)).push(i); }); return m; };
+  const slot = e => `${e.day} ${pLabel(c, e.period)}`;
+  const flag = (list, text) => { list.forEach(i => bad.add(i)); messages.push(text); pairs.push(list); };
+
+  group(e => key(AS[e.a].teacher, e.day, e.period)).forEach(list => {
+    if (list.length > 1) flag(list, `${ix.teachers[AS[entries[list[0]].a].teacher].name} is booked twice on ${slot(entries[list[0]])}: ${list.map(i => desc(c, entries[i])).join(' and ')}.`);
+  });
+  group(e => key(e.room, e.day, e.period)).forEach(list => {
+    if (list.length > 1) flag(list, `${entries[list[0]].room} is double-booked on ${slot(entries[list[0]])}: ${list.map(i => desc(c, entries[i])).join(' and ')}.`);
+  });
+  group(e => key(ix.groups[AS[e.a].group].section, e.day, e.period)).forEach(list => {
+    const whole = list.filter(i => !ix.groups[AS[entries[i].a].group].isSub);
+    const subs = list.filter(i => ix.groups[AS[entries[i].a].group].isSub);
+    const perSub = {};
+    subs.forEach(i => (perSub[AS[entries[i].a].group] ||= []).push(i));
+    if (whole.length > 1 || (whole.length && subs.length) || Object.values(perSub).some(l => l.length > 1))
+      flag(list, `${ix.groups[AS[entries[list[0]].a].group].section} has overlapping classes on ${slot(entries[list[0]])}: ${list.map(i => desc(c, entries[i])).join(' and ')}.`);
+  });
+  const count = {};
+  entries.forEach(e => { if (!e.ghost) count[e.a] = (count[e.a] || 0) + 1; });
+  AS.forEach(a => { if ((count[a.i] || 0) !== a.periods) messages.push(`${gLabel(c, a.group)} ${subj(c, a).short} has ${count[a.i] || 0} of ${a.periods} periods.`); });
+  return { messages, bad, pairs };
+}
+
+/* ------------------------------ scorecard ------------------------------ */
+function metrics(c, entries) {
+  const ix = idx(c), units = {}, subBusy = {}, load = {};
+  entries.forEach(e => {
+    const a = A(c)[e.a], G = ix.groups[a.group];
+    const targets = G.isSub ? [G.id] : (ix.subsOf[G.section].length ? ix.subsOf[G.section] : [G.section]);
+    targets.forEach(t => (units[key(t, e.day)] ||= new Set()).add(e.period));
+    if (G.isSub) (subBusy[key(G.section, e.day, e.period)] ||= new Set()).add(G.id);
+    load[a.teacher] = (load[a.teacher] || 0) + 1;
+  });
+  let lab = 0, par = 0;
+  Object.entries(subBusy).forEach(([k, s]) => { lab++; if (s.size === ix.subsOf[k.split('|')[0]].length) par++; });
+  const gaps = Object.values(units).map(s => { const a = [...s]; return Math.max(...a) - Math.min(...a) + 1 - a.length; });
+  const avg = gaps.length ? gaps.reduce((x, y) => x + y, 0) / gaps.length : 0;
+  const parPct = lab ? 100 * par / lab : 100;
+  const last = entries.filter(e => e.period === ix.P.length).length;
+  const L = Object.values(load);
+  const used = new Set(entries.map(e => key(e.room, e.day, e.period))).size;
+  return {
+    score: Math.max(0, Math.min(100, Math.round(100 - 15 * avg - 0.3 * (100 - parPct) - 0.5 * last))),
+    avg: avg.toFixed(2), parPct: Math.round(parPct), last,
+    lmin: L.length ? Math.min(...L) : 0, lmax: L.length ? Math.max(...L) : 0,
+    classes: entries.length, required: A(c).reduce((s, a) => s + a.periods, 0),
+    roomUse: Math.round(100 * used / (c.rooms.length * c.scheme.days.length * ix.P.length)),
+  };
+}
+
+/* ------------------------------ pre-check ------------------------------ */
+function precheck(c) {
+  const ix = idx(c), S = c.scheme, slots = S.days.length * ix.P.length, out = [];
+  const tl = {};
+  A(c).forEach(a => tl[a.teacher] = (tl[a.teacher] || 0) + a.periods);
+  c.teachers.forEach(t => {
+    const cap = tMax(c, t) * S.days.length - (t.off || []).length, l = tl[t.id] || 0;
+    if (l > cap) out.push({ level: 'error', text: `${t.name} has ${l} periods a week but can teach at most ${cap}.`, fix: 'Teachers' });
+    else if (l > 0.6 * cap) out.push({ level: 'warn', text: `${t.name} has a heavy load: ${l} of a possible ${cap} periods a week.`, fix: 'Teachers' });
+  });
+  c.sections.forEach(s => {
+    const whole = A(c).filter(a => a.group === s.id).reduce((x, a) => x + a.periods, 0);
+    const subs = ix.subsOf[s.id].map(g => A(c).filter(a => a.group === g).reduce((x, a) => x + a.periods, 0));
+    const need = whole + (subs.length ? Math.max(...subs) : 0);
+    out.push(need > slots
+      ? { level: 'error', text: `${s.id} needs ${need} periods but the week has only ${slots}.`, fix: 'Sections' }
+      : { level: 'ok', text: `${s.id}: ${need} of ${slots} weekly periods needed.` });
+  });
+  const demand = {};
+  A(c).forEach(a => demand[roomTypeOf(c, a)] = (demand[roomTypeOf(c, a)] || 0) + a.periods);
+  Object.entries(demand).forEach(([t, d]) => {
+    const cap = c.rooms.filter(r => r.type === t).length * slots;
+    out.push(d > cap
+      ? { level: 'error', text: `${typeName(t)}s are needed for ${d} periods but only ${cap} are available.`, fix: 'Rooms' }
+      : { level: 'ok', text: `${typeName(t)}s: ${d} of ${cap} room-periods needed (${Math.round(100 * d / cap)}%).` });
+  });
+  A(c).forEach(a => {
+    const G = ix.groups[a.group];
+    if (!c.rooms.some(r => r.type === roomTypeOf(c, a) && r.cap >= G.strength))
+      out.push({ level: 'error', text: `No ${typeName(roomTypeOf(c, a)).toLowerCase()} is big enough for ${gLabel(c, a.group)} (${G.strength} students).`, fix: 'Rooms' });
+  });
+  c.teachers.filter(t => (t.off || []).length).forEach(t =>
+    out.push({ level: 'info', text: `${t.name} is unavailable on ${fmtOff(t.off)}. Classes won't be placed there.` }));
+  const rank = { error: 0, warn: 1, info: 2, ok: 3 };
+  return out.sort((x, y) => rank[x.level] - rank[y.level]);
+}
+
+/* ------------------------------ app state ------------------------------ */
+const state = {
+  ci: 0, page: 'dashboard', view: 'section', key: null,
+  gen: {}, drawer: false, preview: null, history: [], applied: null, sim: null, generating: null, toast: null,
+};
+const col = () => COLLEGES[state.ci];
+const current = () => state.gen[col().id];
+
+function displayEntries() {
+  const g = current();
+  if (!g) return [];
+  const list = g.entries.map((e, i) => ({ ...e, i }));
+  const pv = state.preview;
+  if (!pv) return list;
+  list[pv.ei] = { ...list[pv.ei], day: pv.day, period: pv.period, room: pv.room, preview: true };
+  list.push({ ...g.entries[pv.ei], i: pv.ei, ghost: true });
+  return list;
+}
+
+function freeSlots(c, entries, ei, limit) {
+  const ix = idx(c), a = A(c)[entries[ei].a], T = ix.teachers[a.teacher], G = ix.groups[a.group];
+  const busyT = new Set(), busyR = new Set(), busyG = new Set(), daysUsed = new Set(), load = {};
+  entries.forEach((e, j) => {
+    if (j === ei) return;
+    const b = A(c)[e.a], k = key(e.day, e.period), g = ix.groups[b.group];
+    if (b.teacher === a.teacher) { busyT.add(k); load[e.day] = (load[e.day] || 0) + 1; }
+    busyR.add(key(e.room, k));
+    if (g.section === G.section) busyG.add(key(g.isSub ? g.id : '*', k));
+    if (b.i === a.i) daysUsed.add(e.day);
+  });
+  const rooms = c.rooms.filter(r => r.type === roomTypeOf(c, a) && r.cap >= G.strength);
+  const out = [];
+  for (const d of c.scheme.days) {
+    if (daysUsed.has(d) || (load[d] || 0) + 1 > tMax(c, T)) continue;
+    for (const p of ix.P) {
+      const k = key(d, p);
+      if (busyT.has(k) || (T.off || []).some(([od, op]) => od === d && op === p)) continue;
+      const gBusy = busyG.has(key('*', k)) || (G.isSub ? busyG.has(key(G.id, k)) : ix.subsOf[G.section].some(s => busyG.has(key(s, k))));
+      if (gBusy) continue;
+      const r = rooms.find(r => !busyR.has(key(r.id, k)));
+      if (!r) continue;
+      out.push({ day: d, period: p, room: r.id });
+      if (out.length >= limit) return out;
+    }
+  }
+  return out;
+}
+
+/* ------------------------------ actions ------------------------------ */
+function render() { document.getElementById('app').innerHTML = layout(); }
+function go(page) { state.page = page; render(); window.scrollTo(0, 0); }
+function setCollege(i) {
+  state.ci = +i; state.key = null; state.preview = null; state.history = []; state.applied = null; state.sim = null;
+  render(); toast(`Switched to ${col().name}. Its own data and scheme are loaded.`);
+}
+function setView(v) { state.view = v; state.key = null; render(); }
+function setKey(k) { state.key = k; render(); }
+function toggleDrawer(open) { state.drawer = open ?? !state.drawer; render(); }
+function toast(text) {
+  state.toast = text; render();
+  clearTimeout(window._tt); window._tt = setTimeout(() => { state.toast = null; render(); }, 3200);
+}
+function runGenerate() {
+  const steps = ['Checking data and rules', 'Placing labs side by side', 'Placing lectures and tutorials', 'Verifying: no clashes'];
+  state.generating = 0; render();
+  const timer = setInterval(() => {
+    state.generating++;
+    if (state.generating >= steps.length) {
+      clearInterval(timer);
+      state.gen[col().id] = generate(col());
+      state.generating = null; state.preview = null; state.history = []; state.applied = null; state.sim = null;
+      state.page = 'timetable';
+      const v = validate(col(), current().entries);
+      render();
+      toast(v.messages.length ? `Generated with ${v.messages.length} issue(s) to review.` : 'Timetable generated and verified: 0 conflicts.');
+    } else render();
+  }, 450);
+  window._steps = steps;
+}
+function simulateClash() {
+  const c = col(), g = current();
+  if (!g) return;
+  const ix = idx(c), E = g.entries;
+  for (let i = 0; i < E.length; i++) {
+    const a = A(c)[E[i].a];
+    if (blockOf(c, a) !== 1 || ix.groups[a.group].isSub) continue;
+    for (const o of E) {
+      const b = A(c)[o.a];
+      if (b.teacher !== a.teacher || b.group === a.group) continue;
+      const at = e => e.day === o.day && e.period === o.period;
+      const groupBusy = E.some(e => at(e) && ix.groups[A(c)[e.a].group].section === ix.groups[a.group].section);
+      const sameDay = E.some((e, j) => j !== i && e.a === E[i].a && e.day === o.day);
+      const room = c.rooms.find(r => r.type === roomTypeOf(c, a) && r.cap >= ix.groups[a.group].strength && !E.some(e => at(e) && e.room === r.id));
+      if (groupBusy || sameDay || !room) continue;
+      state.sim = { ei: i };
+      E[i] = { ...E[i], day: o.day, period: o.period, room: room.id };
+      Object.assign(state, { view: 'section', key: a.group, page: 'timetable', drawer: true, preview: null, applied: null });
+      render();
+      toast('A clash was added on purpose, to show how the assistant helps.');
+      return;
+    }
+  }
+}
+function previewOption(day, period, room, ei) { state.preview = { ei, day, period: +period, room }; state.applied = null; render(); }
+function discardPreview() { state.preview = null; render(); }
+function applyPreview() {
+  const g = current(), pv = state.preview;
+  if (!g || !pv) return;
+  const before = g.entries[pv.ei];
+  state.history.push({ ei: pv.ei, from: { ...before } });
+  g.entries[pv.ei] = { ...before, day: pv.day, period: pv.period, room: pv.room };
+  state.applied = `${desc(col(), g.entries[pv.ei])} moved to ${pv.day} ${pLabel(col(), pv.period)} in ${pv.room}.`;
+  state.preview = null; state.sim = null;
+  render(); toast('Change applied. You can undo it from the assistant.');
+}
+function undoLast() {
+  const g = current(), h = g && state.history.pop();
+  if (!h) return;
+  g.entries[h.ei] = h.from; state.applied = null;
+  render(); toast('Change undone.');
+}
+
+/* ------------------------------ icons ------------------------------ */
+const ICONS = {
+  grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
+  calendar: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',
+  table: 'M4 5h16v14H4zM4 10h16M4 15h16M10 5v14',
+  shield: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3zM9 12l2 2 4-4',
+  sliders: 'M4 7h10M18 7h2M4 17h2M10 17h10M16 5v4M8 15v4',
+  bot: 'M8 8h8a3 3 0 013 3v5a3 3 0 01-3 3H8a3 3 0 01-3-3v-5a3 3 0 013-3zM12 4v4M9.5 13h.01M14.5 13h.01',
+  printer: 'M7 9V4h10v5M7 17H5a1 1 0 01-1-1v-5a2 2 0 012-2h12a2 2 0 012 2v5a1 1 0 01-1 1h-2M7 14h10v6H7z',
+  bolt: 'M13 3L5 13h6l-1 8 8-10h-6l1-8z',
+  check: 'M5 12l4 4 10-10',
+  x: 'M6 6l12 12M18 6L6 18',
+  building: 'M4 20h16M6 20V6l6-3 6 3v14M10 9h.01M14 9h.01M10 13h.01M14 13h.01M10 17h4',
+};
+const icon = (n, cls = 'w-5 h-5') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="${ICONS[n]}"/></svg>`;
+
+/* ------------------------------ layout ------------------------------ */
+const NAV = [['dashboard', 'Dashboard', 'grid'], ['timetable', 'Timetable', 'calendar'], ['data', 'Data', 'table'], ['precheck', 'Pre-check', 'shield'], ['scheme', 'College scheme', 'sliders']];
+
+function layout() {
+  const c = col();
+  return `
+  <header class="no-print sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-slate-200 bg-white/90 px-4 backdrop-blur">
+    <div class="flex items-center gap-2">
+      <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-sm font-bold text-white">S</div>
+      <div class="leading-tight"><div class="text-sm font-semibold">Samay</div><div class="text-[11px] text-slate-500">Timetable Optimizer</div></div>
+    </div>
+    <div class="ml-2 hidden h-6 w-px bg-slate-200 sm:block"></div>
+    <label class="flex items-center gap-2 text-sm">
+      <span class="hidden text-slate-500 sm:inline">${icon('building', 'w-4 h-4')}</span>
+      <select onchange="setCollege(this.value)" class="max-w-[220px] rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        ${COLLEGES.map((x, i) => `<option value="${i}" ${i === state.ci ? 'selected' : ''}>${x.name}</option>`).join('')}
+      </select>
+    </label>
+    <span class="hidden rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-600 md:inline">${c.term}</span>
+    <div class="ml-auto flex items-center gap-2">
+      <span class="hidden rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 lg:inline">Prototype</span>
+      <span class="hidden rounded-md bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 sm:inline">Timetable coordinator</span>
+      <div class="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700">TC</div>
+    </div>
+  </header>
+  <div class="flex">
+    <aside class="no-print sticky top-14 hidden h-[calc(100vh-3.5rem)] w-56 shrink-0 flex-col border-r border-slate-200 bg-white p-3 md:flex">
+      <nav class="space-y-1">
+        ${NAV.map(([id, label, ic]) => `
+          <button onclick="go('${id}')" class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm ${state.page === id ? 'bg-indigo-50 font-medium text-indigo-700' : 'text-slate-600 hover:bg-slate-50'}">
+            ${icon(ic)}${label}</button>`).join('')}
+      </nav>
+      <button onclick="toggleDrawer(true)" class="mt-3 flex w-full items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">${icon('bot')}Assistant</button>
+      <div class="mt-auto rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-500">
+        <div class="mb-1 font-medium text-slate-700">Built for many colleges</div>
+        Each college keeps its own data and its own scheme: days, periods, breaks, lab groups and rules.
+      </div>
+    </aside>
+    <main class="min-w-0 flex-1 p-4 md:p-6 ${state.drawer ? 'lg:pr-[400px]' : ''}">
+      <div class="no-print mb-4 flex gap-2 overflow-x-auto md:hidden">
+        ${NAV.map(([id, label]) => `<button onclick="go('${id}')" class="whitespace-nowrap rounded-full px-3 py-1 text-sm ${state.page === id ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}">${label}</button>`).join('')}
+      </div>
+      <div class="fade-in">${page()}</div>
+    </main>
+  </div>
+  ${state.drawer ? drawer() : ''}
+  ${state.generating !== null ? overlay() : ''}
+  ${state.toast ? `<div class="no-print fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm text-white shadow-lg fade-in">${state.toast}</div>` : ''}`;
+}
+
+function page() {
+  return { dashboard, timetable, data: dataPage, precheck: precheckPage, scheme: schemePage }[state.page]();
+}
+
+function overlay() {
+  const steps = window._steps || [];
+  return `<div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+    <div class="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl fade-in">
+      <div class="text-base font-semibold">Generating timetable</div>
+      <div class="mb-4 text-sm text-slate-500">${col().name}</div>
+      <ol class="space-y-2">${steps.map((s, i) => `
+        <li class="flex items-center gap-2 text-sm ${i < state.generating ? 'text-emerald-700' : i === state.generating ? 'font-medium text-slate-900' : 'text-slate-400'}">
+          ${i < state.generating ? icon('check', 'w-4 h-4') : `<span class="inline-block h-4 w-4 rounded-full border-2 ${i === state.generating ? 'border-indigo-500 border-t-transparent animate-spin' : 'border-slate-200'}"></span>`}
+          ${s}</li>`).join('')}</ol>
+    </div></div>`;
+}
+
+const btn = (label, onclick, kind = 'secondary', ic = '') => {
+  const cls = kind === 'primary' ? 'bg-indigo-600 text-white hover:bg-indigo-700' : kind === 'danger' ? 'border border-red-200 bg-white text-red-700 hover:bg-red-50' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50';
+  return `<button onclick="${onclick}" class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${cls}">${ic ? icon(ic, 'w-4 h-4') : ''}${label}</button>`;
+};
+const card = (inner, cls = '') => `<div class="rounded-xl border border-slate-200 bg-white p-4 ${cls}">${inner}</div>`;
+const stat = (label, value, sub = '', tone = 'text-slate-900') => card(`<div class="text-xs text-slate-500">${label}</div><div class="mt-1 text-2xl font-semibold ${tone}">${value}</div>${sub ? `<div class="mt-0.5 text-xs text-slate-500">${sub}</div>` : ''}`);
+
+function schemeSummary(c) {
+  const S = c.scheme;
+  return `${S.days.length} days (${S.days[0]}–${S.days[S.days.length - 1]}) · ${S.periods.length} periods · ${S.breaks.map(b => `${b.label.toLowerCase()} after P${b.after}`).join(', ')} · labs ${S.labBlock} periods · lab groups ${S.labGroups.split(' (')[0]}`;
+}
+
+/* ------------------------------ pages ------------------------------ */
+function dashboard() {
+  const c = col(), g = current(), checks = precheck(c);
+  const errors = checks.filter(x => x.level === 'error').length, warns = checks.filter(x => x.level === 'warn').length;
+  const v = g ? validate(c, g.entries) : null, m = g ? metrics(c, g.entries) : null;
+  return `
+  <div class="mb-6 flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <div class="text-sm text-slate-500">${c.kind} · ${c.place}</div>
+      <h1 class="text-2xl font-semibold tracking-tight">${c.name}</h1>
+    </div>
+    <div class="flex gap-2">${btn('Run pre-check', "go('precheck')", 'secondary', 'shield')}${btn(g ? 'Generate again' : 'Generate timetable', 'runGenerate()', 'primary', 'bolt')}</div>
+  </div>
+  <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    ${stat('Timetable', g ? 'Generated' : 'Not yet', g ? `at ${g.at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Click Generate to create one')}
+    ${stat('Conflicts', v ? v.messages.length : '–', v ? (v.messages.length ? 'Open the assistant to fix' : 'Verified by the clash checker') : 'Shown after generating', v ? (v.messages.length ? 'text-red-600' : 'text-emerald-600') : '')}
+    ${stat('Quality score', m ? m.score + '/100' : '–', m ? `${m.avg} gaps per day · ${m.parPct}% labs side by side` : 'Fewer gaps = higher score')}
+    ${stat('Pre-check', errors ? `${errors} to fix` : 'Ready', `${warns} warning${warns === 1 ? '' : 's'}`, errors ? 'text-red-600' : 'text-emerald-600')}
+  </div>
+  <div class="mt-4 grid gap-4 lg:grid-cols-3">
+    ${card(`<div class="mb-3 flex items-center justify-between"><div class="font-medium">Departments</div><span class="text-xs text-slate-500">Data submitted by HODs</span></div>
+      <ul class="divide-y divide-slate-100">${c.departments.map(d => `
+        <li class="flex items-center justify-between py-2 text-sm"><span>${d.name}</span>
+        ${d.status === 'ready' ? '<span class="rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">Ready</span>' : '<span class="rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">2 rows to review</span>'}</li>`).join('')}</ul>`, 'lg:col-span-1')}
+    ${card(`<div class="mb-3 font-medium">This college's scheme</div>
+      <p class="text-sm leading-relaxed text-slate-600">${schemeSummary(c)}</p>
+      <div class="mt-3 grid grid-cols-3 gap-2 text-center">
+        <div class="rounded-lg bg-slate-50 p-2"><div class="text-lg font-semibold">${c.sections.length}</div><div class="text-xs text-slate-500">Sections</div></div>
+        <div class="rounded-lg bg-slate-50 p-2"><div class="text-lg font-semibold">${c.teachers.length}</div><div class="text-xs text-slate-500">Teachers</div></div>
+        <div class="rounded-lg bg-slate-50 p-2"><div class="text-lg font-semibold">${c.rooms.length}</div><div class="text-xs text-slate-500">Rooms</div></div>
+      </div>
+      <button onclick="go('scheme')" class="mt-3 text-sm font-medium text-indigo-600 hover:underline">View scheme →</button>`)}
+    ${card(`<div class="mb-3 font-medium">How it works</div>
+      <ol class="space-y-3 text-sm">
+        <li class="flex gap-3"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-xs font-semibold text-indigo-700">1</span><span>Departments add teachers, subjects, sections and labs, or import from Excel.</span></li>
+        <li class="flex gap-3"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-xs font-semibold text-indigo-700">2</span><span>Pre-check spots impossible data, then Generate builds a clash-free week.</span></li>
+        <li class="flex gap-3"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-xs font-semibold text-indigo-700">3</span><span>Review by section, teacher or room, fix with the assistant, then print.</span></li>
+      </ol>`)}
+  </div>`;
+}
+
+function timetable() {
+  const c = col(), g = current(), ix = idx(c);
+  if (!g) return `
+    <h1 class="mb-4 text-2xl font-semibold tracking-tight">Timetable</h1>
+    ${card(`<div class="flex flex-col items-center py-12 text-center">
+      <div class="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">${icon('calendar', 'w-6 h-6')}</div>
+      <div class="text-lg font-medium">Generate your first timetable</div>
+      <p class="mt-1 max-w-md text-sm text-slate-500">Samay places every class for ${c.name} while making sure no teacher, room or section is ever double-booked.</p>
+      <div class="mt-4">${btn('Generate timetable', 'runGenerate()', 'primary', 'bolt')}</div></div>`)}`;
+
+  const options = { section: c.sections.map(s => [s.id, s.id]), teacher: c.teachers.map(t => [t.id, t.name]), room: c.rooms.map(r => [r.id, r.id]) }[state.view];
+  if (!state.key || !options.some(o => o[0] === state.key)) state.key = options[0][0];
+  const entries = displayEntries();
+  const v = validate(c, entries.filter(e => !e.ghost));
+  const base = validate(c, g.entries);
+  const m = metrics(c, g.entries);
+  const title = state.view === 'section' ? state.key : state.view === 'teacher' ? ix.teachers[state.key].name : `${state.key} (${typeName(ix.rooms[state.key].type)})`;
+
+  let badge;
+  if (state.preview) badge = `<span class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-sm font-medium text-amber-800">Preview: ${base.messages.length} → ${v.messages.length} conflicts</span>`;
+  else if (!base.messages.length) badge = `<span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-700">${icon('check', 'w-4 h-4')}0 conflicts · verified</span>`;
+  else badge = `<button onclick="toggleDrawer(true)" class="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1 text-sm font-medium text-red-700 hover:bg-red-100">${base.messages.length} conflict${base.messages.length > 1 ? 's' : ''} · fix with assistant</button>`;
+
+  return `
+  <div class="print-only mb-3">
+    <div class="text-lg font-semibold">${c.name} · ${title}</div>
+    <div class="text-xs text-slate-500">${c.term} · Generated by Samay · ${base.messages.length ? base.messages.length + ' conflicts' : 'Verified: 0 conflicts'}</div>
+  </div>
+  <div class="no-print mb-4 flex flex-wrap items-center justify-between gap-3">
+    <div class="flex items-center gap-3"><h1 class="text-2xl font-semibold tracking-tight">${title}</h1>${badge}</div>
+    <div class="flex flex-wrap gap-2">
+      ${btn('Simulate a clash', 'simulateClash()', 'secondary')}
+      ${btn('Assistant', 'toggleDrawer(true)', 'secondary', 'bot')}
+      ${btn('Print or save PDF', 'window.print()', 'secondary', 'printer')}
+    </div>
+  </div>
+  <div class="no-print mb-4 flex flex-wrap items-center gap-3">
+    <div class="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
+      ${[['section', 'Section'], ['teacher', 'Teacher'], ['room', 'Room']].map(([id, l]) => `<button onclick="setView('${id}')" class="rounded-md px-3 py-1.5 text-sm ${state.view === id ? 'bg-indigo-600 font-medium text-white' : 'text-slate-600 hover:bg-slate-50'}">${l}</button>`).join('')}
+    </div>
+    <select onchange="setKey(this.value)" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+      ${options.map(([id, l]) => `<option value="${id}" ${id === state.key ? 'selected' : ''}>${l}</option>`).join('')}
+    </select>
+    <div class="ml-auto flex flex-wrap items-center gap-3 text-xs text-slate-600">
+      ${Object.values(KIND).map(k => `<span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm ${k.dot}"></span>${k.label}</span>`).join('')}
+      <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm ring-2 ring-red-500"></span>Clash</span>
+    </div>
+  </div>
+  <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2">${grid(c, entries, v.bad)}</div>
+  ${g.unplaced.length ? `<div class="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">${g.unplaced.length} class(es) could not be placed. Run the pre-check for details.</div>` : ''}
+  <div class="no-print mt-4 grid grid-cols-2 gap-3 md:grid-cols-5">
+    ${stat('Quality score', m.score + '/100', 'Higher is better')}
+    ${stat('Student gaps', m.avg, 'Free periods between classes, per day')}
+    ${stat('Labs side by side', m.parPct + '%', 'Lab groups busy together')}
+    ${stat('Teacher load', `${m.lmin}–${m.lmax}`, 'Periods a week, lowest–highest')}
+    ${stat('Room use', m.roomUse + '%', `${m.classes} of ${m.required} periods placed`)}
+  </div>
+  <p class="no-print mt-3 text-xs text-slate-400">Prototype note: this page uses a simple in-browser generator. The real app generates with Google OR-Tools (CP-SAT) on the server and re-checks every result with the same clash checker.</p>`;
+}
+
+function grid(c, entries, bad) {
+  const ix = idx(c), S = c.scheme;
+  const at = (d, p) => entries.filter(e => e.day === d && e.period === p && inView(c, e));
+  const sig = items => items.map(e => `${e.a}@${e.room}${e.preview ? 'p' : ''}${e.ghost ? 'g' : ''}`).sort().join(',');
+  let head = '<th class="w-14"></th>';
+  ix.P.forEach(p => {
+    const [l, s, e] = S.periods[p - 1];
+    head += `<th class="px-1 pb-1 text-left font-normal"><div class="text-xs font-semibold text-slate-700">${l}</div><div class="text-[10px] text-slate-400">${s}–${e}</div></th>`;
+    if (ix.breaksAfter.has(p) && p < ix.P.length) head += `<th class="w-7"></th>`;
+  });
+  const rows = S.days.map(d => {
+    let html = `<th class="pr-2 text-left align-middle text-sm font-semibold text-slate-700">${d}</th>`;
+    let p = 1;
+    while (p <= ix.P.length) {
+      const items = at(d, p), s = sig(items);
+      let span = 1;
+      while (s && p + span <= ix.P.length && !ix.breaksAfter.has(p + span - 1) && sig(at(d, p + span)) === s) span++;
+      html += `<td colspan="${span}" class="align-top">${cell(c, items, bad, d, p)}</td>`;
+      const last = p + span - 1;
+      if (ix.breaksAfter.has(last) && last < ix.P.length) {
+        const b = ix.breaksAfter.get(last);
+        html += d === S.days[0]
+          ? `<td rowspan="${S.days.length}" class="rounded-md bg-slate-100 align-middle"><div class="vtext mx-auto text-[10px] font-medium uppercase tracking-wider text-slate-400">${b.label} · ${b.time}</div></td>`
+          : '';
+      }
+      p = last + 1;
+    }
+    return `<tr>${html}</tr>`;
+  }).join('');
+  return `<table class="w-full min-w-[760px] table-fixed border-separate border-spacing-1"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function inView(c, e) {
+  const a = A(c)[e.a], ix = idx(c);
+  if (state.view === 'section') return ix.groups[a.group].section === state.key;
+  if (state.view === 'teacher') return a.teacher === state.key;
+  return e.room === state.key;
+}
+
+function cell(c, items, bad, d, p) {
+  const ix = idx(c);
+  if (!items.length) return `<div class="h-[60px] rounded-lg border border-dashed border-slate-200"></div>`;
+  if (state.view === 'section') {
+    const subs = ix.subsOf[state.key];
+    const whole = items.filter(e => !ix.groups[A(c)[e.a].group].isSub);
+    const subItems = items.filter(e => ix.groups[A(c)[e.a].group].isSub);
+    if (subItems.length && subs.length) {
+      const parts = subs.map(g => {
+        const mine = subItems.filter(e => A(c)[e.a].group === g);
+        return mine.length ? mine.map(e => block(c, e, bad)).join('') : `<div class="rounded-md border border-dashed border-slate-200 px-2 py-1 text-[11px] text-slate-400">${ix.groups[g].label} · free</div>`;
+      }).join('');
+      return `<div class="space-y-1">${whole.map(e => block(c, e, bad)).join('')}${parts}</div>`;
+    }
+  }
+  return `<div class="space-y-1">${items.map(e => block(c, e, bad)).join('')}</div>`;
+}
+
+function block(c, e, bad) {
+  const ix = idx(c), a = A(c)[e.a], s = subj(c, a), T = ix.teachers[a.teacher], G = ix.groups[a.group];
+  let extra = '';
+  if (e.ghost) extra = ' opacity-40';
+  else if (e.preview) extra = ' outline outline-2 outline-dashed outline-amber-500 outline-offset-1';
+  else if (bad.has(e.i)) extra = ' ring-2 ring-red-500';
+  const line2 = state.view === 'section' ? `${T.name} · ${e.room}` : state.view === 'teacher' ? `${gLabel(c, a.group)} · ${e.room}` : `${gLabel(c, a.group)} · ${T.name}`;
+  const tag = G.isSub && state.view === 'section' ? `<span class="mr-1 rounded bg-white/80 px-1 text-[10px] font-semibold">${G.label}</span>` : '';
+  const note = e.preview ? '<span class="text-[10px] font-semibold text-amber-700">New</span>' : e.ghost ? '<span class="text-[10px] font-semibold text-slate-500">Moving</span>' : '';
+  return `<div class="tt-cell rounded-lg border px-2 py-1.5 ${KIND[s.kind].cls}${extra}" title="${s.name} · ${KIND[s.kind].label}">
+    <div class="flex items-center justify-between gap-1"><span class="truncate text-[13px] font-semibold ${e.ghost ? 'line-through' : ''}">${tag}${s.short}</span>${note}</div>
+    <div class="truncate text-[11px] opacity-75">${line2}</div></div>`;
+}
+
+function drawer() {
+  const c = col(), g = current();
+  let body;
+  if (!g) {
+    body = `<p class="text-sm text-slate-600">Generate a timetable first. Then I can explain clashes, suggest fixes and move classes for you, always with a preview before anything changes.</p>`;
+  } else {
+    const v = validate(c, g.entries);
+    if (state.preview) {
+      const pv = state.preview, after = validate(c, displayEntries().filter(e => !e.ghost));
+      body = `
+        ${bubble(`Here's a preview. <b>${desc(c, g.entries[pv.ei])}</b> moves to <b>${pv.day} ${pLabel(c, pv.period)}</b> in <b>${pv.room}</b>. The changed cell is outlined on the grid.`)}
+        <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Conflicts: ${v.messages.length} → ${after.messages.length}. Nothing is saved until you apply.</div>
+        <div class="flex gap-2">${btn('Apply change', 'applyPreview()', 'primary', 'check')}${btn('Discard', 'discardPreview()', 'secondary')}</div>`;
+    } else if (v.messages.length) {
+      const ei = state.sim && v.bad.has(state.sim.ei) ? state.sim.ei : [...v.bad][0];
+      const opts = freeSlots(c, g.entries, ei, 3);
+      body = `
+        ${bubble(`I found ${v.messages.length} conflict${v.messages.length > 1 ? 's' : ''}:`)}
+        <ul class="space-y-1 text-sm">${v.messages.map(m => `<li class="rounded-md bg-red-50 px-3 py-2 text-red-800">${m}</li>`).join('')}</ul>
+        ${bubble(`I can move <b>${desc(c, g.entries[ei])}</b> to a free slot. Everyone involved is free there and no other class has to move:`)}
+        <div class="space-y-2">${opts.map((o, n) => `
+          <div class="flex items-center justify-between gap-2 rounded-lg border border-slate-200 p-3">
+            <div class="text-sm"><div class="font-medium">Option ${n + 1}: ${o.day} ${pLabel(c, o.period)}</div><div class="text-xs text-slate-500">Room ${o.room}</div></div>
+            ${btn('Preview', `previewOption('${o.day}', ${o.period}, '${o.room}', ${ei})`, 'secondary')}
+          </div>`).join('') || '<div class="text-sm text-slate-500">No free slot found. Try freeing a room or changing the teacher.</div>'}</div>`;
+    } else {
+      body = `
+        ${state.applied ? `<div class="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">${state.applied} 0 conflicts.</div>` : ''}
+        ${bubble(`All clear: 0 conflicts in ${c.name}. I can help with changes. I'll always show a preview first and wait for you to apply it.`)}
+        ${state.history.length ? btn('Undo last change', 'undoLast()', 'secondary') : ''}
+        <div class="text-xs font-medium uppercase tracking-wide text-slate-400">Try asking</div>
+        <div class="flex flex-wrap gap-2">${[`${c.teachers[0].name} is absent on Monday`, `Find free rooms on ${c.scheme.days[2]} P3`, `Move ${Object.values(c.subjects)[1].short} of ${c.sections[0].id} off ${c.scheme.days.at(-1)}`, 'Why does this section have a gap?'].map(q => `<span class="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600">${q}</span>`).join('')}</div>
+        <div class="text-sm text-slate-500">To see a fix in action, click <b>Simulate a clash</b> on the timetable.</div>`;
+    }
+  }
+  return `<aside class="no-print fixed bottom-0 right-0 top-14 z-40 flex w-full max-w-[390px] flex-col border-l border-slate-200 bg-white shadow-xl fade-in">
+    <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+      <div class="flex items-center gap-2"><div class="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">${icon('bot')}</div>
+      <div><div class="text-sm font-semibold">Scheduling assistant</div><div class="text-[11px] text-slate-500">Suggests and previews changes. You approve.</div></div></div>
+      <button onclick="toggleDrawer(false)" class="rounded-md p-1 text-slate-500 hover:bg-slate-100" aria-label="Close assistant">${icon('x')}</button>
+    </div>
+    <div class="flex-1 space-y-3 overflow-y-auto p-4">${body}</div>
+    <div class="border-t border-slate-200 p-3">
+      <div class="flex gap-2"><input disabled placeholder="Ask in plain words (coming soon)" class="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"/>
+      <button disabled class="rounded-lg bg-slate-200 px-3 text-sm text-slate-500">Send</button></div>
+    </div></aside>`;
+}
+const bubble = html => `<div class="rounded-lg bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">${html}</div>`;
+
+function dataPage() {
+  const c = col(), g = current(), ix = idx(c);
+  const load = {};
+  A(c).forEach(a => load[a.teacher] = (load[a.teacher] || 0) + a.periods);
+  const use = {};
+  if (g) g.entries.forEach(e => use[e.room] = (use[e.room] || 0) + 1);
+  const slots = c.scheme.days.length * ix.P.length;
+  const th = h => `<th class="px-3 py-2 text-left text-xs font-medium text-slate-500">${h}</th>`;
+  const td = (v, cls = '') => `<td class="px-3 py-2 text-sm ${cls}">${v}</td>`;
+  const table = (title, heads, rows, note) => card(`
+    <div class="mb-3 flex items-center justify-between"><div class="font-medium">${title}</div><span class="text-xs text-slate-500">${note}</span></div>
+    <div class="overflow-x-auto"><table class="w-full"><thead class="border-b border-slate-100"><tr>${heads.map(th).join('')}</tr></thead>
+    <tbody class="divide-y divide-slate-100">${rows.join('')}</tbody></table></div>`, 'mb-4');
+  return `
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-2xl font-semibold tracking-tight">Data</h1>
+    <div class="flex gap-2"><button disabled class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-400">Import from Excel · coming soon</button>
+    <button disabled class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-400">Add · coming soon</button></div>
+  </div>
+  ${table('Sections and lab groups', ['Section', 'Department', 'Students', 'Lab groups'], c.sections.map(s => `<tr>${td(s.id, 'font-medium')}${td(s.dept)}${td(s.strength)}${td(s.subs.length ? s.subs.map(u => `<span class="mr-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs">${u.label} · ${u.strength}</span>`).join('') : '<span class="text-xs text-slate-400">None (no labs)</span>')}</tr>`), `${c.sections.length} sections`)}
+  ${table('Teachers', ['Name', 'Department', 'Periods a week', 'Max a day', 'Unavailable'], c.teachers.map(t => `<tr>${td(t.name, 'font-medium')}${td(t.dept)}${td(load[t.id] || 0)}${td(tMax(c, t))}${td(t.off ? fmtOff(t.off) : '<span class="text-slate-400">–</span>')}</tr>`), `${c.teachers.length} teachers`)}
+  ${table('Rooms', ['Room', 'Type', 'Capacity', 'Owner', 'Used'], c.rooms.map(r => `<tr>${td(r.id, 'font-medium')}${td(typeName(r.type))}${td(r.cap)}${td(r.owner === 'Shared' ? '<span class="rounded bg-indigo-50 px-1.5 py-0.5 text-xs text-indigo-700">Shared</span>' : r.owner)}${td(g ? Math.round(100 * (use[r.id] || 0) / slots) + '%' : '–')}</tr>`), `${c.rooms.length} rooms`)}
+  ${table('Subjects', ['Code', 'Subject', 'Type', 'Room needed'], Object.entries(c.subjects).map(([code, s]) => `<tr>${td(code, 'font-mono text-xs')}${td(s.name)}${td(`<span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-sm ${KIND[s.kind].dot}"></span>${KIND[s.kind].label}</span>`)}${td(typeName(s.room || c.scheme.theoryRoomType))}</tr>`), `${Object.keys(c.subjects).length} subjects`)}`;
+}
+
+function precheckPage() {
+  const c = col(), list = precheck(c);
+  const errors = list.filter(x => x.level === 'error').length, warns = list.filter(x => x.level === 'warn').length;
+  const style = {
+    error: ['bg-red-50 text-red-800', 'Must fix'], warn: ['bg-amber-50 text-amber-900', 'Check'],
+    info: ['bg-sky-50 text-sky-900', 'Note'], ok: ['bg-emerald-50 text-emerald-800', 'OK'],
+  };
+  return `
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <div><h1 class="text-2xl font-semibold tracking-tight">Pre-check</h1>
+    <p class="text-sm text-slate-500">Finds data that would make a timetable impossible, before you generate.</p></div>
+    ${btn('Generate timetable', 'runGenerate()', 'primary', 'bolt')}
+  </div>
+  ${card(`<div class="flex items-center gap-3">
+    <div class="flex h-10 w-10 items-center justify-center rounded-full ${errors ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'}">${icon(errors ? 'x' : 'check')}</div>
+    <div><div class="font-medium">${errors ? `${errors} problem${errors > 1 ? 's' : ''} to fix before generating` : 'Your data is ready to generate'}</div>
+    <div class="text-sm text-slate-500">${warns} warning${warns === 1 ? '' : 's'} · ${list.length} checks run</div></div></div>`, 'mb-4')}
+  <div class="space-y-2">${list.map(x => `
+    <div class="flex items-start justify-between gap-3 rounded-lg ${style[x.level][0]} px-4 py-3 text-sm">
+      <div class="flex gap-3"><span class="mt-0.5 shrink-0 rounded bg-white/70 px-1.5 py-0.5 text-[11px] font-semibold">${style[x.level][1]}</span><span>${x.text}</span></div>
+      ${x.fix ? `<button onclick="go('data')" class="shrink-0 font-medium underline-offset-2 hover:underline">Fix in ${x.fix}</button>` : ''}
+    </div>`).join('')}</div>`;
+}
+
+function schemePage() {
+  const c = col(), S = c.scheme;
+  const rows = [];
+  S.periods.forEach(([l, s, e], i) => {
+    rows.push(`<tr><td class="px-3 py-2 text-sm font-medium">${l}</td><td class="px-3 py-2 text-sm">${s} – ${e}</td><td class="px-3 py-2 text-sm text-slate-500">Class</td></tr>`);
+    const b = S.breaks.find(b => b.after === i + 1);
+    if (b) rows.push(`<tr class="bg-slate-50"><td class="px-3 py-2 text-sm font-medium text-slate-500">${b.label}</td><td class="px-3 py-2 text-sm text-slate-500">${b.time}</td><td class="px-3 py-2 text-sm text-slate-400">Break · no classes, labs can't run across it</td></tr>`);
+  });
+  const compareRow = (label, fn) => `<tr><td class="px-3 py-2 text-sm text-slate-500">${label}</td>${COLLEGES.map((x, i) => `<td class="px-3 py-2 text-sm ${i === state.ci ? 'font-medium' : ''}">${fn(x)}</td>`).join('')}</tr>`;
+  return `
+  <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <div><h1 class="text-2xl font-semibold tracking-tight">College scheme</h1>
+    <p class="text-sm text-slate-500">How ${c.name} runs its week. Every college sets its own.</p></div>
+    <button disabled class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-400">Edit scheme · coming soon</button>
+  </div>
+  <div class="grid gap-4 lg:grid-cols-2">
+    ${card(`<div class="mb-3 font-medium">Daily periods</div>
+      <div class="mb-3 flex flex-wrap gap-1">${S.days.map(d => `<span class="rounded-md bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700">${d}</span>`).join('')}</div>
+      <table class="w-full"><tbody class="divide-y divide-slate-100">${rows.join('')}</tbody></table>`)}
+    ${card(`<div class="mb-3 font-medium">Rules</div>
+      <dl class="divide-y divide-slate-100 text-sm">
+        ${[['Lab length', `${S.labBlock} back-to-back periods`], ['Lab groups', S.labGroups], ['Theory classes in', typeName(S.theoryRoomType) + 's'],
+           ['Same subject per day', `At most ${S.rules.maxSameSubjectPerDay}`], ['Teacher default max a day', `${S.rules.teacherMaxPerDay} periods`],
+           ['Room types', [...new Set(c.rooms.map(r => typeName(r.type)))].join(', ')]].map(([k, v]) => `<div class="flex justify-between gap-4 py-2"><dt class="text-slate-500">${k}</dt><dd class="text-right font-medium">${v}</dd></div>`).join('')}
+      </dl>`)}
+  </div>
+  ${card(`<div class="mb-1 font-medium">Every college, its own scheme</div>
+    <p class="mb-3 text-sm text-slate-500">Each college's data and scheme are stored separately. The generator and clash checker read the scheme instead of assuming a fixed week.</p>
+    <div class="overflow-x-auto"><table class="w-full"><thead class="border-b border-slate-100"><tr><th></th>${COLLEGES.map(x => `<th class="px-3 py-2 text-left text-xs font-medium text-slate-500">${x.name}</th>`).join('')}</tr></thead>
+    <tbody class="divide-y divide-slate-100">
+      ${compareRow('Working days', x => `${x.scheme.days.length} (${x.scheme.days[0]}–${x.scheme.days.at(-1)})`)}
+      ${compareRow('Periods a day', x => `${x.scheme.periods.length} × ${minutes(x.scheme.periods[0])} min`)}
+      ${compareRow('College hours', x => `${x.scheme.periods[0][1]}–${x.scheme.periods.at(-1)[2]}`)}
+      ${compareRow('Breaks', x => x.scheme.breaks.map(b => `${b.label} after P${b.after}`).join(', '))}
+      ${compareRow('Lab groups', x => x.scheme.labGroups)}
+      ${compareRow('Theory rooms', x => typeName(x.scheme.theoryRoomType) + 's')}
+      ${compareRow('Teacher max a day', x => x.scheme.rules.teacherMaxPerDay)}
+    </tbody></table></div>`, 'mt-4')}`;
+}
+function minutes([, s, e]) { const t = x => +x.slice(0, 2) * 60 + +x.slice(3); return t(e) - t(s); }
+
+render();
+</script>
+</body>
+</html>
