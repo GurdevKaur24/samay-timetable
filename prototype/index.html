@@ -49,6 +49,11 @@ const COLLEGES = [
       { id: 'ECE', name: 'Electronics and Comm. Engg.', status: 'ready' },
       { id: 'AS', name: 'Applied Sciences', status: 'ready' },
     ],
+    courses: [
+      { id: 'BTECH-CSE', name: 'B.Tech Computer Science and Engg.', dept: 'CSE', years: 4 },
+      { id: 'MCA', name: 'Master of Computer Applications', dept: 'CSE', years: 2 },
+      { id: 'BTECH-ECE', name: 'B.Tech Electronics and Comm. Engg.', dept: 'ECE', years: 4 },
+    ],
     rooms: [
       { id: 'LH-101', type: 'lecture', cap: 70, owner: 'CSE' }, { id: 'LH-102', type: 'lecture', cap: 70, owner: 'CSE' },
       { id: 'LH-201', type: 'lecture', cap: 70, owner: 'ECE' }, { id: 'LH-202', type: 'lecture', cap: 70, owner: 'ECE' },
@@ -75,37 +80,37 @@ const COLLEGES = [
       { id: 'T16', name: 'Ms. A. Grewal', dept: 'ECE', max: 5 },
     ],
     sections: [
-      { id: 'CSE-3A', dept: 'CSE', strength: 60, subs: [{ label: 'A1', strength: 30 }, { label: 'A2', strength: 30 }] },
-      { id: 'CSE-3B', dept: 'CSE', strength: 60, subs: [{ label: 'B1', strength: 30 }, { label: 'B2', strength: 30 }] },
-      { id: 'CSE-5A', dept: 'CSE', strength: 56, subs: [{ label: 'A1', strength: 28 }, { label: 'A2', strength: 28 }] },
-      { id: 'ECE-3A', dept: 'ECE', strength: 60, subs: [{ label: 'A1', strength: 30 }, { label: 'A2', strength: 30 }] },
-      { id: 'ECE-5A', dept: 'ECE', strength: 52, subs: [{ label: 'A1', strength: 26 }, { label: 'A2', strength: 26 }] },
+      { id: 'CSE-3A', dept: 'CSE', course: 'BTECH-CSE', sem: 3, strength: 60, subs: [{ label: 'A1', strength: 30 }, { label: 'A2', strength: 30 }] },
+      { id: 'CSE-3B', dept: 'CSE', course: 'BTECH-CSE', sem: 3, strength: 60, subs: [{ label: 'B1', strength: 30 }, { label: 'B2', strength: 30 }] },
+      { id: 'CSE-5A', dept: 'CSE', course: 'BTECH-CSE', sem: 5, strength: 56, subs: [{ label: 'A1', strength: 28 }, { label: 'A2', strength: 28 }] },
+      { id: 'ECE-3A', dept: 'ECE', course: 'BTECH-ECE', sem: 3, strength: 60, subs: [{ label: 'A1', strength: 30 }, { label: 'A2', strength: 30 }] },
+      { id: 'ECE-5A', dept: 'ECE', course: 'BTECH-ECE', sem: 5, strength: 52, subs: [{ label: 'A1', strength: 26 }, { label: 'A2', strength: 26 }] },
     ],
     subjects: {
-      CS301: { short: 'DBMS', name: 'Database Management Systems', kind: 'theory' },
-      CS302: { short: 'OS', name: 'Operating Systems', kind: 'theory' },
-      CS303: { short: 'DS', name: 'Data Structures', kind: 'theory' },
-      MA301: { short: 'Maths-III', name: 'Engineering Mathematics III', kind: 'theory' },
-      HU301: { short: 'Comm. Skills', name: 'Communication Skills', kind: 'tutorial' },
-      CS301L: { short: 'DBMS Lab', name: 'DBMS Lab', kind: 'lab', room: 'computer_lab' },
-      CS303L: { short: 'DS Lab', name: 'Data Structures Lab', kind: 'lab', room: 'computer_lab' },
-      CS501: { short: 'CN', name: 'Computer Networks', kind: 'theory' },
-      CS502: { short: 'AI', name: 'Artificial Intelligence', kind: 'theory' },
-      CS503: { short: 'SE', name: 'Software Engineering', kind: 'theory' },
-      CS504: { short: 'TOC', name: 'Theory of Computation', kind: 'theory' },
-      CS501L: { short: 'CN Lab', name: 'Computer Networks Lab', kind: 'lab', room: 'computer_lab' },
-      CS502L: { short: 'AI Lab', name: 'AI Lab', kind: 'lab', room: 'computer_lab' },
-      EC301: { short: 'S&S', name: 'Signals and Systems', kind: 'theory' },
-      EC302: { short: 'Analog', name: 'Analog Electronics', kind: 'theory' },
-      EC303: { short: 'Digital', name: 'Digital Electronics', kind: 'theory' },
-      EC302L: { short: 'Analog Lab', name: 'Analog Electronics Lab', kind: 'lab', room: 'electronics_lab' },
-      EC303L: { short: 'Digital Lab', name: 'Digital Electronics Lab', kind: 'lab', room: 'electronics_lab' },
-      EC501: { short: 'MPMC', name: 'Microprocessors and Microcontrollers', kind: 'theory' },
-      EC502: { short: 'Comm. Sys', name: 'Communication Systems', kind: 'theory' },
-      EC503: { short: 'Control', name: 'Control Systems', kind: 'theory' },
-      EC504: { short: 'VLSI', name: 'VLSI Design', kind: 'theory' },
-      EC501L: { short: 'MPMC Lab', name: 'Microprocessors Lab', kind: 'lab', room: 'electronics_lab' },
-      EC502L: { short: 'Comm. Lab', name: 'Communication Systems Lab', kind: 'lab', room: 'electronics_lab' },
+      CS301: { short: 'DBMS', name: 'Database Management Systems', kind: 'theory', dept: 'CSE' },
+      CS302: { short: 'OS', name: 'Operating Systems', kind: 'theory', dept: 'CSE' },
+      CS303: { short: 'DS', name: 'Data Structures', kind: 'theory', dept: 'CSE' },
+      MA301: { short: 'Maths-III', name: 'Engineering Mathematics III', kind: 'theory', dept: 'AS' },
+      HU301: { short: 'Comm. Skills', name: 'Communication Skills', kind: 'tutorial', dept: 'AS' },
+      CS301L: { short: 'DBMS Lab', name: 'DBMS Lab', kind: 'lab', room: 'computer_lab', dept: 'CSE' },
+      CS303L: { short: 'DS Lab', name: 'Data Structures Lab', kind: 'lab', room: 'computer_lab', dept: 'CSE' },
+      CS501: { short: 'CN', name: 'Computer Networks', kind: 'theory', dept: 'CSE' },
+      CS502: { short: 'AI', name: 'Artificial Intelligence', kind: 'theory', dept: 'CSE' },
+      CS503: { short: 'SE', name: 'Software Engineering', kind: 'theory', dept: 'CSE' },
+      CS504: { short: 'TOC', name: 'Theory of Computation', kind: 'theory', dept: 'CSE' },
+      CS501L: { short: 'CN Lab', name: 'Computer Networks Lab', kind: 'lab', room: 'computer_lab', dept: 'CSE' },
+      CS502L: { short: 'AI Lab', name: 'AI Lab', kind: 'lab', room: 'computer_lab', dept: 'CSE' },
+      EC301: { short: 'S&S', name: 'Signals and Systems', kind: 'theory', dept: 'ECE' },
+      EC302: { short: 'Analog', name: 'Analog Electronics', kind: 'theory', dept: 'ECE' },
+      EC303: { short: 'Digital', name: 'Digital Electronics', kind: 'theory', dept: 'ECE' },
+      EC302L: { short: 'Analog Lab', name: 'Analog Electronics Lab', kind: 'lab', room: 'electronics_lab', dept: 'ECE' },
+      EC303L: { short: 'Digital Lab', name: 'Digital Electronics Lab', kind: 'lab', room: 'electronics_lab', dept: 'ECE' },
+      EC501: { short: 'MPMC', name: 'Microprocessors and Microcontrollers', kind: 'theory', dept: 'ECE' },
+      EC502: { short: 'Comm. Sys', name: 'Communication Systems', kind: 'theory', dept: 'ECE' },
+      EC503: { short: 'Control', name: 'Control Systems', kind: 'theory', dept: 'ECE' },
+      EC504: { short: 'VLSI', name: 'VLSI Design', kind: 'theory', dept: 'ECE' },
+      EC501L: { short: 'MPMC Lab', name: 'Microprocessors Lab', kind: 'lab', room: 'electronics_lab', dept: 'ECE' },
+      EC502L: { short: 'Comm. Lab', name: 'Communication Systems Lab', kind: 'lab', room: 'electronics_lab', dept: 'ECE' },
     },
     // [subject, group, teacher, periods per week]. Theory → whole section; labs → one lab group (A1/A2).
     assignments: [
@@ -115,7 +120,7 @@ const COLLEGES = [
       ['CS301L', 'CSE-3B/B1', 'T07'], ['CS303L', 'CSE-3B/B1', 'T08'], ['CS301L', 'CSE-3B/B2', 'T07'], ['CS303L', 'CSE-3B/B2', 'T08'],
       ['CS501', 'CSE-5A', 'T04'], ['CS502', 'CSE-5A', 'T05'], ['CS503', 'CSE-5A', 'T06'], ['CS504', 'CSE-5A', 'T06'],
       ['CS501L', 'CSE-5A/A1', 'T04'], ['CS502L', 'CSE-5A/A1', 'T05'], ['CS501L', 'CSE-5A/A2', 'T04'], ['CS502L', 'CSE-5A/A2', 'T05'],
-      ['EC301', 'ECE-3A', 'T11'], ['EC302', 'ECE-3A', 'T12'], ['EC303', 'ECE-3A', 'T13'], ['MA301', 'ECE-3A', 'T09'],
+      ['EC301', 'ECE-3A', 'T11'], ['EC302', 'ECE-3A', 'T12'], ['EC303', 'ECE-3A', 'T13'], ['MA301', 'ECE-3A', 'T09'], ['CS303', 'ECE-3A', 'T03'],
       ['EC302L', 'ECE-3A/A1', 'T12'], ['EC303L', 'ECE-3A/A1', 'T13'], ['EC302L', 'ECE-3A/A2', 'T12'], ['EC303L', 'ECE-3A/A2', 'T13'],
       ['EC501', 'ECE-5A', 'T14'], ['EC502', 'ECE-5A', 'T15'], ['EC503', 'ECE-5A', 'T11'], ['EC504', 'ECE-5A', 'T16'],
       ['EC501L', 'ECE-5A/A1', 'T14'], ['EC502L', 'ECE-5A/A1', 'T15'], ['EC501L', 'ECE-5A/A2', 'T14'], ['EC502L', 'ECE-5A/A2', 'T15'],
@@ -136,6 +141,11 @@ const COLLEGES = [
       { id: 'PHY', name: 'Physics', status: 'ready' },
       { id: 'COM', name: 'Commerce', status: 'review' },
       { id: 'GEN', name: 'Maths and English', status: 'ready' },
+    ],
+    courses: [
+      { id: 'BSC-CS', name: 'B.Sc. Computer Science', dept: 'CS', years: 3 },
+      { id: 'BSC-PHY', name: 'B.Sc. Physics', dept: 'PHY', years: 3 },
+      { id: 'BCOM', name: 'B.Com', dept: 'COM', years: 3 },
     ],
     rooms: [
       { id: 'Room 1', type: 'classroom', cap: 75, owner: 'CS' }, { id: 'Room 2', type: 'classroom', cap: 75, owner: 'PHY' },
@@ -158,37 +168,37 @@ const COLLEGES = [
       { id: 'B2', name: 'Dr. Ritu Sethi', dept: 'COM', max: 4 },
     ],
     sections: [
-      { id: 'BSc CS-I', dept: 'CS', strength: 66, subs: [{ label: 'G1', strength: 22 }, { label: 'G2', strength: 22 }, { label: 'G3', strength: 22 }] },
-      { id: 'BSc Phy-I', dept: 'PHY', strength: 60, subs: [{ label: 'G1', strength: 20 }, { label: 'G2', strength: 20 }, { label: 'G3', strength: 20 }] },
-      { id: 'BCom-II', dept: 'COM', strength: 70, subs: [] },
+      { id: 'BSc CS-I', dept: 'CS', course: 'BSC-CS', sem: 1, strength: 66, subs: [{ label: 'G1', strength: 22 }, { label: 'G2', strength: 22 }, { label: 'G3', strength: 22 }] },
+      { id: 'BSc Phy-I', dept: 'PHY', course: 'BSC-PHY', sem: 1, strength: 60, subs: [{ label: 'G1', strength: 20 }, { label: 'G2', strength: 20 }, { label: 'G3', strength: 20 }] },
+      { id: 'BCom-II', dept: 'COM', course: 'BCOM', sem: 3, strength: 70, subs: [] },
     ],
     subjects: {
-      CS101: { short: 'Python', name: 'Programming in Python', kind: 'theory' },
-      CS102: { short: 'Web Tech', name: 'Web Technologies', kind: 'theory' },
-      CS103: { short: 'DBMS', name: 'Database Concepts', kind: 'theory' },
-      MT101: { short: 'Calculus', name: 'Calculus', kind: 'theory' },
-      EN101: { short: 'English', name: 'General English', kind: 'tutorial' },
-      CS101L: { short: 'Python Lab', name: 'Python Lab', kind: 'lab', room: 'computer_lab' },
-      CS102L: { short: 'Web Lab', name: 'Web Technologies Lab', kind: 'lab', room: 'computer_lab' },
-      CS103L: { short: 'DBMS Lab', name: 'Database Lab', kind: 'lab', room: 'computer_lab' },
-      PH101: { short: 'Mechanics', name: 'Mechanics', kind: 'theory' },
-      PH102: { short: 'Optics', name: 'Optics', kind: 'theory' },
-      PH103: { short: 'Electronics', name: 'Basic Electronics', kind: 'theory' },
-      PH101L: { short: 'Mech. Lab', name: 'Mechanics Lab', kind: 'lab', room: 'science_lab' },
-      PH102L: { short: 'Optics Lab', name: 'Optics Lab', kind: 'lab', room: 'science_lab' },
-      PH103L: { short: 'Elec. Lab', name: 'Electronics Lab', kind: 'lab', room: 'science_lab' },
-      BC201: { short: 'Accounts', name: 'Corporate Accounting', kind: 'theory' },
-      BC202: { short: 'Bus. Law', name: 'Business Law', kind: 'theory' },
-      BC203: { short: 'Tax', name: 'Income Tax', kind: 'theory' },
-      BC204: { short: 'Bus. Stats', name: 'Business Statistics', kind: 'theory' },
-      BC205: { short: 'Bus. Comm.', name: 'Business Communication', kind: 'tutorial' },
+      CS101: { short: 'Python', name: 'Programming in Python', kind: 'theory', dept: 'CS' },
+      CS102: { short: 'Web Tech', name: 'Web Technologies', kind: 'theory', dept: 'CS' },
+      CS103: { short: 'DBMS', name: 'Database Concepts', kind: 'theory', dept: 'CS' },
+      MT101: { short: 'Calculus', name: 'Calculus', kind: 'theory', dept: 'GEN' },
+      EN101: { short: 'English', name: 'General English', kind: 'tutorial', dept: 'GEN' },
+      CS101L: { short: 'Python Lab', name: 'Python Lab', kind: 'lab', room: 'computer_lab', dept: 'CS' },
+      CS102L: { short: 'Web Lab', name: 'Web Technologies Lab', kind: 'lab', room: 'computer_lab', dept: 'CS' },
+      CS103L: { short: 'DBMS Lab', name: 'Database Lab', kind: 'lab', room: 'computer_lab', dept: 'CS' },
+      PH101: { short: 'Mechanics', name: 'Mechanics', kind: 'theory', dept: 'PHY' },
+      PH102: { short: 'Optics', name: 'Optics', kind: 'theory', dept: 'PHY' },
+      PH103: { short: 'Electronics', name: 'Basic Electronics', kind: 'theory', dept: 'PHY' },
+      PH101L: { short: 'Mech. Lab', name: 'Mechanics Lab', kind: 'lab', room: 'science_lab', dept: 'PHY' },
+      PH102L: { short: 'Optics Lab', name: 'Optics Lab', kind: 'lab', room: 'science_lab', dept: 'PHY' },
+      PH103L: { short: 'Elec. Lab', name: 'Electronics Lab', kind: 'lab', room: 'science_lab', dept: 'PHY' },
+      BC201: { short: 'Accounts', name: 'Corporate Accounting', kind: 'theory', dept: 'COM' },
+      BC202: { short: 'Bus. Law', name: 'Business Law', kind: 'theory', dept: 'COM' },
+      BC203: { short: 'Tax', name: 'Income Tax', kind: 'theory', dept: 'COM' },
+      BC204: { short: 'Bus. Stats', name: 'Business Statistics', kind: 'theory', dept: 'COM' },
+      BC205: { short: 'Bus. Comm.', name: 'Business Communication', kind: 'tutorial', dept: 'COM' },
     },
     assignments: [
       ['CS101', 'BSc CS-I', 'C1'], ['CS102', 'BSc CS-I', 'C2'], ['CS103', 'BSc CS-I', 'C3'], ['MT101', 'BSc CS-I', 'M1'], ['EN101', 'BSc CS-I', 'E1', 2],
       ['CS101L', 'BSc CS-I/G1', 'C1'], ['CS102L', 'BSc CS-I/G1', 'C2'], ['CS103L', 'BSc CS-I/G1', 'C3'],
       ['CS101L', 'BSc CS-I/G2', 'C1'], ['CS102L', 'BSc CS-I/G2', 'C2'], ['CS103L', 'BSc CS-I/G2', 'C3'],
       ['CS101L', 'BSc CS-I/G3', 'C1'], ['CS102L', 'BSc CS-I/G3', 'C2'], ['CS103L', 'BSc CS-I/G3', 'C3'],
-      ['PH101', 'BSc Phy-I', 'P1'], ['PH102', 'BSc Phy-I', 'P2'], ['PH103', 'BSc Phy-I', 'P3'], ['MT101', 'BSc Phy-I', 'M1'], ['EN101', 'BSc Phy-I', 'E1', 2],
+      ['PH101', 'BSc Phy-I', 'P1'], ['PH102', 'BSc Phy-I', 'P2'], ['PH103', 'BSc Phy-I', 'P3'], ['MT101', 'BSc Phy-I', 'M1'], ['CS101', 'BSc Phy-I', 'C1'], ['EN101', 'BSc Phy-I', 'E1', 2],
       ['PH101L', 'BSc Phy-I/G1', 'P1'], ['PH102L', 'BSc Phy-I/G1', 'P2'], ['PH103L', 'BSc Phy-I/G1', 'P3'],
       ['PH101L', 'BSc Phy-I/G2', 'P1'], ['PH102L', 'BSc Phy-I/G2', 'P2'], ['PH103L', 'BSc Phy-I/G2', 'P3'],
       ['PH101L', 'BSc Phy-I/G3', 'P1'], ['PH102L', 'BSc Phy-I/G3', 'P2'], ['PH103L', 'BSc Phy-I/G3', 'P3'],
@@ -717,7 +727,8 @@ function dashboard() {
   <div class="mt-4 grid gap-4 lg:grid-cols-3">
     ${card(`<div class="mb-3 flex items-center justify-between"><div class="font-medium">Departments</div><span class="text-xs text-slate-500">Data submitted by HODs</span></div>
       <ul class="divide-y divide-slate-100">${c.departments.map(d => `
-        <li class="flex items-center justify-between py-2 text-sm"><span>${d.name}</span>
+        <li class="flex items-center justify-between gap-2 py-2 text-sm"><span><span class="font-medium">${esc(d.name)}</span>
+          <span class="block text-xs text-slate-500">${(c.courses || []).filter(x => x.dept === d.id).length} courses · ${c.sections.filter(s => s.dept === d.id).length} sections · ${c.teachers.filter(t => t.dept === d.id).length} teachers</span></span>
         ${d.status === 'ready' ? '<span class="rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">Ready</span>' : '<span class="rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">2 rows to review</span>'}</li>`).join('')}</ul>`, 'lg:col-span-1')}
     ${card(`<div class="mb-3 font-medium">This college's scheme</div>
       <p class="text-sm leading-relaxed text-slate-600">${schemeSummary(c)}</p>
@@ -746,13 +757,19 @@ function timetable() {
       <p class="mt-1 max-w-md text-sm text-slate-500">Samay places every class for ${c.name} while making sure no teacher, room or section is ever double-booked.</p>
       <div class="mt-4">${btn('Generate timetable', 'runGenerate()', 'primary', 'bolt')}</div></div>`)}`;
 
-  const options = { section: c.sections.map(s => [s.id, s.id]), teacher: c.teachers.map(t => [t.id, t.name]), room: c.rooms.map(r => [r.id, r.id]) }[state.view];
-  if (!state.key || !options.some(o => o[0] === state.key)) state.key = options[0][0];
+  const roomOpts = [...new Set(c.rooms.map(r => r.type))].map(t => ({ group: typeName(t) + 's', items: c.rooms.filter(r => r.type === t).map(r => [r.id, r.id]) }));
+  const options = { section: sectionOptions(c), teacher: teacherOptions(c), room: roomOpts }[state.view];
+  const flat = options.flatMap(o => o.items || [o]);
+  if (!state.key || !flat.some(o => o[0] === state.key)) state.key = flat[0][0];
   const entries = displayEntries();
   const v = validate(c, entries.filter(e => !e.ghost));
   const base = validate(c, g.entries);
   const m = metrics(c, g.entries);
   const title = state.view === 'section' ? state.key : state.view === 'teacher' ? ix.teachers[state.key].name : `${state.key} (${typeName(ix.rooms[state.key].type)})`;
+  const sec = state.view === 'section' ? c.sections.find(s => s.id === state.key) : null, T = state.view === 'teacher' ? ix.teachers[state.key] : null;
+  const subtitle = sec ? `${deptName(c, sec.dept)} · ${courseOf(c, sec.course)?.name || ''}${sec.sem ? ` · Semester ${sec.sem}` : ''}`
+    : T ? `${deptName(c, T.dept)}${(() => { const o = [...new Set(A(c).filter(a => a.teacher === T.id).map(a => groupDept(c, a.group)))].filter(d => d !== T.dept); return o.length ? ` · also teaches ${o.map(d => deptName(c, d)).join(', ')} students` : ''; })()}`
+    : ix.rooms[state.key].owner === 'Shared' ? 'Shared by all departments' : deptName(c, ix.rooms[state.key].owner);
 
   let badge;
   if (state.preview) badge = `<span class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-sm font-medium text-amber-800">Preview: ${base.messages.length} → ${v.messages.length} conflicts</span>`;
@@ -765,7 +782,8 @@ function timetable() {
     <div class="text-xs text-slate-500">${c.term} · Generated by Samay · ${base.messages.length ? base.messages.length + ' conflicts' : 'Verified: 0 conflicts'}</div>
   </div>
   <div class="no-print mb-4 flex flex-wrap items-center justify-between gap-3">
-    <div class="flex items-center gap-3"><h1 class="text-2xl font-semibold tracking-tight">${title}</h1>${badge}</div>
+    <div><div class="flex items-center gap-3"><h1 class="text-2xl font-semibold tracking-tight">${esc(title)}</h1>${badge}</div>
+      <p class="mt-0.5 text-sm text-slate-500">${esc(subtitle)}</p></div>
     <div class="flex flex-wrap gap-2">
       ${btn('Simulate a clash', 'simulateClash()', 'secondary')}
       ${btn('Assistant', 'toggleDrawer(true)', 'secondary', 'bot')}
@@ -777,7 +795,7 @@ function timetable() {
       ${[['section', 'Section'], ['teacher', 'Teacher'], ['room', 'Room']].map(([id, l]) => `<button onclick="setView('${id}')" class="rounded-md px-3 py-1.5 text-sm ${state.view === id ? 'bg-indigo-600 font-medium text-white' : 'text-slate-600 hover:bg-slate-50'}">${l}</button>`).join('')}
     </div>
     <select onchange="setKey(this.value)" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-      ${options.map(([id, l]) => `<option value="${id}" ${id === state.key ? 'selected' : ''}>${l}</option>`).join('')}
+      ${optionsHtml(options, state.key)}
     </select>
     <div class="ml-auto flex flex-wrap items-center gap-3 text-xs text-slate-600">
       ${Object.values(KIND).map(k => `<span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm ${k.dot}"></span>${k.label}</span>`).join('')}
@@ -922,21 +940,34 @@ const bubble = html => `<div class="rounded-lg bg-slate-50 p-3 text-sm leading-r
    from a form or from an imported row.
 =========================================================================== */
 const esc = v => String(v ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+// College structure: Department → Course → Section (→ lab groups). Teachers and subjects belong to a department,
+// but any teacher can teach any department's students (e.g. Applied Sciences teaches Maths to CSE and ECE).
 const ENT = {
+  departments: { label: 'Departments', one: 'department' },
+  courses: { label: 'Courses', one: 'course' },
   sections: { label: 'Sections', one: 'section' },
   teachers: { label: 'Teachers', one: 'teacher' },
-  rooms: { label: 'Rooms', one: 'room' },
   subjects: { label: 'Subjects', one: 'subject' },
+  rooms: { label: 'Rooms', one: 'room' },
   assignments: { label: 'Teaching assignments', one: 'teaching assignment' },
 };
 // Spreadsheet columns for import and for the downloadable template.
 const COLUMNS = {
-  sections: [['Section', 'name'], ['Department', 'dept'], ['Students', 'strength'], ['Lab groups', 'groups']],
+  departments: [['Code', 'code'], ['Name', 'name'], ['Head of department', 'hod']],
+  courses: [['Course code', 'code'], ['Course name', 'name'], ['Department', 'dept'], ['Duration (years)', 'years']],
+  sections: [['Section', 'name'], ['Course', 'course'], ['Semester', 'sem'], ['Students', 'strength'], ['Lab groups', 'groups']],
   teachers: [['Name', 'name'], ['Department', 'dept'], ['Max periods a day', 'max'], ['Unavailable', 'off']],
   rooms: [['Room', 'name'], ['Type', 'type'], ['Capacity', 'cap'], ['Owner', 'owner']],
-  subjects: [['Code', 'code'], ['Name', 'name'], ['Short name', 'short'], ['Type', 'kind'], ['Room needed', 'room'], ['Lectures per week', 'perWeek']],
+  subjects: [['Code', 'code'], ['Name', 'name'], ['Short name', 'short'], ['Type', 'kind'], ['Room needed', 'room'], ['Lectures per week', 'perWeek'], ['Offered by', 'dept']],
   assignments: [['Subject code', 'subject'], ['Taught to', 'group'], ['Teacher', 'teacher'], ['Periods per week', 'periods']],
 };
+const deptName = (c, id) => c.departments.find(d => d.id === id)?.name ?? id;
+const courseOf = (c, id) => (c.courses || []).find(x => x.id === id);
+const sectionOf = (c, groupId) => c.sections.find(s => s.id === idx(c).groups[groupId]?.section);
+// The department whose students a group belongs to.
+const groupDept = (c, groupId) => sectionOf(c, groupId)?.dept;
+const isGuest = (c, a) => idx(c).teachers[a[2] ?? a.teacher]?.dept !== groupDept(c, a[1] ?? a.group);
+const deptBadge = (id, tone = 'slate') => `<span class="rounded ${tone === 'indigo' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'} px-1.5 py-0.5 text-[11px] font-medium">${esc(id)}</span>`;
 
 const intOrNull = v => (String(v ?? '').trim() === '' ? null : Number(String(v).trim()));
 const isInt = (n, lo, hi) => Number.isInteger(n) && n >= lo && n <= hi;
@@ -959,15 +990,26 @@ function dataChanged(c, message) {
 
 /* ---- current record → form values (strings, as typed) ---- */
 function toValues(c, entity, ref) {
+  const filterDept = state.deptFilter && state.deptFilter !== 'all' ? state.deptFilter : null;
+  if (entity === 'departments') {
+    const d = ref != null ? c.departments[ref] : null;
+    return d ? { code: d.id, name: d.name, hod: d.hod || '' } : { code: '', name: '', hod: '' };
+  }
+  if (entity === 'courses') {
+    const x = ref != null ? c.courses[ref] : null;
+    return x ? { code: x.id, name: x.name, dept: x.dept, years: String(x.years) }
+             : { code: '', name: '', dept: filterDept || c.departments[0].id, years: '4' };
+  }
   if (entity === 'sections') {
     const s = ref != null ? c.sections[ref] : null;
-    return s ? { name: s.id, dept: s.dept, strength: String(s.strength), groups: String(s.subs.length) }
-             : { name: '', dept: c.departments[0].id, strength: '', groups: String(c.sections[0]?.subs.length ?? 2) };
+    const firstCourse = (c.courses || []).find(x => !filterDept || x.dept === filterDept);
+    return s ? { name: s.id, course: s.course || '', sem: String(s.sem ?? 1), strength: String(s.strength), groups: String(s.subs.length) }
+             : { name: '', course: firstCourse?.id || '', sem: '1', strength: '', groups: String(c.sections[0]?.subs.length ?? 2) };
   }
   if (entity === 'teachers') {
     const t = ref != null ? c.teachers[ref] : null;
     return t ? { name: t.name, dept: t.dept, max: String(tMax(c, t)), off: (t.off || []).map(x => [...x]) }
-             : { name: '', dept: c.departments[0].id, max: String(c.scheme.rules.teacherMaxPerDay), off: [] };
+             : { name: '', dept: filterDept || c.departments[0].id, max: String(c.scheme.rules.teacherMaxPerDay), off: [] };
   }
   if (entity === 'rooms') {
     const r = ref != null ? c.rooms[ref] : null;
@@ -976,8 +1018,8 @@ function toValues(c, entity, ref) {
   }
   if (entity === 'subjects') {
     const s = ref != null ? c.subjects[ref] : null;
-    return s ? { code: ref, name: s.name, short: s.short, kind: s.kind, room: s.room || '', perWeek: s.perWeek != null ? String(s.perWeek) : '' }
-             : { code: '', name: '', short: '', kind: 'theory', room: '', perWeek: '' };
+    return s ? { code: ref, name: s.name, short: s.short, kind: s.kind, room: s.room || '', perWeek: s.perWeek != null ? String(s.perWeek) : '', dept: s.dept || '' }
+             : { code: '', name: '', short: '', kind: 'theory', room: '', perWeek: '', dept: filterDept || '' };
   }
   const a = ref != null ? c.assignments[ref] : null;
   return a ? { subject: a[0], group: a[1], teacher: a[2], periods: a[3] != null ? String(a[3]) : '' }
@@ -990,13 +1032,40 @@ function validateValues(c, entity, v, ref, seen = new Set()) {
   const deptIds = c.departments.map(d => d.id);
   const taken = (list, val) => list.some(x => x.toLowerCase() === String(val).toLowerCase()) || seen.has(String(val).toLowerCase());
   let record = null;
+  const courses = c.courses || [];
+
+  if (entity === 'departments') {
+    const code = String(v.code || '').trim().toUpperCase(), name = String(v.name || '').trim();
+    if (!code) err.code = 'Enter a short code, like CSE or ME.';
+    else if (!/^[A-Z0-9-]{1,10}$/.test(code)) err.code = 'Use up to 10 letters, numbers or "-".';
+    else if (taken(c.departments.filter((_, i) => i !== ref).map(d => d.id), code)) err.code = `${code} already exists.`;
+    if (!name) err.name = 'Enter the department name.';
+    if (!Object.keys(err).length) record = { id: code, name, hod: String(v.hod || '').trim() || undefined, status: ref != null ? c.departments[ref].status : 'ready' };
+  }
+
+  if (entity === 'courses') {
+    const code = String(v.code || '').trim().toUpperCase(), name = String(v.name || '').trim(), years = intOrNull(v.years);
+    if (!code) err.code = 'Enter a short code, like BTECH-ME.';
+    else if (!/^[A-Z0-9.-]{1,16}$/.test(code)) err.code = 'Use up to 16 letters, numbers, "." or "-".';
+    else if (taken(courses.filter((_, i) => i !== ref).map(x => x.id), code)) err.code = `${code} already exists.`;
+    if (!name) err.name = 'Enter the course name, like B.Tech Mechanical Engineering.';
+    if (!deptIds.includes(v.dept)) err.dept = v.dept ? `No department "${v.dept}". Use one of: ${deptIds.join(', ')}.` : 'Choose a department.';
+    if (!isInt(years, 1, 6)) err.years = 'Enter 1–6 years.';
+    if (ref != null && !err.years) {
+      const tooHigh = c.sections.filter(s => s.course === courses[ref].id && s.sem > years * 2);
+      if (tooHigh.length) err.years = `${tooHigh.map(s => s.id).join(', ')} ${tooHigh.length > 1 ? 'are' : 'is'} in a later semester than ${years} year(s) allows.`;
+    }
+    if (!Object.keys(err).length) record = { id: code, name, dept: v.dept, years };
+  }
 
   if (entity === 'sections') {
     const name = String(v.name || '').trim(), strength = intOrNull(v.strength), groups = intOrNull(v.groups) ?? 0;
+    const course = courses.find(x => x.id === v.course), sem = intOrNull(v.sem);
     if (!name) err.name = 'Enter a section name, like CSE-3A.';
     else if (name.includes('/')) err.name = 'A section name can\'t contain "/".';
     else if (taken(c.sections.filter((_, i) => i !== ref).map(s => s.id), name)) err.name = `${name} already exists.`;
-    if (!deptIds.includes(v.dept)) err.dept = v.dept ? `No department "${v.dept}". Use one of: ${deptIds.join(', ')}.` : 'Choose a department.';
+    if (!course) err.course = v.course ? `No course "${v.course}". Add it on the Courses tab first.` : 'Choose a course.';
+    else if (!isInt(sem, 1, course.years * 2)) err.sem = `${course.name} has semesters 1–${course.years * 2}.`;
     if (!isInt(strength, 1, 1000)) err.strength = 'Enter the number of students (1–1000).';
     if (!isInt(groups, 0, 6)) err.groups = 'Lab groups must be between 0 and 6.';
     if (ref != null && !err.groups && groups < c.sections[ref].subs.length) {
@@ -1010,7 +1079,7 @@ function validateValues(c, entity, v, ref, seen = new Set()) {
       const oldSubs = ref != null ? c.sections[ref].subs : [];
       const prefix = oldSubs.length ? oldSubs[0].label.replace(/\d+$/, '') : null;
       const labels = prefix ? Array.from({ length: groups }, (_, i) => `${prefix}${i + 1}`) : labLabels(c, name, groups), base = Math.floor(strength / Math.max(groups, 1)), extra = strength - base * groups;
-      record = { id: name, dept: v.dept, strength, subs: labels.map((label, i) => ({ label, strength: base + (i < extra ? 1 : 0) })) };
+      record = { id: name, dept: course.dept, course: course.id, sem, strength, subs: labels.map((label, i) => ({ label, strength: base + (i < extra ? 1 : 0) })) };
     }
   }
 
@@ -1049,10 +1118,12 @@ function validateValues(c, entity, v, ref, seen = new Set()) {
     if (v.kind === 'lab' && !labRoomTypes(c).includes(v.room)) err.room = `Choose the lab it needs: ${labRoomTypes(c).map(typeName).join(', ')}.`;
     if (per !== null && v.kind !== 'lab' && !isInt(per, 1, maxWeek)) err.perWeek = `Enter 1–${maxWeek}, or leave blank to use the college rule.`;
     if (per !== null && v.kind === 'lab' && !isInt(per, 1, 20)) err.perWeek = 'Enter a whole number of periods, or leave blank.';
+    if (v.dept && !deptIds.includes(v.dept)) err.dept = `No department "${v.dept}". Use one of: ${deptIds.join(', ')}, or leave blank for a common subject.`;
     if (!Object.keys(err).length) {
       record = { code, subject: { short: String(v.short || '').trim() || name.slice(0, 14), name, kind: v.kind } };
       if (v.kind === 'lab') record.subject.room = v.room;
       if (per !== null) record.subject.perWeek = per;
+      if (v.dept) record.subject.dept = v.dept;
     }
   }
 
@@ -1075,13 +1146,28 @@ function validateValues(c, entity, v, ref, seen = new Set()) {
   return { errors: err, record };
 }
 const uniqueKey = (entity, record) => ({
+  departments: () => record.id, courses: () => record.id,
   sections: () => record.id, teachers: () => record.name, rooms: () => record.id,
   subjects: () => record.code, assignments: () => `${record[0]}|${record[1]}`,
 }[entity]().toLowerCase());
 
 /* ---- write a checked record into the college (handles renames) ---- */
 function saveRecord(c, entity, record, ref) {
-  if (entity === 'sections') {
+  if (entity === 'departments') {
+    if (ref == null) { c.departments.push(record); return; }
+    const old = c.departments[ref].id;
+    if (old !== record.id) {
+      [...(c.courses || []), ...c.sections, ...c.teachers, ...Object.values(c.subjects)].forEach(x => { if (x.dept === old) x.dept = record.id; });
+      c.rooms.forEach(r => { if (r.owner === old) r.owner = record.id; });
+    }
+    c.departments[ref] = record;
+  } else if (entity === 'courses') {
+    c.courses ||= [];
+    if (ref == null) { c.courses.push(record); return; }
+    const old = c.courses[ref].id;
+    c.sections.forEach(s => { if (s.course === old) { s.course = record.id; s.dept = record.dept; } });
+    c.courses[ref] = record;
+  } else if (entity === 'sections') {
     if (ref == null) { c.sections.push(record); return; }
     const old = c.sections[ref];
     c.assignments.forEach(a => {
@@ -1107,6 +1193,16 @@ function saveRecord(c, entity, record, ref) {
 }
 
 function deleteBlockReason(c, entity, ref) {
+  if (entity === 'departments') {
+    const id = c.departments[ref].id;
+    const used = [['course', (c.courses || []).filter(x => x.dept === id).length], ['teacher', c.teachers.filter(t => t.dept === id).length],
+                  ['subject', Object.values(c.subjects).filter(s => s.dept === id).length]].filter(([, n]) => n);
+    return used.length ? `${id} still has ${used.map(([w, n]) => `${n} ${w}${n > 1 ? 's' : ''}`).join(', ')}. Move or delete those first.` : null;
+  }
+  if (entity === 'courses') {
+    const x = c.courses[ref], n = c.sections.filter(s => s.course === x.id).length;
+    return n ? `${x.name} has ${n} section(s). Move or delete those first.` : null;
+  }
   if (entity === 'sections') {
     const s = c.sections[ref], n = assignmentsOf(c, a => a[1] === s.id || a[1].startsWith(`${s.id}/`));
     return n ? `${s.id} has ${n} teaching assignment(s). Delete those first.` : null;
@@ -1122,6 +1218,7 @@ function deleteBlockReason(c, entity, ref) {
   return null;
 }
 const recordName = (c, entity, ref) => ({
+  departments: () => `${c.departments[ref].id} (${c.departments[ref].name})`, courses: () => c.courses[ref].name,
   sections: () => c.sections[ref].id, teachers: () => c.teachers[ref].name, rooms: () => c.rooms[ref].id,
   subjects: () => `${ref} ${c.subjects[ref].name}`,
   assignments: () => { const a = c.assignments[ref]; return `${c.subjects[a[0]].short} for ${gLabel(c, a[1])}`; },
@@ -1217,7 +1314,13 @@ function normalizeRow(c, entity, raw) {
   const v = {};
   COLUMNS[entity].forEach(([h, f]) => v[f] = get(h));
   const dept = x => c.departments.find(d => d.id.toLowerCase() === x.toLowerCase() || d.name.toLowerCase() === x.toLowerCase())?.id ?? x;
-  if ('dept' in v) v.dept = dept(v.dept);
+  if ('dept' in v) v.dept = /^(common|all|shared)$/i.test(v.dept) ? '' : dept(v.dept);
+  if (entity === 'departments') v.code = v.code.toUpperCase();
+  if (entity === 'courses' && v.years === '') v.years = '4';
+  if (entity === 'sections') {
+    const x = (c.courses || []).find(o => o.id.toLowerCase() === v.course.toLowerCase() || o.name.toLowerCase() === v.course.toLowerCase());
+    if (x) v.course = x.id;
+  }
   if (entity === 'rooms') {
     v.type = roomTypes(c).find(t => t === v.type || typeName(t).toLowerCase() === v.type.toLowerCase()) ?? v.type;
     v.owner = !v.owner || v.owner.toLowerCase() === 'shared' ? 'Shared' : dept(v.owner);
@@ -1265,12 +1368,25 @@ function checkImportRows(rows) {
 function exampleRows(c, entity) {
   const d = c.departments[0].id, s0 = c.sections[0], t0 = c.teachers[0], sub0 = Object.entries(c.subjects)[0];
   const labGroup = c.sections.find(s => s.subs.length);
+  const course0 = courseOf(c, s0.course) || (c.courses || [])[0];
   return {
+    departments: [
+      { Code: 'ME', Name: 'Mechanical Engineering', 'Head of department': 'Dr. G. S. Brar' },
+      { Code: 'CIVIL', Name: 'Civil Engineering', 'Head of department': '' },
+      { Code: d, Name: c.departments[0].name, 'Head of department': '' },
+      { Code: 'Business Studies Dept', Name: 'Business Studies', 'Head of department': '' },
+    ],
+    courses: [
+      { 'Course code': `M-${d}`, 'Course name': `Masters in ${c.departments[0].name}`, Department: d, 'Duration (years)': 2 },
+      { 'Course code': `DIP-${d}`, 'Course name': `Diploma in ${c.departments[0].name}`, Department: c.departments[0].name, 'Duration (years)': 3 },
+      { 'Course code': course0?.id, 'Course name': course0?.name, Department: course0?.dept, 'Duration (years)': course0?.years },
+      { 'Course code': 'PHD', 'Course name': 'Ph.D.', Department: 'Philosophy', 'Duration (years)': 9 },
+    ],
     sections: [
-      { Section: `${s0.dept}-7A`, Department: s0.dept, Students: 58, 'Lab groups': 2 },
-      { Section: `${s0.dept}-7B`, Department: s0.dept, Students: 60, 'Lab groups': 2 },
-      { Section: s0.id, Department: s0.dept, Students: 60, 'Lab groups': 2 },
-      { Section: `${s0.dept}-7C`, Department: 'Mechanical', Students: 'sixty', 'Lab groups': 2 },
+      { Section: `${s0.dept}-7A`, Course: course0?.id, Semester: 7, Students: 58, 'Lab groups': 2 },
+      { Section: `${s0.dept}-7B`, Course: course0?.name, Semester: 7, Students: 60, 'Lab groups': 2 },
+      { Section: s0.id, Course: course0?.id, Semester: 3, Students: 60, 'Lab groups': 2 },
+      { Section: `${s0.dept}-9A`, Course: course0?.id, Semester: 19, Students: 'sixty', 'Lab groups': 2 },
     ],
     teachers: [
       { Name: 'Dr. Jaspreet Kaur', Department: d, 'Max periods a day': 4, Unavailable: `${c.scheme.days[0]} P1` },
@@ -1286,10 +1402,11 @@ function exampleRows(c, entity) {
       { Room: 'Old Hall', Type: 'Basement', Capacity: 0, Owner: 'Shared' },
     ],
     subjects: [
-      { Code: 'XX401', Name: 'Machine Learning', 'Short name': 'ML', Type: 'Lecture', 'Room needed': '', 'Lectures per week': '' },
-      { Code: 'XX401L', Name: 'Machine Learning Lab', 'Short name': 'ML Lab', Type: 'Lab', 'Room needed': typeName(labRoomTypes(c)[0]), 'Lectures per week': '' },
-      { Code: sub0[0], Name: sub0[1].name, 'Short name': sub0[1].short, Type: 'Lecture', 'Room needed': '', 'Lectures per week': '' },
-      { Code: 'XX402', Name: 'Ethics', 'Short name': 'Ethics', Type: 'Seminar', 'Room needed': '', 'Lectures per week': 9 },
+      { Code: 'XX401', Name: 'Machine Learning', 'Short name': 'ML', Type: 'Lecture', 'Room needed': '', 'Lectures per week': '', 'Offered by': d },
+      { Code: 'XX401L', Name: 'Machine Learning Lab', 'Short name': 'ML Lab', Type: 'Lab', 'Room needed': typeName(labRoomTypes(c)[0]), 'Lectures per week': '', 'Offered by': d },
+      { Code: 'XX403', Name: 'Environmental Studies', 'Short name': 'EVS', Type: 'Lecture', 'Room needed': '', 'Lectures per week': 2, 'Offered by': 'Common' },
+      { Code: sub0[0], Name: sub0[1].name, 'Short name': sub0[1].short, Type: 'Lecture', 'Room needed': '', 'Lectures per week': '', 'Offered by': d },
+      { Code: 'XX402', Name: 'Ethics', 'Short name': 'Ethics', Type: 'Seminar', 'Room needed': '', 'Lectures per week': 9, 'Offered by': '' },
     ],
     assignments: [
       { 'Subject code': Object.keys(c.subjects).find(k => c.subjects[k].kind === 'tutorial') || sub0[0], 'Taught to': c.sections.at(-1).id, Teacher: c.teachers.at(-1).name, 'Periods per week': '' },
@@ -1316,21 +1433,69 @@ function fInput(m, f, label, { type = 'text', placeholder = '', hint = '' } = {}
     <input type="${type}" value="${esc(m.values[f])}" placeholder="${esc(placeholder)}" oninput="mv('${f}', this.value)" class="${inputCls(m.errors?.[f])}"/>
     ${hint ? `<p class="mt-1 text-xs text-slate-500">${hint}</p>` : ''}${fieldErr(m, f)}</label>`;
 }
+// Options are [value, label] pairs, or { group, items } for a labelled group (shown as <optgroup>).
+function optionsHtml(options, selected) {
+  const one = ([v, l]) => `<option value="${esc(v)}" ${String(v) === String(selected) ? 'selected' : ''}>${esc(l)}</option>`;
+  return options.map(o => o.group ? `<optgroup label="${esc(o.group)}">${o.items.map(one).join('')}</optgroup>` : one(o)).join('');
+}
 function fSelect(m, f, label, options, { rerender = false, hint = '' } = {}) {
   return `<label class="block"><span class="mb-1 block text-sm font-medium text-slate-700">${label}</span>
     <select onchange="mv('${f}', this.value, ${rerender})" class="${inputCls(m.errors?.[f])}">
       ${m.values[f] === '' ? '<option value="" selected disabled>Choose…</option>' : ''}
-      ${options.map(([v, l]) => `<option value="${esc(v)}" ${String(v) === String(m.values[f]) ? 'selected' : ''}>${esc(l)}</option>`).join('')}
+      ${optionsHtml(options, m.values[f])}
     </select>${hint ? `<p class="mt-1 text-xs text-slate-500">${hint}</p>` : ''}${fieldErr(m, f)}</label>`;
+}
+// Grouped pickers: sections by department and course, lab groups by section, teachers by department.
+function sectionOptions(c, keep = () => true) {
+  const out = [];
+  c.departments.forEach(d => {
+    const mine = c.sections.filter(s => s.dept === d.id && keep(s));
+    const byCourse = {};
+    mine.forEach(s => (byCourse[s.course || ''] ||= []).push(s));
+    Object.entries(byCourse).forEach(([cid, list]) => out.push({
+      group: `${d.id} · ${courseOf(c, cid)?.name || 'No course'}`,
+      items: list.sort((a, b) => (a.sem ?? 0) - (b.sem ?? 0) || a.id.localeCompare(b.id)).map(s => [s.id, s.sem ? `${s.id} (Sem ${s.sem})` : s.id]),
+    }));
+  });
+  return out;
+}
+function labGroupOptions(c) {
+  const ix = idx(c);
+  return c.sections.filter(s => ix.subsOf[s.id].length).map(s => ({ group: `${s.dept} · ${s.id}`, items: ix.subsOf[s.id].map(g => [g, gLabel(c, g)]) }));
+}
+function teacherOptions(c, firstDept) {
+  const order = [...c.departments].sort((a, b) => (b.id === firstDept) - (a.id === firstDept));
+  return order.map(d => ({
+    group: `${d.name}${firstDept && d.id !== firstDept ? ' (guest)' : ''}`,
+    items: c.teachers.filter(t => t.dept === d.id).map(t => [t.id, t.name]),
+  })).filter(g => g.items.length);
 }
 
 function formBody(c, m) {
   const ix = idx(c), v = m.values, depts = c.departments.map(d => [d.id, `${d.id} · ${d.name}`]);
+  if (m.entity === 'departments') {
+    return `<div class="grid grid-cols-3 gap-3"><div>${fInput(m, 'code', 'Code', { placeholder: 'ME' })}</div>
+      <div class="col-span-2">${fInput(m, 'name', 'Department name', { placeholder: 'Mechanical Engineering' })}</div></div>
+      ${fInput(m, 'hod', 'Head of department (optional)', { placeholder: 'Dr. G. S. Brar' })}
+      <p class="text-xs text-slate-500">After adding the department, add its courses, then its sections, teachers and subjects.
+      Service departments (like Applied Sciences) can have no courses of their own and only teach other departments.</p>`;
+  }
+  if (m.entity === 'courses') {
+    return `<div class="grid grid-cols-3 gap-3"><div>${fInput(m, 'code', 'Code', { placeholder: 'BTECH-ME' })}</div>
+      <div class="col-span-2">${fInput(m, 'name', 'Course name', { placeholder: 'B.Tech Mechanical Engineering' })}</div></div>
+      <div class="grid grid-cols-2 gap-3">${fSelect(m, 'dept', 'Department', depts)}${fInput(m, 'years', 'Duration (years)', { type: 'number', hint: 'Sets which semesters its sections can be in.' })}</div>`;
+  }
   if (m.entity === 'sections') {
     const n = intOrNull(v.groups) ?? 0, old = m.ref != null ? c.sections[m.ref].subs : [];
     const labels = old.length ? Array.from({ length: n }, (_, i) => `${old[0].label.replace(/\d+$/, '')}${i + 1}`) : labLabels(c, v.name || 'A', n);
+    const course = courseOf(c, v.course);
+    const courseOpts = c.departments.map(d => ({ group: d.name, items: (c.courses || []).filter(x => x.dept === d.id).map(x => [x.id, x.name]) })).filter(g => g.items.length);
     return `${fInput(m, 'name', 'Section name', { placeholder: 'CSE-3C' })}
-      <div class="grid grid-cols-2 gap-3">${fSelect(m, 'dept', 'Department', depts)}${fInput(m, 'strength', 'Students', { type: 'number', placeholder: '60' })}</div>
+      ${courseOpts.length ? fSelect(m, 'course', 'Course', courseOpts, { rerender: true, hint: course ? `Department: ${esc(deptName(c, course.dept))}` : '' })
+        : '<div class="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Add a course first (Courses tab), then add its sections.</div>'}
+      <div class="grid grid-cols-2 gap-3">
+        ${fSelect(m, 'sem', 'Semester', Array.from({ length: (course?.years || 4) * 2 }, (_, i) => [i + 1, `Semester ${i + 1}`]))}
+        ${fInput(m, 'strength', 'Students', { type: 'number', placeholder: '60' })}</div>
       ${fSelect(m, 'groups', 'Lab groups', [0, 1, 2, 3, 4].map(k => [k, k === 0 ? 'None (no labs)' : `${k} group${k > 1 ? 's' : ''}`]), { rerender: true,
         hint: n ? `Labs will be taught to ${labels.join(', ')}. Students are split evenly between them.` : 'Choose this if the section has no labs.' })}`;
   }
@@ -1358,16 +1523,22 @@ function formBody(c, m) {
       ${v.kind === 'lab' ? fSelect(m, 'room', 'Lab it needs', labRoomTypes(c).map(t => [t, typeName(t)])) : '<div></div>'}</div>
       ${fInput(m, 'perWeek', v.kind === 'lab' ? 'Lab periods a week' : 'Lectures a week', { type: 'number',
         placeholder: v.kind === 'lab' ? `College rule: ${c.scheme.rules.labSessionsPerWeek * c.scheme.labBlock}` : `College rule: ${c.scheme.rules.lecturesPerWeek}`,
-        hint: 'Leave blank to follow your college rule.' })}`;
+        hint: 'Leave blank to follow your college rule.' })}
+      ${fSelect(m, 'dept', 'Offered by', [['', 'Common (any department)'], ...depts], { hint: 'The department that owns the subject. Any department\'s students can still take it.' })}`;
   }
   const s = c.subjects[v.subject];
-  const groups = !s ? [] : s.kind === 'lab'
-    ? Object.values(ix.groups).filter(g => g.isSub).map(g => [g.id, gLabel(c, g.id)])
-    : c.sections.map(x => [x.id, x.id]);
+  const groups = !s ? [] : s.kind === 'lab' ? labGroupOptions(c) : sectionOptions(c);
   const def = s ? weekly(c, v.subject) : null;
-  return `${fSelect(m, 'subject', 'Subject', Object.entries(c.subjects).map(([k, x]) => [k, `${k} · ${x.name} (${KIND[x.kind].label})`]), { rerender: true })}
-    ${s ? fSelect(m, 'group', s.kind === 'lab' ? 'Lab group' : 'Section', groups, { hint: s.kind === 'lab' ? 'Labs are taught to one lab group at a time.' : 'Lectures are taught to the whole section.' }) : ''}
-    ${fSelect(m, 'teacher', 'Teacher', c.teachers.map(t => [t.id, `${t.name} (${t.dept})`]))}
+  const studentsDept = v.group ? groupDept(c, v.group) : null, T = ix.teachers[v.teacher];
+  const subjectOpts = c.departments.map(d => ({ group: `Offered by ${d.name}`, items: Object.entries(c.subjects).filter(([, x]) => x.dept === d.id) }))
+    .concat([{ group: 'Common subjects', items: Object.entries(c.subjects).filter(([, x]) => !x.dept) }])
+    .filter(g => g.items.length).map(g => ({ group: g.group, items: g.items.map(([k, x]) => [k, `${k} · ${x.name} (${KIND[x.kind].label})`]) }));
+  const guestNote = T && studentsDept && T.dept !== studentsDept
+    ? `<div class="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-900"><b>Guest teaching:</b> ${esc(T.name)} from ${esc(deptName(c, T.dept))} will teach ${esc(gLabel(c, v.group))} (${esc(deptName(c, studentsDept))}). That's fine: the generator makes sure ${esc(T.name)} is never in two departments at the same time.</div>` : '';
+  return `${fSelect(m, 'subject', 'Subject', subjectOpts, { rerender: true })}
+    ${s ? fSelect(m, 'group', s.kind === 'lab' ? 'Lab group' : 'Section', groups, { rerender: true, hint: s.kind === 'lab' ? 'Labs are taught to one lab group at a time.' : 'Lectures are taught to the whole section. Any department\'s section can take this subject.' }) : ''}
+    ${fSelect(m, 'teacher', 'Teacher', teacherOptions(c, studentsDept), { rerender: true, hint: 'Teachers from any department can teach here.' })}
+    ${guestNote}
     ${s ? fInput(m, 'periods', 'Periods a week', { type: 'number', placeholder: `Default: ${def}`, hint: `Leave blank to use ${def} (from the ${s.perWeek != null ? 'subject' : 'college rule'}).` }) : ''}`;
 }
 
@@ -1439,7 +1610,7 @@ function modal() {
 /* ---- the Data page ---- */
 function dataPage() {
   const c = col(), g = current(), ix = idx(c);
-  const tab = state.dataTab || 'sections';
+  const tab = state.dataTab || 'departments';
   const load = {};
   A(c).forEach(a => load[a.teacher] = (load[a.teacher] || 0) + a.periods);
   const use = {};
@@ -1450,30 +1621,89 @@ function dataPage() {
   const actions = ref => `<td class="whitespace-nowrap px-3 py-2 text-right text-sm">
     <button onclick="openForm('${tab}', ${JSON.stringify(ref).replace(/"/g, '&quot;')})" class="rounded-md px-2 py-1 font-medium text-indigo-600 hover:bg-indigo-50">Edit</button>
     <button onclick="askDelete('${tab}', ${JSON.stringify(ref).replace(/"/g, '&quot;')})" class="rounded-md px-2 py-1 text-slate-500 hover:bg-red-50 hover:text-red-700">Delete</button></td>`;
-  const counts = { sections: c.sections.length, teachers: c.teachers.length, rooms: c.rooms.length, subjects: Object.keys(c.subjects).length, assignments: c.assignments.length };
+  const f = state.deptFilter && state.deptFilter !== 'all' && c.departments.some(d => d.id === state.deptFilter) ? state.deptFilter : null;
+  const courses = c.courses || [];
+
+  // Who teaches whom across departments.
+  const teachesIn = {}, guestOut = {}, guestIn = {};
+  A(c).forEach(a => {
+    const sd = groupDept(c, a.group), td_ = ix.teachers[a.teacher].dept;
+    (teachesIn[a.teacher] ||= new Set()).add(sd);
+    if (sd !== td_) { guestOut[td_] = (guestOut[td_] || 0) + a.periods; guestIn[sd] = (guestIn[sd] || 0) + a.periods; }
+  });
+  const inDept = a => !f || groupDept(c, a.group) === f || ix.teachers[a.teacher].dept === f;
+  const subjectTaughtTo = code => new Set(A(c).filter(a => a.subject === code).map(a => groupDept(c, a.group)));
+  const list = {
+    departments: c.departments.map((d, i) => [d, i]),
+    courses: courses.map((x, i) => [x, i]).filter(([x]) => !f || x.dept === f),
+    sections: c.sections.map((s, i) => [s, i]).filter(([s]) => !f || s.dept === f),
+    teachers: c.teachers.map((t, i) => [t, i]).filter(([t]) => !f || t.dept === f || teachesIn[t.id]?.has(f)),
+    subjects: Object.entries(c.subjects).filter(([code, s]) => !f || s.dept === f || subjectTaughtTo(code).has(f)),
+    rooms: c.rooms.map((r, i) => [r, i]).filter(([r]) => !f || r.owner === f || r.owner === 'Shared'),
+    assignments: A(c).filter(inDept),
+  };
+  const counts = Object.fromEntries(Object.entries(list).map(([k, v]) => [k, v.length]));
+  const deptChips = set => [...set].filter(Boolean).map(d => deptBadge(d)).join(' ');
+  const guestBadge = (from) => `<span class="ml-1 inline-block whitespace-nowrap rounded bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-700" title="Teacher from another department">Guest · ${esc(from)}</span>`;
 
   const views = {
-    sections: () => [['Section', 'Department', 'Students', 'Lab groups'], c.sections.map((s, i) => `<tr>${td(esc(s.id), 'font-medium')}${td(esc(s.dept))}${td(s.strength)}${td(s.subs.length ? s.subs.map(u => `<span class="mr-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs">${esc(u.label)} · ${u.strength}</span>`).join('') : '<span class="text-xs text-slate-400">None (no labs)</span>')}${actions(i)}</tr>`)],
-    teachers: () => [['Name', 'Department', 'Periods a week', 'Max a day', 'Unavailable'], c.teachers.map((t, i) => `<tr>${td(esc(t.name), 'font-medium')}${td(esc(t.dept))}${td(load[t.id] || 0)}${td(tMax(c, t))}${td(t.off ? fmtOff(t.off) : '<span class="text-slate-400">–</span>')}${actions(i)}</tr>`)],
-    rooms: () => [['Room', 'Type', 'Seats', 'Belongs to', 'Used'], c.rooms.map((r, i) => `<tr>${td(esc(r.id), 'font-medium')}${td(typeName(r.type))}${td(r.cap)}${td(r.owner === 'Shared' ? '<span class="rounded bg-indigo-50 px-1.5 py-0.5 text-xs text-indigo-700">Shared</span>' : esc(r.owner))}${td(g ? Math.round(100 * (use[r.id] || 0) / slots) + '%' : '–')}${actions(i)}</tr>`)],
-    subjects: () => [['Code', 'Subject', 'Type', 'Room needed', 'Per week'], Object.entries(c.subjects).map(([code, s]) => `<tr>${td(esc(code), 'font-mono text-xs')}${td(`${esc(s.name)} <span class="text-xs text-slate-400">${esc(s.short)}</span>`)}${td(`<span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-sm ${KIND[s.kind].dot}"></span>${KIND[s.kind].label}</span>`)}${td(typeName(s.room || c.scheme.theoryRoomType))}${td(`${weekly(c, code)} <span class="text-xs ${s.perWeek != null ? 'text-amber-700' : 'text-slate-400'}">${s.perWeek != null ? 'set for subject' : 'college rule'}</span>`)}${actions(code)}</tr>`)],
-    assignments: () => [['Subject', 'Taught to', 'Teacher', 'Periods a week'], A(c).map(a => {
-      const own = c.assignments[a.i][3] != null;
-      return `<tr>${td(`${esc(subj(c, a).name)} <span class="text-xs text-slate-400">${KIND[subj(c, a).kind].label}</span>`)}${td(esc(gLabel(c, a.group)))}${td(esc(ix.teachers[a.teacher].name))}${td(`${a.periods} <span class="text-xs ${own ? 'text-amber-700' : 'text-slate-400'}">${own ? 'set here' : 'default'}</span>`)}${actions(a.i)}</tr>`;
+    departments: () => [['Code', 'Department', 'Courses', 'Sections', 'Teachers', 'Cross-department teaching'], list.departments.map(([d, i]) => {
+      const cs = courses.filter(x => x.dept === d.id), ss = c.sections.filter(s => s.dept === d.id), ts = c.teachers.filter(t => t.dept === d.id);
+      const across = [guestOut[d.id] ? `<span title="Periods a week its teachers teach other departments' students">Gives ${guestOut[d.id]} periods</span>` : '',
+                      guestIn[d.id] ? `<span title="Periods a week its students are taught by other departments' teachers">Gets ${guestIn[d.id]} periods</span>` : ''].filter(Boolean);
+      return `<tr>${td(deptBadge(d.id, 'indigo'))}${td(`${esc(d.name)}${d.hod ? `<div class="text-xs font-normal text-slate-500">HOD: ${esc(d.hod)}</div>` : ''}`, 'font-medium')}
+        ${td(cs.length ? cs.map(x => `<div>${esc(x.name)}</div>`).join('') : '<span class="text-slate-400">None (service department)</span>', 'text-xs')}${td(ss.length)}${td(ts.length)}
+        ${td(across.length ? across.map(x => `<div>${x}</div>`).join('') : '<span class="text-slate-400">–</span>', 'whitespace-nowrap text-xs text-indigo-700')}${actions(i)}</tr>`;
+    })],
+    courses: () => [['Code', 'Course', 'Department', 'Duration', 'Sections'], list.courses.map(([x, i]) => {
+      const ss = c.sections.filter(s => s.course === x.id);
+      return `<tr>${td(esc(x.id), 'font-mono text-xs')}${td(esc(x.name), 'font-medium')}${td(deptBadge(x.dept))}${td(`${x.years} years · ${x.years * 2} semesters`)}
+        ${td(ss.length ? ss.map(s => `<span class="mr-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs">${esc(s.id)} · Sem ${s.sem}</span>`).join('') : '<span class="text-xs text-slate-400">No sections yet</span>')}${actions(i)}</tr>`;
+    })],
+    sections: () => [['Section', 'Course', 'Semester', 'Students', 'Lab groups'], list.sections.map(([s, i]) => `<tr>${td(esc(s.id), 'font-medium')}
+      ${td(`${deptBadge(s.dept)} ${esc(courseOf(c, s.course)?.name || '–')}`)}${td(s.sem ?? '–')}${td(s.strength)}
+      ${td(s.subs.length ? s.subs.map(u => `<span class="mr-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs">${esc(u.label)} · ${u.strength}</span>`).join('') : '<span class="text-xs text-slate-400">None (no labs)</span>')}${actions(i)}</tr>`)],
+    teachers: () => [['Name', 'Department', 'Teaches students of', 'Periods a week', 'Max a day', 'Unavailable'], list.teachers.map(([t, i]) => {
+      const other = [...(teachesIn[t.id] || [])].filter(d => d !== t.dept);
+      return `<tr>${td(esc(t.name) + (f && t.dept !== f ? guestBadge(t.dept) : ''), 'font-medium')}${td(deptBadge(t.dept))}
+        ${td(teachesIn[t.id] ? deptChips(teachesIn[t.id]) + (other.length ? ' <span class="text-[11px] text-indigo-700">cross-department</span>' : '') : '<span class="text-xs text-slate-400">No classes yet</span>')}
+        ${td(load[t.id] || 0)}${td(tMax(c, t))}${td(t.off ? fmtOff(t.off) : '<span class="text-slate-400">–</span>')}${actions(i)}</tr>`;
+    })],
+    rooms: () => [['Room', 'Type', 'Seats', 'Belongs to', 'Used'], list.rooms.map(([r, i]) => `<tr>${td(esc(r.id), 'font-medium')}${td(typeName(r.type))}${td(r.cap)}${td(r.owner === 'Shared' ? '<span class="rounded bg-indigo-50 px-1.5 py-0.5 text-xs text-indigo-700">Shared</span>' : deptBadge(r.owner))}${td(g ? Math.round(100 * (use[r.id] || 0) / slots) + '%' : '–')}${actions(i)}</tr>`)],
+    subjects: () => [['Code', 'Subject', 'Offered by', 'Taken by', 'Type', 'Per week'], list.subjects.map(([code, s]) => {
+      const takers = subjectTaughtTo(code);
+      return `<tr>${td(esc(code), 'font-mono text-xs')}${td(`${esc(s.name)} <span class="text-xs text-slate-400">${esc(s.short)}</span>`)}
+        ${td(s.dept ? deptBadge(s.dept) : '<span class="text-xs text-slate-500">Common</span>')}${td(takers.size ? deptChips(takers) : '<span class="text-xs text-slate-400">Not assigned</span>')}
+        ${td(`<span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-sm ${KIND[s.kind].dot}"></span>${KIND[s.kind].label}${s.room ? ` · ${typeName(s.room)}` : ''}</span>`)}
+        ${td(`${weekly(c, code)} <span class="text-xs ${s.perWeek != null ? 'text-amber-700' : 'text-slate-400'}">${s.perWeek != null ? 'set for subject' : 'college rule'}</span>`)}${actions(code)}</tr>`;
+    })],
+    assignments: () => [['Subject', 'Taught to', 'Teacher', 'Periods a week'], list.assignments.map(a => {
+      const own = c.assignments[a.i][3] != null, T = ix.teachers[a.teacher], sd = groupDept(c, a.group);
+      return `<tr>${td(`${esc(subj(c, a).name)} <span class="text-xs text-slate-400">${KIND[subj(c, a).kind].label}</span>`)}${td(`${deptBadge(sd)} ${esc(gLabel(c, a.group))}`)}
+        ${td(esc(T.name) + (T.dept !== sd ? guestBadge(T.dept) : ''))}${td(`${a.periods} <span class="text-xs ${own ? 'text-amber-700' : 'text-slate-400'}">${own ? 'set here' : 'default'}</span>`)}${actions(a.i)}</tr>`;
     })],
   };
   const [heads, rows] = views[tab]();
+  const hint = {
+    departments: 'Each department has its own courses, sections, teachers and subjects. Teachers can still teach other departments\' students.',
+    courses: 'Courses (programmes) belong to a department, like B.Tech CSE or MCA. Sections belong to a course and semester.',
+    assignments: `Who teaches what to whom. Lectures go to a whole section; labs go to one lab group. A teacher from another department is marked "Guest". Default: ${c.scheme.rules.lecturesPerWeek} lectures a week per subject.`,
+  }[tab];
   return `
   <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
     <div><h1 class="text-2xl font-semibold tracking-tight">Data</h1>
     <p class="text-sm text-slate-500">Everything the generator needs. Add records one by one, or import a whole sheet at once.</p></div>
-    <div class="flex gap-2">${btn('Import from Excel', `openImport('${tab}')`, 'secondary', 'table')}${btn(`Add ${ENT[tab].one}`, `openForm('${tab}')`, 'primary')}</div>
+    <div class="flex flex-wrap gap-2">
+      ${tab !== 'departments' ? `<select onchange="state.deptFilter = this.value; render()" aria-label="Filter by department" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        ${optionsHtml([['all', 'All departments'], ...c.departments.map(d => [d.id, d.name])], f || 'all')}</select>` : ''}
+      ${btn('Import from Excel', `openImport('${tab}')`, 'secondary', 'table')}${btn(`Add ${ENT[tab].one}`, `openForm('${tab}')`, 'primary')}</div>
   </div>
   <div class="mb-3 flex gap-1 overflow-x-auto border-b border-slate-200">
     ${Object.entries(ENT).map(([k, e]) => `<button onclick="state.dataTab='${k}'; render()" class="-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm ${k === tab ? 'border-indigo-600 font-medium text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-700'}">
       ${e.label} <span class="ml-1 rounded-full bg-slate-100 px-1.5 text-xs text-slate-600">${counts[k]}</span></button>`).join('')}
   </div>
-  ${tab === 'assignments' ? `<p class="mb-3 text-sm text-slate-500">Who teaches what to whom. Lectures go to a whole section; labs go to one lab group. Default: ${c.scheme.rules.lecturesPerWeek} lectures a week per subject.</p>` : ''}
+  ${f && tab !== 'departments' ? `<p class="mb-3 text-sm text-slate-500">Showing ${esc(deptName(c, f))}${tab === 'teachers' ? ', including guest teachers who teach its students' : tab === 'rooms' ? ' rooms and shared rooms' : tab === 'assignments' ? ': classes for its students and classes its teachers give elsewhere' : ''}.</p>` : ''}
+  ${hint ? `<p class="mb-3 text-sm text-slate-500">${hint}</p>` : ''}
   ${rows.length ? card(`<div class="overflow-x-auto"><table class="w-full"><thead class="border-b border-slate-100"><tr>${heads.map(th).join('')}<th></th></tr></thead>
     <tbody class="divide-y divide-slate-100">${rows.join('')}</tbody></table></div>`)
     : card(`<div class="py-10 text-center"><div class="font-medium">No ${ENT[tab].label.toLowerCase()} yet</div>

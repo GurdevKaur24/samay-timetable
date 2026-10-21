@@ -15,6 +15,11 @@ cd frontend; npm run dev            # http://localhost:5173
 ```
 
 ## Domain glossary
+- **College structure**: Department → Course (programme, e.g. B.Tech CSE, MCA; has a duration in years) → Section
+  (in one semester) → lab groups. Service departments (e.g. Applied Sciences) may have no courses.
+- **Cross-department teaching**: teachers and subjects belong to a department ("offered by"), but any teacher can teach
+  any department's sections, and the same subject can be taken by several departments. Never restrict a teacher to
+  their own department; the clash rules alone keep them from being in two places at once.
 - **Section**: a class group, e.g. CSE-3A (strength = number of students).
 - **Sub-section**: lab split of a section, e.g. A → A1, A2. Theory is taught to the whole section; labs to one sub-section.
   A1 and A2 may do **different** lab subjects at the same time (A1 in the CN Lab, A2 in the DBMS Lab).
