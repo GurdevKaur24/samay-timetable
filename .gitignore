@@ -8,6 +8,11 @@ __pycache__/
 node_modules/
 dist/
 
+# Submission-only reports (kept locally, never pushed)
+docs/*.pdf
+docs/*-summary.txt
+docs/*-report.txt
+
 # Env / OS / editors
 .env
 .env.*
