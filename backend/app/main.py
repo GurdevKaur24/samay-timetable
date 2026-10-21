@@ -6,13 +6,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import config
 from .auth import LoginLimiter
 from .db import Database
-from .routers import auth, college
+from .jobs import JobRunner
+from .routers import auth, college, timetables
 from .seed import seed
 
 
-def create_app(db_path: str | Path | None = None, seed_if_empty: bool = True) -> FastAPI:
+def create_app(db_path: str | Path | None = None, seed_if_empty: bool = True, solve_seconds: float | None = None) -> FastAPI:
     app = FastAPI(title="Samay Timetable API")
     app.state.db = Database(db_path or config.DB_PATH)
+    app.state.jobs = JobRunner(app.state.db, time_limit=solve_seconds or config.SOLVE_SECONDS)
     app.state.login_limiter = LoginLimiter()
     app.state.cookie_secure = config.COOKIE_SECURE
     if seed_if_empty and app.state.db.college_count() == 0:
@@ -27,6 +29,7 @@ def create_app(db_path: str | Path | None = None, seed_if_empty: bool = True) ->
     )
     app.include_router(auth.router)
     app.include_router(college.router)
+    app.include_router(timetables.router)
 
     @app.get("/api/health")
     def health():

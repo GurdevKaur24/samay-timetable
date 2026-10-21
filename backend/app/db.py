@@ -94,6 +94,53 @@ class Database:
             row = conn.execute("SELECT version FROM college_data WHERE college_id = ?", (college_id,)).fetchone()
         return row["version"] if row else None
 
+    def get_college_data_with_version(self, college_id: str) -> tuple[dict, int] | None:
+        """Data and its version read together, so a timetable always records exactly what it was built from."""
+        with self.connect() as conn:
+            row = conn.execute("SELECT data, version FROM college_data WHERE college_id = ?", (college_id,)).fetchone()
+        return (json.loads(row["data"]), row["version"]) if row else None
+
+    def save_college_data(self, college_id: str, data: dict) -> int:
+        """Replace a college's data; returns the new data version."""
+        with self.connect() as conn:
+            conn.execute("UPDATE college_data SET data = ?, version = version + 1, updated_at = ? WHERE college_id = ?",
+                         (json.dumps(data), time.time(), college_id))
+            return conn.execute("SELECT version FROM college_data WHERE college_id = ?", (college_id,)).fetchone()["version"]
+
+    # ---- timetables -----------------------------------------------------------------------------------------
+    def save_timetable(self, college_id: str, result: dict) -> int:
+        """Store a checked timetable as the college's next version number; returns that number."""
+        with self.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            version = conn.execute("SELECT COALESCE(MAX(version), 0) + 1 FROM timetables WHERE college_id = ?", (college_id,)).fetchone()[0]
+            conn.execute("INSERT INTO timetables (college_id, version, created_at, status, result) VALUES (?, ?, ?, 'ok', ?)",
+                         (college_id, version, time.time(), json.dumps(result)))
+        return version
+
+    def list_timetables(self, college_id: str) -> list[dict]:
+        with self.connect() as conn:
+            rows = conn.execute("SELECT version, created_at, result FROM timetables WHERE college_id = ? ORDER BY version DESC",
+                                (college_id,)).fetchall()
+        out = []
+        for r in rows:
+            result = json.loads(r["result"])
+            out.append({"version": r["version"], "created_at": r["created_at"], "built_from": result["built_from"],
+                        "score": result["metrics"]["score"], "seconds": result["seconds"]})
+        return out
+
+    def get_timetable(self, college_id: str, version: int | None = None) -> dict | None:
+        """One version of a college's timetable (the latest if no version is given)."""
+        with self.connect() as conn:
+            if version is None:
+                row = conn.execute("SELECT version, created_at, result FROM timetables WHERE college_id = ? ORDER BY version DESC LIMIT 1",
+                                   (college_id,)).fetchone()
+            else:
+                row = conn.execute("SELECT version, created_at, result FROM timetables WHERE college_id = ? AND version = ?",
+                                   (college_id, version)).fetchone()
+        if row is None:
+            return None
+        return {"version": row["version"], "created_at": row["created_at"], **json.loads(row["result"])}
+
     # ---- users and sessions ---------------------------------------------------------------------------------
     def add_user(self, email: str, name: str, role: str, college_id: str, password: str) -> int:
         with self.connect() as conn:

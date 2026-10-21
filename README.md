@@ -24,8 +24,18 @@ python -m venv .venv
 On first start it creates a local database (`backend/data/samay.db`) with two demo colleges and one coordinator account
 for each; their sign-in details are in `backend/data/demo_users.json`. To start fresh: `.\.venv\Scripts\python -m app.seed --reset`.
 
-API so far: `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `GET /api/college`, `GET /api/college/data`.
-Each signed-in user only ever sees their own college.
+API so far (each signed-in user only ever sees their own college):
+
+| Area | Endpoints |
+|---|---|
+| Sign-in | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me` |
+| College | `GET /api/college` (summary), `GET /api/college/data` (all data) |
+| Pre-check | `GET /api/precheck` |
+| Generate | `POST /api/timetables` starts a run, `GET /api/jobs/{id}` shows its progress |
+| Timetables | `GET /api/timetables` (versions), `GET /api/timetables/latest`, `GET /api/timetables/{version}`, `POST /api/timetables/{version}/check` |
+
+Every saved timetable has passed the clash checker; each version keeps the data it was built from and is marked
+`out_of_date` when the college's data changes later.
 
 Frontend (app on http://localhost:5173):
 ```

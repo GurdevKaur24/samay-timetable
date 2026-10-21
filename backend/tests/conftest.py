@@ -11,7 +11,7 @@ DEMO = {u["college"]: u for u in json.loads((Path(__file__).resolve().parent.par
 
 @pytest.fixture
 def app(tmp_path):
-    return create_app(db_path=tmp_path / "test.db")
+    return create_app(db_path=tmp_path / "test.db", solve_seconds=20)
 
 
 @pytest.fixture

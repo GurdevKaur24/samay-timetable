@@ -13,6 +13,10 @@ Full product plan and roadmap: `docs/requirements.md`.
   - `app/auth.py`: `current_user` is the only source of a college id. Sign-in cookie `samay_session` (httpOnly,
     SameSite=Lax; set `SAMAY_COOKIE_SECURE=1` behind HTTPS). Passwords use scrypt; only token hashes are stored.
   - Demo accounts (one coordinator per seed college) are in `data/demo_users.json`.
+  - `app/jobs.py`: generation runs in a background thread (one run per college at a time, time limit
+    `SAMAY_SOLVE_SECONDS`, default 30). A timetable is saved only if the clash checker finds 0 problems; versions are
+    numbered per college and store the data they were built from.
+  - `app/services/precheck.py`: plain-English pre-check (teacher load, section hours, room demand, room sizes).
 - **prototype/**: single-page clickable prototype of the whole product (in-browser data and a simple generator).
 - **frontend/**: React + Vite + TypeScript + Tailwind v4. Calls the API through the Vite proxy at `/api`.
 
