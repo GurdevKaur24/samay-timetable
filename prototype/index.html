@@ -1368,7 +1368,10 @@ function checkImportRows(rows) {
 function exampleRows(c, entity) {
   const d = c.departments[0].id, s0 = c.sections[0], t0 = c.teachers[0], sub0 = Object.entries(c.subjects)[0];
   const labGroup = c.sections.find(s => s.subs.length);
-  const course0 = courseOf(c, s0.course) || (c.courses || [])[0];
+  const course0 = courseOf(c, s0.course) || (c.courses || [])[0], lastSem = (course0?.years || 4) * 2;
+  // A lab group, and a lab subject it doesn't have yet, so the lab example row is valid.
+  const labGroupId = labGroup ? idx(c).subsOf[labGroup.id][0] : null;
+  const freeLab = labGroupId && Object.keys(c.subjects).find(k => c.subjects[k].kind === 'lab' && !c.assignments.some(a => a[0] === k && a[1] === labGroupId));
   return {
     departments: [
       { Code: 'ME', Name: 'Mechanical Engineering', 'Head of department': 'Dr. G. S. Brar' },
@@ -1383,10 +1386,11 @@ function exampleRows(c, entity) {
       { 'Course code': 'PHD', 'Course name': 'Ph.D.', Department: 'Philosophy', 'Duration (years)': 9 },
     ],
     sections: [
-      { Section: `${s0.dept}-7A`, Course: course0?.id, Semester: 7, Students: 58, 'Lab groups': 2 },
-      { Section: `${s0.dept}-7B`, Course: course0?.name, Semester: 7, Students: 60, 'Lab groups': 2 },
-      { Section: s0.id, Course: course0?.id, Semester: 3, Students: 60, 'Lab groups': 2 },
-      { Section: `${s0.dept}-9A`, Course: course0?.id, Semester: 19, Students: 'sixty', 'Lab groups': 2 },
+      // Last semester of the course, so the example fits any course length.
+      { Section: `${s0.dept}-${lastSem}A`, Course: course0?.id, Semester: lastSem, Students: 58, 'Lab groups': 2 },
+      { Section: `${s0.dept}-${lastSem}B`, Course: course0?.name, Semester: lastSem, Students: 60, 'Lab groups': 2 },
+      { Section: s0.id, Course: course0?.id, Semester: s0.sem ?? 1, Students: 60, 'Lab groups': 2 },
+      { Section: `${s0.dept}-99A`, Course: course0?.id, Semester: lastSem + 10, Students: 'sixty', 'Lab groups': 2 },
     ],
     teachers: [
       { Name: 'Dr. Jaspreet Kaur', Department: d, 'Max periods a day': 4, Unavailable: `${c.scheme.days[0]} P1` },
@@ -1411,7 +1415,8 @@ function exampleRows(c, entity) {
     assignments: [
       { 'Subject code': Object.keys(c.subjects).find(k => c.subjects[k].kind === 'tutorial') || sub0[0], 'Taught to': c.sections.at(-1).id, Teacher: c.teachers.at(-1).name, 'Periods per week': '' },
       { 'Subject code': sub0[0], 'Taught to': s0.id, Teacher: t0.name, 'Periods per week': '' },
-      { 'Subject code': Object.keys(c.subjects).find(k => c.subjects[k].kind === 'lab'), 'Taught to': labGroup ? labGroup.id : s0.id, Teacher: t0.name, 'Periods per week': '' },
+      { 'Subject code': freeLab || Object.keys(c.subjects).find(k => c.subjects[k].kind === 'lab'), 'Taught to': labGroupId ? gLabel(c, labGroupId) : s0.id, Teacher: c.teachers[1].name, 'Periods per week': '' },
+      { 'Subject code': Object.keys(c.subjects).find(k => c.subjects[k].kind === 'lab'), 'Taught to': s0.id, Teacher: t0.name, 'Periods per week': '' },
       { 'Subject code': sub0[0], 'Taught to': s0.id, Teacher: 'Dr. Nobody', 'Periods per week': '' },
     ],
   }[entity];
