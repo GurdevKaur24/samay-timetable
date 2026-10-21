@@ -14,7 +14,13 @@ Built for Hackathon 1, Punjab Jobs AI Bootcamp (J-PAL South Asia).
 See [docs/requirements.md](docs/requirements.md) for users, roles, the full feature list and the roadmap.
 
 ## Run it locally (Windows)
-Backend (API on port 8000):
+Start the server, then open **http://localhost:8000** and sign in. The server runs the API and serves the app page,
+so data is saved and timetables are generated with OR-Tools.
+
+Opening `prototype/index.html` directly (double-click) still works as an offline **demo mode**: demo accounts,
+a simple in-browser generator, and nothing is saved.
+
+Backend (API and app on port 8000):
 ```
 cd backend
 python -m venv .venv
@@ -29,10 +35,10 @@ API so far (each signed-in user only ever sees their own college):
 | Area | Endpoints |
 |---|---|
 | Sign-in | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me` |
-| College | `GET /api/college` (summary), `GET /api/college/data` (all data) |
+| College | `GET /api/college` (summary), `GET /api/college/data` (all data), `PUT /api/college/data` (save; checked again on the server) |
 | Pre-check | `GET /api/precheck` |
 | Generate | `POST /api/timetables` starts a run, `GET /api/jobs/{id}` shows its progress |
-| Timetables | `GET /api/timetables` (versions), `GET /api/timetables/latest`, `GET /api/timetables/{version}`, `POST /api/timetables/{version}/check` |
+| Timetables | `GET /api/timetables` (versions), `GET /api/timetables/latest`, `GET /api/timetables/{version}`, `POST /api/timetables/{version}/check`, `POST /api/timetables/{version}/revise` (save an approved change as a new version) |
 
 Every saved timetable has passed the clash checker; each version keeps the data it was built from and is marked
 `out_of_date` when the college's data changes later.

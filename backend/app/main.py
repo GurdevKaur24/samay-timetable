@@ -2,6 +2,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from . import config
 from .auth import LoginLimiter
@@ -33,7 +34,11 @@ def create_app(db_path: str | Path | None = None, seed_if_empty: bool = True, so
 
     @app.get("/api/health")
     def health():
-        return {"status": "ok"}
+        return {"status": "ok", "app": "samay"}
+
+    # The web page: same origin as the API, so the sign-in cookie just works. Mounted last so /api routes win.
+    if config.WEB_DIR.is_dir():
+        app.mount("/", StaticFiles(directory=config.WEB_DIR, html=True), name="web")
 
     return app
 

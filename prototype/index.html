@@ -448,10 +448,12 @@ function precheck(c) {
 
 /* ------------------------------ app state ------------------------------ */
 const state = {
-  ci: null, page: 'dashboard', view: 'section', key: null, // ci = the signed-in college; null = signed out
+  ci: null, page: 'dashboard', view: 'section', key: null, // ci = the signed-in demo college; null = signed out
   gen: {}, drawer: false, preview: null, history: [], applied: null, sim: null, generating: null, toast: null,
+  // Live mode: the page was opened from the Samay server, so data, sign-in and generating go through the API.
+  live: false, liveCollege: null, booting: true, sync: null, staleVersion: null, signinError: null, signingIn: false, signinEmail: '',
 };
-const col = () => COLLEGES[state.ci];
+const col = () => state.live ? state.liveCollege : (state.ci === null ? null : COLLEGES[state.ci]);
 const current = () => state.gen[col().id];
 
 function displayEntries() {
@@ -503,6 +505,7 @@ function signIn(i) {
   render(); toast(`Signed in to ${col().name}.`);
 }
 function signOut() {
+  if (state.live) { signOutLive(); return; }
   Object.assign(state, { ci: null, preview: null, history: [], applied: null, sim: null, drawer: false, menu: false, modal: null });
   render();
 }
@@ -515,6 +518,8 @@ function toast(text) {
 }
 function runGenerate() {
   const steps = ['Checking data and rules', 'Placing labs side by side', 'Placing lectures and tutorials', 'Verifying: no clashes'];
+  window._steps = steps;
+  if (state.live) { runGenerateLive(); return; }
   state.generating = 0; render();
   const timer = setInterval(() => {
     state.generating++;
@@ -549,7 +554,7 @@ function simulateClash() {
       E[i] = { ...E[i], day: o.day, period: o.period, room: room.id };
       Object.assign(state, { view: 'section', key: a.group, page: 'timetable', drawer: true, preview: null, applied: null });
       render();
-      toast('A clash was added on purpose, to show how the assistant helps.');
+      toast(state.live ? 'A clash was added on screen only (not saved), to show how the assistant helps.' : 'A clash was added on purpose, to show how the assistant helps.');
       return;
     }
   }
@@ -564,13 +569,195 @@ function applyPreview() {
   g.entries[pv.ei] = { ...before, day: pv.day, period: pv.period, room: pv.room };
   state.applied = `${desc(col(), g.entries[pv.ei])} moved to ${pv.day} ${pLabel(col(), pv.period)} in ${pv.room}.`;
   state.preview = null; state.sim = null;
-  render(); toast('Change applied. You can undo it from the assistant.');
+  render();
+  if (state.live) reviseOnServer(g, 'Change applied');
+  else toast('Change applied. You can undo it from the assistant.');
 }
 function undoLast() {
   const g = current(), h = g && state.history.pop();
   if (!h) return;
   g.entries[h.ei] = h.from; state.applied = null;
-  render(); toast('Change undone.');
+  render();
+  // Undoing back to a clash (e.g. one added with "Simulate a clash") is shown but never saved.
+  if (state.live && !validate(col(), g.entries).messages.length) reviseOnServer(g, 'Change undone');
+  else toast(state.live ? 'Change undone on screen only: the result has a clash, so it isn\'t saved.' : 'Change undone.');
+}
+
+/* ------------------------------------------------------------------------------------------------
+   LIVE MODE: the same screens, backed by the Samay server. The server checks every save again and
+   is the only source of truth; the college always comes from the signed-in session.
+------------------------------------------------------------------------------------------------- */
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const assignmentId = i => `A${String(i + 1).padStart(2, '0')}`;
+
+async function api(path, { method = 'GET', body } = {}) {
+  const res = await fetch(path, { method, credentials: 'same-origin', headers: body ? { 'Content-Type': 'application/json' } : {},
+                                  body: body ? JSON.stringify(body) : undefined });
+  let json = null;
+  try { json = await res.json(); } catch { /* empty body */ }
+  if (!res.ok) {
+    if (res.status === 401 && path !== '/api/auth/login' && state.liveCollege) {
+      Object.assign(state, { liveCollege: null, modal: null, drawer: false, signinError: 'Your session has ended. Please sign in again.' });
+      render();
+    }
+    const d = json?.detail;
+    const msg = typeof d === 'string' ? d : d?.message ? [d.message, ...(d.problems || []).slice(0, 3)].join(' ') : `Something went wrong (${res.status}). Try again.`;
+    throw Object.assign(new Error(msg), { status: res.status, detail: d });
+  }
+  return json;
+}
+
+// Server format (see backend/app/schema.py) ⇄ the page's in-memory format.
+function fromServer(d) {
+  const S = d.scheme;
+  return {
+    id: d.id, name: d.name, place: d.place || '', term: d.term || '', kind: d.kind || '',
+    scheme: {
+      days: [...S.days], periods: S.periods.map(p => [p.label, p.start, p.end]),
+      breaks: S.breaks.map(b => ({ after: b.after, label: b.label, time: `${S.periods[b.after - 1].end}–${S.periods[b.after].start}` })),
+      theoryRoomType: S.theory_room_type, labPrefix: S.lab_prefix, labBlock: S.lab_block,
+      rules: { lecturesPerWeek: S.rules.lectures_per_week, labSessionsPerWeek: S.rules.lab_sessions_per_week,
+               maxSameSubjectPerDay: S.rules.max_same_subject_per_day, teacherMaxPerDay: S.rules.teacher_max_per_day },
+    },
+    departments: d.departments.map(x => ({ ...x })),
+    courses: (d.courses || []).map(x => ({ ...x })),
+    rooms: d.rooms.map(r => ({ id: r.id, type: r.type, cap: r.capacity, owner: r.owner })),
+    teachers: d.teachers.map(t => ({ id: t.id, name: t.name, dept: t.dept, ...(t.max_per_day ? { max: t.max_per_day } : {}),
+                                     ...(t.unavailable?.length ? { off: t.unavailable.map(x => [...x]) } : {}) })),
+    sections: d.sections.map(s => ({ id: s.id, dept: s.dept, course: s.course, sem: s.sem, strength: s.strength,
+                                     subs: (s.lab_groups || []).map(g => ({ label: g.label, strength: g.strength })) })),
+    subjects: Object.fromEntries(d.subjects.map(s => [s.id, { short: s.short, name: s.name, kind: s.kind, ...(s.dept ? { dept: s.dept } : {}),
+                                                            ...(s.room_type ? { room: s.room_type } : {}), ...(s.per_week != null ? { perWeek: s.per_week } : {}) }])),
+    assignments: d.assignments.map(a => a.periods != null ? [a.subject, a.group, a.teacher, a.periods] : [a.subject, a.group, a.teacher]),
+    _ids: d.assignments.map(a => a.id),
+  };
+}
+function toServer(c) {
+  const S = c.scheme, clean = o => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== ''));
+  return {
+    id: c.id, name: c.name, place: c.place, term: c.term, kind: c.kind,
+    scheme: {
+      days: S.days, periods: S.periods.map(([label, start, end]) => ({ label, start, end })), breaks: S.breaks.map(b => ({ after: b.after, label: b.label })),
+      theory_room_type: S.theoryRoomType, lab_block: S.labBlock, lab_prefix: S.labPrefix,
+      rules: { lectures_per_week: S.rules.lecturesPerWeek, lab_sessions_per_week: S.rules.labSessionsPerWeek,
+               max_same_subject_per_day: S.rules.maxSameSubjectPerDay, teacher_max_per_day: S.rules.teacherMaxPerDay },
+    },
+    departments: c.departments.map(d => clean({ id: d.id, name: d.name, hod: d.hod, status: d.status })),
+    courses: (c.courses || []).map(x => clean({ id: x.id, name: x.name, dept: x.dept, years: x.years })),
+    sections: c.sections.map(s => clean({ id: s.id, dept: s.dept, course: s.course, sem: s.sem, strength: s.strength,
+                                          lab_groups: s.subs.map(u => ({ label: u.label, strength: u.strength })) })),
+    teachers: c.teachers.map(t => clean({ id: t.id, name: t.name, dept: t.dept, max_per_day: t.max, unavailable: t.off || [] })),
+    rooms: c.rooms.map(r => ({ id: r.id, type: r.type, capacity: r.cap, owner: r.owner })),
+    subjects: Object.entries(c.subjects).map(([id, s]) => clean({ id, short: s.short, name: s.name, kind: s.kind, dept: s.dept, room_type: s.room, per_week: s.perWeek })),
+    assignments: c.assignments.map((a, i) => clean({ id: assignmentId(i), subject: a[0], group: a[1], teacher: a[2], periods: a[3] })),
+  };
+}
+
+async function loadCollege() {
+  const r = await api('/api/college/data');
+  const c = fromServer(r.data);
+  c._version = r.version;
+  Object.assign(state, { liveCollege: c, gen: {}, key: null, preview: null, history: [], applied: null, sim: null, sync: 'saved', signinError: null });
+  await loadLatestTimetable();
+}
+
+// Show the latest saved timetable, unless the data changed after it was made.
+async function loadLatestTimetable() {
+  const c = col();
+  try {
+    const t = await api('/api/timetables/latest');
+    if (t.out_of_date) { delete state.gen[c.id]; state.staleVersion = t.version; return; }
+    const pos = new Map(c._ids.map((id, i) => [id, i]));
+    state.gen[c.id] = {
+      entries: t.entries.filter(e => pos.has(e.assignment)).map(e => ({ a: pos.get(e.assignment), day: e.day, period: e.period, room: e.room })),
+      unplaced: [], at: new Date(t.created_at * 1000), version: t.version,
+    };
+    state.staleVersion = null;
+  } catch (e) {
+    if (e.status !== 404) throw e;
+    delete state.gen[c.id]; state.staleVersion = null;
+  }
+}
+
+async function signInLive(ev) {
+  ev?.preventDefault();
+  const email = document.getElementById('si-email').value.trim(), password = document.getElementById('si-password').value;
+  state.signinEmail = email;
+  if (!email || !password) { state.signinError = 'Enter your email and password.'; render(); return; }
+  Object.assign(state, { signingIn: true, signinError: null }); render();
+  try {
+    await api('/api/auth/login', { method: 'POST', body: { email, password } });
+    await loadCollege();
+    Object.assign(state, { signingIn: false, page: 'dashboard', drawer: false });
+    render(); toast(`Signed in to ${col().name}.`);
+  } catch (e) {
+    Object.assign(state, { signingIn: false, signinError: e.message }); render();
+  }
+}
+
+async function signOutLive() {
+  await api('/api/auth/logout', { method: 'POST' }).catch(() => {});
+  Object.assign(state, { liveCollege: null, gen: {}, preview: null, history: [], applied: null, sim: null, drawer: false, menu: false, modal: null, staleVersion: null });
+  render();
+}
+
+async function saveToServer(c) {
+  state.sync = 'saving'; render();
+  try {
+    const r = await api('/api/college/data', { method: 'PUT', body: { version: c._version, data: toServer(c) } });
+    c._version = r.version;
+    c._ids = c.assignments.map((_, i) => assignmentId(i));
+    state.sync = 'saved';
+  } catch (e) {
+    state.sync = 'error';
+    toast(e.message);
+    if (e.status === 409 || e.status === 422) { await loadCollege().catch(() => {}); state.sync = 'saved'; }  // show what the server really has
+  }
+  render();
+}
+
+async function runGenerateLive() {
+  const c = col();
+  state.generating = 0; render();
+  try {
+    let job = await api('/api/timetables', { method: 'POST' });
+    const started = Date.now();
+    while (job.status === 'queued' || job.status === 'running') {
+      state.generating = Math.min(2, Math.floor((Date.now() - started) / 900)); render();
+      await sleep(400);
+      job = await api(`/api/jobs/${job.id}`);
+    }
+    if (job.status !== 'done') { state.generating = null; render(); toast(job.message); go('precheck'); return; }
+    state.generating = 3; render();
+    await loadLatestTimetable();
+    Object.assign(state, { generating: null, preview: null, history: [], applied: null, sim: null, page: 'timetable' });
+    render(); toast(job.message);
+  } catch (e) {
+    state.generating = null; render(); toast(e.message);
+  }
+}
+
+async function reviseOnServer(g, what) {
+  const c = col();
+  try {
+    const r = await api(`/api/timetables/${g.version}/revise`, { method: 'POST', body: {
+      entries: g.entries.map(e => ({ assignment: c._ids[e.a], day: e.day, period: e.period, room: e.room })) } });
+    g.version = r.version;
+    render(); toast(`${what}. ${r.message}`);
+  } catch (e) {
+    toast(e.message); await loadLatestTimetable().catch(() => {}); render();
+  }
+}
+
+async function boot() {
+  if (location.protocol.startsWith('http')) {
+    try { state.live = (await (await fetch('/api/health')).json()).app === 'samay'; } catch { state.live = false; }
+  }
+  if (state.live) {
+    try { await api('/api/auth/me'); await loadCollege(); } catch { /* not signed in yet */ }
+  }
+  state.booting = false;
+  render();
 }
 
 /* ------------------------------ icons ------------------------------ */
@@ -593,6 +780,28 @@ const icon = (n, cls = 'w-5 h-5') => `<svg class="${cls}" viewBox="0 0 24 24" fi
 const NAV = [['dashboard', 'Dashboard', 'grid'], ['timetable', 'Timetable', 'calendar'], ['data', 'Data', 'table'], ['precheck', 'Pre-check', 'shield'], ['scheme', 'College scheme', 'sliders']];
 
 function signInPage() {
+  if (state.live) return `
+  <div class="flex min-h-screen items-center justify-center p-4">
+    <div class="w-full max-w-md fade-in">
+      <div class="mb-6 flex items-center gap-3">
+        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-base font-bold text-white">S</div>
+        <div class="leading-tight"><div class="text-lg font-semibold">Samay</div><div class="text-xs text-slate-500">Clash-free college timetables</div></div>
+      </div>
+      <form onsubmit="signInLive(event)" class="rounded-xl border border-slate-200 bg-white p-6">
+        <h1 class="text-lg font-semibold">Sign in to your college</h1>
+        <p class="mt-1 text-sm text-slate-500">You'll only see your own college's teachers, rooms and timetables.</p>
+        <label class="mt-4 block"><span class="mb-1 block text-sm font-medium text-slate-700">Email</span>
+          <input id="si-email" type="email" autocomplete="username" value="${esc(state.signinEmail)}" placeholder="coordinator@yourcollege.edu" class="${inputCls(false)}"/></label>
+        <label class="mt-3 block"><span class="mb-1 block text-sm font-medium text-slate-700">Password</span>
+          <input id="si-password" type="password" autocomplete="current-password" class="${inputCls(false)}"/></label>
+        ${state.signinError ? `<p class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">${esc(state.signinError)}</p>` : ''}
+        <button type="submit" ${state.signingIn ? 'disabled' : ''} class="mt-4 w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60">
+          ${state.signingIn ? 'Signing in…' : 'Sign in'}</button>
+        <p class="mt-4 text-xs text-slate-500">Trying the demo? The demo accounts are listed in <code class="rounded bg-slate-100 px-1">backend/data/demo_users.json</code>.</p>
+      </form>
+      <p class="mt-4 text-center text-xs text-slate-400">Each college's data is private. Colleges can't see each other, or even which other colleges use Samay.</p>
+    </div>
+  </div>`;
   return `
   <div class="flex min-h-screen items-center justify-center p-4">
     <div class="w-full max-w-md fade-in">
@@ -623,8 +832,17 @@ function signInPage() {
   </div>`;
 }
 
+function syncBadge() {
+  if (!state.live) return '<span class="hidden whitespace-nowrap rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 sm:inline" title="Opened without the Samay server: changes stay in this browser tab and are lost on reload">Demo · not saved</span>';
+  return {
+    saving: '<span class="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">Saving…</span>',
+    error: '<span class="rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700">Not saved</span>',
+  }[state.sync] || `<span class="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">${icon('check', 'w-3.5 h-3.5')}Saved</span>`;
+}
+
 function layout() {
-  if (state.ci === null) return signInPage();
+  if (state.booting) return '<div class="flex min-h-screen items-center justify-center text-sm text-slate-500">Loading Samay…</div>';
+  if (!col()) return signInPage();
   const c = col();
   return `
   <header class="no-print sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-slate-200 bg-white/90 px-4 backdrop-blur">
@@ -639,7 +857,7 @@ function layout() {
     </div>
     <span class="hidden rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-600 md:inline">${c.term}</span>
     <div class="relative ml-auto flex items-center gap-2">
-      <span class="hidden rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 lg:inline">Prototype</span>
+      ${syncBadge()}
       <span class="hidden rounded-md bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 sm:inline">Timetable coordinator</span>
       <button onclick="state.menu = !state.menu; render()" class="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-300" aria-label="Account menu">TC</button>
       ${state.menu ? `<div class="absolute right-0 top-10 w-56 rounded-lg border border-slate-200 bg-white p-1 shadow-lg fade-in">
@@ -753,8 +971,10 @@ function timetable() {
     <h1 class="mb-4 text-2xl font-semibold tracking-tight">Timetable</h1>
     ${card(`<div class="flex flex-col items-center py-12 text-center">
       <div class="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">${icon('calendar', 'w-6 h-6')}</div>
-      <div class="text-lg font-medium">Generate your first timetable</div>
-      <p class="mt-1 max-w-md text-sm text-slate-500">Samay places every class for ${c.name} while making sure no teacher, room or section is ever double-booked.</p>
+      <div class="text-lg font-medium">${state.staleVersion ? 'Your data changed: generate again' : 'Generate your first timetable'}</div>
+      <p class="mt-1 max-w-md text-sm text-slate-500">${state.staleVersion
+        ? `Timetable v${state.staleVersion} was made before your latest changes, so it may not match your data any more. Generate again to get an up-to-date timetable. Older versions stay saved.`
+        : `Samay places every class for ${esc(c.name)} while making sure no teacher, room or section is ever double-booked.`}</p>
       <div class="mt-4">${btn('Generate timetable', 'runGenerate()', 'primary', 'bolt')}</div></div>`)}`;
 
   const roomOpts = [...new Set(c.rooms.map(r => r.type))].map(t => ({ group: typeName(t) + 's', items: c.rooms.filter(r => r.type === t).map(r => [r.id, r.id]) }));
@@ -783,7 +1003,7 @@ function timetable() {
   </div>
   <div class="no-print mb-4 flex flex-wrap items-center justify-between gap-3">
     <div><div class="flex items-center gap-3"><h1 class="text-2xl font-semibold tracking-tight">${esc(title)}</h1>${badge}</div>
-      <p class="mt-0.5 text-sm text-slate-500">${esc(subtitle)}</p></div>
+      <p class="mt-0.5 text-sm text-slate-500">${g.version ? `Timetable v${g.version} · ` : ''}${esc(subtitle)}</p></div>
     <div class="flex flex-wrap gap-2">
       ${btn('Simulate a clash', 'simulateClash()', 'secondary')}
       ${btn('Assistant', 'toggleDrawer(true)', 'secondary', 'bot')}
@@ -811,7 +1031,9 @@ function timetable() {
     ${stat('Teacher load', `${m.lmin}–${m.lmax}`, 'Periods a week, lowest–highest')}
     ${stat('Room use', m.roomUse + '%', `${m.classes} of ${m.required} periods placed`)}
   </div>
-  <p class="no-print mt-3 text-xs text-slate-400">Prototype note: this page uses a simple in-browser generator. The real app generates with Google OR-Tools (CP-SAT) on the server and re-checks every result with the same clash checker.</p>`;
+  <p class="no-print mt-3 text-xs text-slate-400">${state.live
+    ? 'Generated on the Samay server with Google OR-Tools (CP-SAT) and saved only after the clash checker found 0 problems.'
+    : 'Demo mode: this page uses a simple in-browser generator. Open Samay from its server to generate with Google OR-Tools (CP-SAT) and save your work.'}</p>`;
 }
 
 function grid(c, entries, bad) {
@@ -982,10 +1204,12 @@ const assignmentsOf = (c, pred) => c.assignments.filter(pred).length;
 
 function dataChanged(c, message) {
   delete c._ix; delete c._A;
-  const hadTimetable = !!state.gen[c.id];
+  const hadTimetable = !!state.gen[c.id], oldVersion = state.gen[c.id]?.version;
   delete state.gen[c.id];
   Object.assign(state, { preview: null, history: [], applied: null, sim: null, modal: null });
+  if (state.live && oldVersion) state.staleVersion = oldVersion;  // the saved timetable no longer matches the data
   toast(hadTimetable ? `${message} Generate again to include the change in the timetable.` : message);
+  if (state.live) saveToServer(c);
 }
 
 /* ---- current record → form values (strings, as typed) ---- */
@@ -1934,7 +2158,7 @@ function schemePage() {
     so colleges with different days, periods, breaks or lecture counts all get correct timetables. No other college can see it.</p></div></div>`, 'mt-4')}`;
 }
 
-render();
+boot();
 </script>
 </body>
 </html>

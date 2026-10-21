@@ -2,9 +2,11 @@
 session, so one college can never ask for another's data."""
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, ValidationError
 
 from ..auth import CurrentUser, current_user, get_db
 from ..db import Database
+from ..schema import CollegeData
 
 router = APIRouter(prefix="/api/college", tags=["college"])
 
@@ -32,3 +34,33 @@ def college_summary(user: CurrentUser = Depends(current_user), db: Database = De
 @router.get("/data")
 def college_data(user: CurrentUser = Depends(current_user), db: Database = Depends(get_db)):
     return {"version": db.get_data_version(user.college_id), "data": own_data(user, db)}
+
+
+class SaveData(BaseModel):
+    version: int  # the version the page started from, so two people can't overwrite each other
+    data: dict
+
+
+def plain_errors(e: ValidationError) -> list[str]:
+    out = []
+    for err in e.errors():
+        where = " → ".join(str(p) for p in err["loc"])
+        msg = err["msg"].removeprefix("Value error, ")
+        out.append(msg if err["type"] == "value_error" else f"{where}: {msg}")
+    return out
+
+
+@router.put("/data")
+def save_college_data(body: SaveData, user: CurrentUser = Depends(current_user), db: Database = Depends(get_db)):
+    """Replace the signed-in user's college data after checking all of it. The college id always comes from the session."""
+    conflict = "Someone else changed your college's data after you opened it. Reload to see the latest, then try again."
+    if body.version != db.get_data_version(user.college_id):
+        raise HTTPException(409, conflict)
+    try:
+        checked = CollegeData.model_validate({**body.data, "id": user.college_id})
+    except ValidationError as e:
+        raise HTTPException(422, {"message": "Your changes weren't saved.", "problems": plain_errors(e)})
+    version = db.save_college_data(user.college_id, checked.model_dump(mode="json", exclude_none=True), expected_version=body.version)
+    if version is None:  # someone saved between our check and our write
+        raise HTTPException(409, conflict)
+    return {"version": version}

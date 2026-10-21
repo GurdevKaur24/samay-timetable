@@ -1,7 +1,9 @@
 """Pre-check, generation and saved timetables for the signed-in user's own college."""
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel
 
+from solver.metrics import metrics
 from solver.validator import validate
 
 from ..auth import CurrentUser, current_user, get_db
@@ -65,6 +67,31 @@ def fetch(version: int | None, user: CurrentUser, db: Database) -> dict:
     if timetable is None:
         raise HTTPException(404, "No timetable yet. Generate one first." if version is None else f"There's no timetable v{version}.")
     return with_freshness(timetable, db.get_data_version(user.college_id))
+
+
+class Revision(BaseModel):
+    entries: list[dict]
+
+
+@router.post("/timetables/{version}/revise", status_code=status.HTTP_201_CREATED)
+def revise(version: int, body: Revision, user: CurrentUser = Depends(current_user), db: Database = Depends(get_db)):
+    """Save a hand-edited copy of a timetable (e.g. a change approved in the assistant) as a new version.
+    It's saved only if the clash checker finds no problems against the data the timetable was built from."""
+    base = db.get_timetable(user.college_id, version)
+    if base is None:
+        raise HTTPException(404, f"There's no timetable v{version}.")
+    data, current = own_data(user, db)
+    if base["built_from"] != current:
+        raise HTTPException(409, "Your college's data changed after this timetable was made. Generate again first.")
+    entries = [{k: e.get(k) for k in ("assignment", "day", "period", "room")} for e in body.entries]
+    problems = validate(data, entries)
+    if problems:
+        raise HTTPException(422, {"message": f"That change wasn't saved: it would cause {len(problems)} problem(s).", "problems": [p["message"] for p in problems]})
+    new_version = db.save_timetable(user.college_id, {
+        "built_from": current, "solver_status": "edited", "seconds": 0, "edited_from": version,
+        "entries": entries, "metrics": metrics(data, entries), "data": data,
+    })
+    return {"version": new_version, "message": f"Saved as timetable v{new_version}: 0 clashes."}
 
 
 @router.post("/timetables/{version}/check")

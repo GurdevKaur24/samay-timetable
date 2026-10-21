@@ -100,11 +100,18 @@ class Database:
             row = conn.execute("SELECT data, version FROM college_data WHERE college_id = ?", (college_id,)).fetchone()
         return (json.loads(row["data"]), row["version"]) if row else None
 
-    def save_college_data(self, college_id: str, data: dict) -> int:
-        """Replace a college's data; returns the new data version."""
+    def save_college_data(self, college_id: str, data: dict, expected_version: int | None = None) -> int | None:
+        """Replace a college's data; returns the new data version. With `expected_version`, saves only if nobody else
+        saved in the meantime (returns None otherwise)."""
         with self.connect() as conn:
-            conn.execute("UPDATE college_data SET data = ?, version = version + 1, updated_at = ? WHERE college_id = ?",
-                         (json.dumps(data), time.time(), college_id))
+            if expected_version is None:
+                cur = conn.execute("UPDATE college_data SET data = ?, version = version + 1, updated_at = ? WHERE college_id = ?",
+                                   (json.dumps(data), time.time(), college_id))
+            else:
+                cur = conn.execute("UPDATE college_data SET data = ?, version = version + 1, updated_at = ? WHERE college_id = ? AND version = ?",
+                                   (json.dumps(data), time.time(), college_id, expected_version))
+            if cur.rowcount == 0:
+                return None
             return conn.execute("SELECT version FROM college_data WHERE college_id = ?", (college_id,)).fetchone()["version"]
 
     # ---- timetables -----------------------------------------------------------------------------------------

@@ -17,7 +17,12 @@ Full product plan and roadmap: `docs/requirements.md`.
     `SAMAY_SOLVE_SECONDS`, default 30). A timetable is saved only if the clash checker finds 0 problems; versions are
     numbered per college and store the data they were built from.
   - `app/services/precheck.py`: plain-English pre-check (teacher load, section hours, room demand, room sizes).
-- **prototype/**: single-page clickable prototype of the whole product (in-browser data and a simple generator).
+- **prototype/index.html**: the app page. Served by the backend at http://localhost:8000 it runs in **live mode**
+  (real sign-in; data loaded from and saved to the server with `PUT /api/college/data`; Generate uses the server's
+  CP-SAT generator; assistant changes saved via `/revise`). Opened as a file, or from any other server, it falls back to
+  **demo mode** (built-in demo colleges, in-browser generator, nothing saved). `fromServer`/`toServer` convert between
+  the server schema and the page's in-memory format. Rebuild `tailwind.css` after adding new classes (command in
+  `prototype/tailwind.config.cjs`).
 - **frontend/**: React + Vite + TypeScript + Tailwind v4. Calls the API through the Vite proxy at `/api`.
 
 ## Run
