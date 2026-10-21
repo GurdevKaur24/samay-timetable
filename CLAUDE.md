@@ -20,6 +20,8 @@ cd frontend; npm run dev            # http://localhost:5173
   A1 and A2 may do **different** lab subjects at the same time (A1 in the CN Lab, A2 in the DBMS Lab).
 - **L-T-P**: weekly Lecture / Tutorial / Practical hours of a subject.
 - **Assignment**: subject × (section or sub-section) × teacher, with required weekly periods.
+- **Weekly periods** come from the college's `rules` (e.g. `lectures_per_week: 3`); a subject (`per_week`) or an
+  assignment (`periods`) can override it. Every college sets its own; never assume one number for all colleges.
 - **Period / slot**: one cell of the day × period grid. Lunch and breaks are not schedulable.
 
 ## Hard rules (never violated, checked by `solver/validator.py`)

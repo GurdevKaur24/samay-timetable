@@ -41,7 +41,7 @@ const COLLEGES = [
                 ['P5', '13:00', '13:50'], ['P6', '13:50', '14:40'], ['P7', '14:40', '15:30']],
       breaks: [{ after: 4, label: 'Lunch', time: '12:20–13:00' }],
       theoryRoomType: 'lecture', labGroups: 'A1, A2 (2 per section)', labBlock: 2,
-      rules: { maxSameSubjectPerDay: 1, teacherMaxPerDay: 5 },
+      rules: { lecturesPerWeek: 3, labSessionsPerWeek: 1, maxSameSubjectPerDay: 1, teacherMaxPerDay: 5 },
     },
     departments: [
       { id: 'CSE', name: 'Computer Science and Engg.', status: 'ready' },
@@ -108,16 +108,16 @@ const COLLEGES = [
     },
     // [subject, group, teacher, periods per week]. Theory → whole section; labs → one lab group (A1/A2).
     assignments: [
-      ['CS301', 'CSE-3A', 'T01', 4], ['CS302', 'CSE-3A', 'T02', 4], ['CS303', 'CSE-3A', 'T03', 4], ['MA301', 'CSE-3A', 'T09', 4], ['HU301', 'CSE-3A', 'T10', 2],
-      ['CS301L', 'CSE-3A/A1', 'T07', 2], ['CS303L', 'CSE-3A/A1', 'T08', 2], ['CS301L', 'CSE-3A/A2', 'T07', 2], ['CS303L', 'CSE-3A/A2', 'T08', 2],
-      ['CS301', 'CSE-3B', 'T01', 4], ['CS302', 'CSE-3B', 'T02', 4], ['CS303', 'CSE-3B', 'T03', 4], ['MA301', 'CSE-3B', 'T09', 4], ['HU301', 'CSE-3B', 'T10', 2],
-      ['CS301L', 'CSE-3B/B1', 'T07', 2], ['CS303L', 'CSE-3B/B1', 'T08', 2], ['CS301L', 'CSE-3B/B2', 'T07', 2], ['CS303L', 'CSE-3B/B2', 'T08', 2],
-      ['CS501', 'CSE-5A', 'T04', 4], ['CS502', 'CSE-5A', 'T05', 4], ['CS503', 'CSE-5A', 'T06', 3], ['CS504', 'CSE-5A', 'T06', 3],
-      ['CS501L', 'CSE-5A/A1', 'T04', 2], ['CS502L', 'CSE-5A/A1', 'T05', 2], ['CS501L', 'CSE-5A/A2', 'T04', 2], ['CS502L', 'CSE-5A/A2', 'T05', 2],
-      ['EC301', 'ECE-3A', 'T11', 4], ['EC302', 'ECE-3A', 'T12', 4], ['EC303', 'ECE-3A', 'T13', 4], ['MA301', 'ECE-3A', 'T09', 4],
-      ['EC302L', 'ECE-3A/A1', 'T12', 2], ['EC303L', 'ECE-3A/A1', 'T13', 2], ['EC302L', 'ECE-3A/A2', 'T12', 2], ['EC303L', 'ECE-3A/A2', 'T13', 2],
-      ['EC501', 'ECE-5A', 'T14', 4], ['EC502', 'ECE-5A', 'T15', 4], ['EC503', 'ECE-5A', 'T11', 3], ['EC504', 'ECE-5A', 'T16', 3],
-      ['EC501L', 'ECE-5A/A1', 'T14', 2], ['EC502L', 'ECE-5A/A1', 'T15', 2], ['EC501L', 'ECE-5A/A2', 'T14', 2], ['EC502L', 'ECE-5A/A2', 'T15', 2],
+      ['CS301', 'CSE-3A', 'T01'], ['CS302', 'CSE-3A', 'T02'], ['CS303', 'CSE-3A', 'T03'], ['MA301', 'CSE-3A', 'T09'], ['HU301', 'CSE-3A', 'T10', 2],
+      ['CS301L', 'CSE-3A/A1', 'T07'], ['CS303L', 'CSE-3A/A1', 'T08'], ['CS301L', 'CSE-3A/A2', 'T07'], ['CS303L', 'CSE-3A/A2', 'T08'],
+      ['CS301', 'CSE-3B', 'T01'], ['CS302', 'CSE-3B', 'T02'], ['CS303', 'CSE-3B', 'T03'], ['MA301', 'CSE-3B', 'T09'], ['HU301', 'CSE-3B', 'T10', 2],
+      ['CS301L', 'CSE-3B/B1', 'T07'], ['CS303L', 'CSE-3B/B1', 'T08'], ['CS301L', 'CSE-3B/B2', 'T07'], ['CS303L', 'CSE-3B/B2', 'T08'],
+      ['CS501', 'CSE-5A', 'T04'], ['CS502', 'CSE-5A', 'T05'], ['CS503', 'CSE-5A', 'T06'], ['CS504', 'CSE-5A', 'T06'],
+      ['CS501L', 'CSE-5A/A1', 'T04'], ['CS502L', 'CSE-5A/A1', 'T05'], ['CS501L', 'CSE-5A/A2', 'T04'], ['CS502L', 'CSE-5A/A2', 'T05'],
+      ['EC301', 'ECE-3A', 'T11'], ['EC302', 'ECE-3A', 'T12'], ['EC303', 'ECE-3A', 'T13'], ['MA301', 'ECE-3A', 'T09'],
+      ['EC302L', 'ECE-3A/A1', 'T12'], ['EC303L', 'ECE-3A/A1', 'T13'], ['EC302L', 'ECE-3A/A2', 'T12'], ['EC303L', 'ECE-3A/A2', 'T13'],
+      ['EC501', 'ECE-5A', 'T14'], ['EC502', 'ECE-5A', 'T15'], ['EC503', 'ECE-5A', 'T11'], ['EC504', 'ECE-5A', 'T16'],
+      ['EC501L', 'ECE-5A/A1', 'T14'], ['EC502L', 'ECE-5A/A1', 'T15'], ['EC501L', 'ECE-5A/A2', 'T14'], ['EC502L', 'ECE-5A/A2', 'T15'],
     ],
   },
   {
@@ -128,7 +128,7 @@ const COLLEGES = [
                 ['P5', '12:30', '13:15'], ['P6', '13:15', '14:00']],
       breaks: [{ after: 2, label: 'Tea', time: '10:00–10:15' }, { after: 4, label: 'Lunch', time: '11:45–12:30' }],
       theoryRoomType: 'classroom', labGroups: 'G1, G2, G3 (3 per section)', labBlock: 2,
-      rules: { maxSameSubjectPerDay: 1, teacherMaxPerDay: 4 },
+      rules: { lecturesPerWeek: 4, labSessionsPerWeek: 1, maxSameSubjectPerDay: 1, teacherMaxPerDay: 4 },
     },
     departments: [
       { id: 'CS', name: 'Computer Science', status: 'ready' },
@@ -183,15 +183,15 @@ const COLLEGES = [
       BC205: { short: 'Bus. Comm.', name: 'Business Communication', kind: 'tutorial' },
     },
     assignments: [
-      ['CS101', 'BSc CS-I', 'C1', 4], ['CS102', 'BSc CS-I', 'C2', 4], ['CS103', 'BSc CS-I', 'C3', 4], ['MT101', 'BSc CS-I', 'M1', 4], ['EN101', 'BSc CS-I', 'E1', 2],
-      ['CS101L', 'BSc CS-I/G1', 'C1', 2], ['CS102L', 'BSc CS-I/G1', 'C2', 2], ['CS103L', 'BSc CS-I/G1', 'C3', 2],
-      ['CS101L', 'BSc CS-I/G2', 'C1', 2], ['CS102L', 'BSc CS-I/G2', 'C2', 2], ['CS103L', 'BSc CS-I/G2', 'C3', 2],
-      ['CS101L', 'BSc CS-I/G3', 'C1', 2], ['CS102L', 'BSc CS-I/G3', 'C2', 2], ['CS103L', 'BSc CS-I/G3', 'C3', 2],
-      ['PH101', 'BSc Phy-I', 'P1', 4], ['PH102', 'BSc Phy-I', 'P2', 4], ['PH103', 'BSc Phy-I', 'P3', 4], ['MT101', 'BSc Phy-I', 'M1', 4], ['EN101', 'BSc Phy-I', 'E1', 2],
-      ['PH101L', 'BSc Phy-I/G1', 'P1', 2], ['PH102L', 'BSc Phy-I/G1', 'P2', 2], ['PH103L', 'BSc Phy-I/G1', 'P3', 2],
-      ['PH101L', 'BSc Phy-I/G2', 'P1', 2], ['PH102L', 'BSc Phy-I/G2', 'P2', 2], ['PH103L', 'BSc Phy-I/G2', 'P3', 2],
-      ['PH101L', 'BSc Phy-I/G3', 'P1', 2], ['PH102L', 'BSc Phy-I/G3', 'P2', 2], ['PH103L', 'BSc Phy-I/G3', 'P3', 2],
-      ['BC201', 'BCom-II', 'B1', 5], ['BC202', 'BCom-II', 'B2', 4], ['BC203', 'BCom-II', 'B1', 4], ['BC204', 'BCom-II', 'M1', 3], ['BC205', 'BCom-II', 'E1', 3],
+      ['CS101', 'BSc CS-I', 'C1'], ['CS102', 'BSc CS-I', 'C2'], ['CS103', 'BSc CS-I', 'C3'], ['MT101', 'BSc CS-I', 'M1'], ['EN101', 'BSc CS-I', 'E1', 2],
+      ['CS101L', 'BSc CS-I/G1', 'C1'], ['CS102L', 'BSc CS-I/G1', 'C2'], ['CS103L', 'BSc CS-I/G1', 'C3'],
+      ['CS101L', 'BSc CS-I/G2', 'C1'], ['CS102L', 'BSc CS-I/G2', 'C2'], ['CS103L', 'BSc CS-I/G2', 'C3'],
+      ['CS101L', 'BSc CS-I/G3', 'C1'], ['CS102L', 'BSc CS-I/G3', 'C2'], ['CS103L', 'BSc CS-I/G3', 'C3'],
+      ['PH101', 'BSc Phy-I', 'P1'], ['PH102', 'BSc Phy-I', 'P2'], ['PH103', 'BSc Phy-I', 'P3'], ['MT101', 'BSc Phy-I', 'M1'], ['EN101', 'BSc Phy-I', 'E1', 2],
+      ['PH101L', 'BSc Phy-I/G1', 'P1'], ['PH102L', 'BSc Phy-I/G1', 'P2'], ['PH103L', 'BSc Phy-I/G1', 'P3'],
+      ['PH101L', 'BSc Phy-I/G2', 'P1'], ['PH102L', 'BSc Phy-I/G2', 'P2'], ['PH103L', 'BSc Phy-I/G2', 'P3'],
+      ['PH101L', 'BSc Phy-I/G3', 'P1'], ['PH102L', 'BSc Phy-I/G3', 'P2'], ['PH103L', 'BSc Phy-I/G3', 'P3'],
+      ['BC201', 'BCom-II', 'B1', 5], ['BC202', 'BCom-II', 'B2'], ['BC203', 'BCom-II', 'B1'], ['BC204', 'BCom-II', 'M1', 3], ['BC205', 'BCom-II', 'E1', 3],
     ],
   },
 ];
@@ -229,7 +229,14 @@ function idx(c) {
   };
   return c._ix;
 }
-function A(c) { return c._A || (c._A = c.assignments.map((a, i) => ({ i, subject: a[0], group: a[1], teacher: a[2], periods: a[3] }))); }
+// Periods a week: the assignment's own number, else the subject's, else the college rule.
+function weekly(c, subjectId, override) {
+  const s = c.subjects[subjectId], R = c.scheme.rules;
+  if (override != null) return override;
+  if (s.perWeek != null) return s.perWeek;
+  return s.kind === 'lab' ? R.labSessionsPerWeek * c.scheme.labBlock : R.lecturesPerWeek;
+}
+function A(c) { return c._A || (c._A = c.assignments.map((a, i) => ({ i, subject: a[0], group: a[1], teacher: a[2], periods: weekly(c, a[0], a[3]) }))); }
 const subj = (c, a) => c.subjects[a.subject];
 const blockOf = (c, a) => subj(c, a).kind === 'lab' ? c.scheme.labBlock : 1;
 const roomTypeOf = (c, a) => subj(c, a).room || c.scheme.theoryRoomType;
@@ -888,6 +895,10 @@ function dataPage() {
   ${table('Sections and lab groups', ['Section', 'Department', 'Students', 'Lab groups'], c.sections.map(s => `<tr>${td(s.id, 'font-medium')}${td(s.dept)}${td(s.strength)}${td(s.subs.length ? s.subs.map(u => `<span class="mr-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs">${u.label} · ${u.strength}</span>`).join('') : '<span class="text-xs text-slate-400">None (no labs)</span>')}</tr>`), `${c.sections.length} sections`)}
   ${table('Teachers', ['Name', 'Department', 'Periods a week', 'Max a day', 'Unavailable'], c.teachers.map(t => `<tr>${td(t.name, 'font-medium')}${td(t.dept)}${td(load[t.id] || 0)}${td(tMax(c, t))}${td(t.off ? fmtOff(t.off) : '<span class="text-slate-400">–</span>')}</tr>`), `${c.teachers.length} teachers`)}
   ${table('Rooms', ['Room', 'Type', 'Capacity', 'Owner', 'Used'], c.rooms.map(r => `<tr>${td(r.id, 'font-medium')}${td(typeName(r.type))}${td(r.cap)}${td(r.owner === 'Shared' ? '<span class="rounded bg-indigo-50 px-1.5 py-0.5 text-xs text-indigo-700">Shared</span>' : r.owner)}${td(g ? Math.round(100 * (use[r.id] || 0) / slots) + '%' : '–')}</tr>`), `${c.rooms.length} rooms`)}
+  ${table('Teaching assignments', ['Subject', 'Taught to', 'Teacher', 'Periods a week'], A(c).map(a => {
+    const own = c.assignments[a.i][3] != null;
+    return `<tr>${td(`${subj(c, a).name} <span class="text-xs text-slate-400">${KIND[subj(c, a).kind].label}</span>`)}${td(gLabel(c, a.group))}${td(ix.teachers[a.teacher].name)}${td(`${a.periods} <span class="text-xs ${own ? 'text-amber-700' : 'text-slate-400'}">${own ? 'set for this subject' : 'college rule'}</span>`)}</tr>`;
+  }), `Default: ${c.scheme.rules.lecturesPerWeek} lectures a week per subject`)}
   ${table('Subjects', ['Code', 'Subject', 'Type', 'Room needed'], Object.entries(c.subjects).map(([code, s]) => `<tr>${td(code, 'font-mono text-xs')}${td(s.name)}${td(`<span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-sm ${KIND[s.kind].dot}"></span>${KIND[s.kind].label}</span>`)}${td(typeName(s.room || c.scheme.theoryRoomType))}</tr>`), `${Object.keys(c.subjects).length} subjects`)}`;
 }
 
@@ -936,7 +947,9 @@ function schemePage() {
       <table class="w-full"><tbody class="divide-y divide-slate-100">${rows.join('')}</tbody></table>`)}
     ${card(`<div class="mb-3 font-medium">Rules</div>
       <dl class="divide-y divide-slate-100 text-sm">
-        ${[['Lab length', `${S.labBlock} back-to-back periods`], ['Lab groups', S.labGroups], ['Theory classes in', typeName(S.theoryRoomType) + 's'],
+        ${[['Lectures per subject', `${S.rules.lecturesPerWeek} a week (a subject can override this)`],
+           ['Lab sessions per subject', `${S.rules.labSessionsPerWeek} a week`],
+           ['Lab length', `${S.labBlock} back-to-back periods`], ['Lab groups', S.labGroups], ['Theory classes in', typeName(S.theoryRoomType) + 's'],
            ['Same subject per day', `At most ${S.rules.maxSameSubjectPerDay}`], ['Teacher default max a day', `${S.rules.teacherMaxPerDay} periods`],
            ['Room types', [...new Set(c.rooms.map(r => typeName(r.type)))].join(', ')]].map(([k, v]) => `<div class="flex justify-between gap-4 py-2"><dt class="text-slate-500">${k}</dt><dd class="text-right font-medium">${v}</dd></div>`).join('')}
       </dl>`)}
@@ -949,6 +962,7 @@ function schemePage() {
       ${compareRow('Periods a day', x => `${x.scheme.periods.length} × ${minutes(x.scheme.periods[0])} min`)}
       ${compareRow('College hours', x => `${x.scheme.periods[0][1]}–${x.scheme.periods.at(-1)[2]}`)}
       ${compareRow('Breaks', x => x.scheme.breaks.map(b => `${b.label} after P${b.after}`).join(', '))}
+      ${compareRow('Lectures per subject', x => `${x.scheme.rules.lecturesPerWeek} a week`)}
       ${compareRow('Lab groups', x => x.scheme.labGroups)}
       ${compareRow('Theory rooms', x => typeName(x.scheme.theoryRoomType) + 's')}
       ${compareRow('Teacher max a day', x => x.scheme.rules.teacherMaxPerDay)}
