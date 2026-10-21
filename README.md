@@ -21,6 +21,11 @@ python -m venv .venv
 .\.venv\Scripts\python -m pip install -r requirements.txt
 .\.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
 ```
+On first start it creates a local database (`backend/data/samay.db`) with two demo colleges and one coordinator account
+for each; their sign-in details are in `backend/data/demo_users.json`. To start fresh: `.\.venv\Scripts\python -m app.seed --reset`.
+
+API so far: `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `GET /api/college`, `GET /api/college/data`.
+Each signed-in user only ever sees their own college.
 
 Frontend (app on http://localhost:5173):
 ```

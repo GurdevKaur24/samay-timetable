@@ -8,6 +8,10 @@ __pycache__/
 node_modules/
 dist/
 
+# Local database (recreated from the seed files)
+backend/data/*.db
+backend/data/*.db-journal
+
 # Submission-only reports (kept locally, never pushed)
 docs/*.pdf
 docs/*-summary.txt

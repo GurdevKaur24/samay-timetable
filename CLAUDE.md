@@ -7,13 +7,19 @@ Full product plan and roadmap: `docs/requirements.md`.
 - **backend/**: Python 3.12, FastAPI, Google OR-Tools (CP-SAT), pytest.
   - `app/schema.py`: the one data format for a college (Pydantic), with plain-English field and cross-reference checks.
   - `solver/`: generator, clash checker, scorecard. Pure Python; reads college dicts in the schema format.
-  - `data/colleges/*.json`: seed colleges (demo-eng, city-arts), exported from the prototype. No database yet.
+  - `data/colleges/*.json`: seed colleges (demo-eng, city-arts), exported from the prototype.
+  - `app/db.py`: SQLite (`data/samay.db`, git-ignored, created and seeded on first start). Tables: colleges, users,
+    sessions, college_data (one validated JSON document per college), timetables.
+  - `app/auth.py`: `current_user` is the only source of a college id. Sign-in cookie `samay_session` (httpOnly,
+    SameSite=Lax; set `SAMAY_COOKIE_SECURE=1` behind HTTPS). Passwords use scrypt; only token hashes are stored.
+  - Demo accounts (one coordinator per seed college) are in `data/demo_users.json`.
 - **prototype/**: single-page clickable prototype of the whole product (in-browser data and a simple generator).
 - **frontend/**: React + Vite + TypeScript + Tailwind v4. Calls the API through the Vite proxy at `/api`.
 
 ## Run
 ```
 cd backend; .\.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
+cd backend; .\.venv\Scripts\python -m app.seed --reset   # rebuild the local database from the seed files
 cd backend; .\.venv\Scripts\python -m pytest
 cd frontend; npm run dev            # http://localhost:5173
 ```

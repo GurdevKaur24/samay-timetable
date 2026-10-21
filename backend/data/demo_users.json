@@ -1,0 +1,19 @@
+{
+  "note": "Demo accounts for the seed colleges, for local testing and the hackathon demo only. Never reuse these passwords.",
+  "users": [
+    {
+      "email": "coordinator@demo-eng.example",
+      "name": "Timetable Coordinator",
+      "role": "coordinator",
+      "college": "demo-eng",
+      "password": "demo-eng-Samay-2026"
+    },
+    {
+      "email": "coordinator@city-arts.example",
+      "name": "Timetable Coordinator",
+      "role": "coordinator",
+      "college": "city-arts",
+      "password": "city-arts-Samay-2026"
+    }
+  ]
+}
