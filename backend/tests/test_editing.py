@@ -91,6 +91,7 @@ def test_restore_makes_an_old_version_the_latest(eng):
 def test_restoring_a_version_built_from_older_data_is_refused(app, eng):
     generate(eng)
     data = app.state.db.get_college_data("demo-eng")
+    data["rooms"][0]["capacity"] += 1
     app.state.db.save_college_data("demo-eng", data)
     r = eng.post("/api/timetables/1/restore")
     assert r.status_code == 409 and "Generate again" in r.json()["detail"]

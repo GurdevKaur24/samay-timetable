@@ -19,6 +19,12 @@ Full product plan and roadmap: `docs/requirements.md`.
     `SAMAY_SOLVE_SECONDS`, default 30). A timetable is saved only if the clash checker finds 0 problems; versions are
     numbered per college and store the data they were built from.
   - `app/services/precheck.py`: plain-English pre-check (teacher load, section hours, room demand, room sizes).
+  - `app/services/fingerprint.py`: a timetable is out of date only when scheduling data changed (not college or
+    department names, heads or ready status). Revise/restore refuse out-of-date versions.
+  - Locks: `{assignment, subject, group, day, start, room}`; the solver's `fixed=` keeps them in place; locks that no
+    longer match the class (subject/group changed) are dropped with a message. Version numbers never repeat.
+  - Sign-up (`SAMAY_SIGNUP`, default on) creates a college from `services/new_college.py` (Mon–Fri, 7 periods, lunch).
+    Only the coordinator role exists so far; HOD/teacher/student roles are not built yet.
 - **prototype/index.html**: the app page. Served by the backend at http://localhost:8000 it runs in **live mode**
   (real sign-in; data loaded from and saved to the server with `PUT /api/college/data`; Generate uses the server's
   CP-SAT generator; assistant changes saved via `/revise`). Opened as a file, or from any other server, it falls back to

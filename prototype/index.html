@@ -207,7 +207,10 @@ const COLLEGES = [
   },
 ];
 
-const ROOM_TYPE = { lecture: 'Lecture hall', classroom: 'Classroom', computer_lab: 'Computer lab', electronics_lab: 'Electronics lab', science_lab: 'Science lab' };
+// Common room types every college can pick from; a college can also add its own (e.g. "Language lab").
+const ROOM_TYPE = { lecture: 'Lecture hall', classroom: 'Classroom', seminar_hall: 'Seminar hall', computer_lab: 'Computer lab',
+  electronics_lab: 'Electronics lab', science_lab: 'Science lab', physics_lab: 'Physics lab', chemistry_lab: 'Chemistry lab',
+  workshop: 'Workshop', drawing_hall: 'Drawing hall' };
 const KIND = {
   theory: { label: 'Lecture', cls: 'bg-sky-50 border-sky-200 text-sky-950', dot: 'bg-sky-400' },
   tutorial: { label: 'Tutorial', cls: 'bg-amber-50 border-amber-200 text-amber-950', dot: 'bg-amber-400' },
@@ -215,7 +218,7 @@ const KIND = {
 };
 
 /* ------------------------------ helpers ------------------------------ */
-const typeName = t => ROOM_TYPE[t] || t;
+const typeName = t => ROOM_TYPE[t] || String(t || '').replace(/_/g, ' ').replace(/^\w/, ch => ch.toUpperCase());
 const key = (...k) => k.join('|');
 const rotate = (arr, n) => arr.map((_, i) => arr[(i + n) % arr.length]);
 
@@ -540,7 +543,11 @@ function render() {
   document.getElementById('app').innerHTML = layout();
   [..._shown].forEach(k => { if (!_frame.has(k)) _shown.delete(k); });
 }
-function go(page) { state.page = page; state.viewing = null; state.sel = null; render(); window.scrollTo(0, 0); }
+function go(page) {
+  state.page = page; state.viewing = null; state.sel = null;
+  if (page === 'accounts') state.accounts = null;  // always show the latest list
+  render(); window.scrollTo(0, 0);
+}
 // A user belongs to exactly one college and only ever sees that college's data.
 function signIn(i) {
   Object.assign(state, { ci: +i, page: 'dashboard', key: null, preview: null, history: [], applied: null, sim: null, drawer: false });
@@ -882,7 +889,8 @@ async function loadCollege() {
   const r = await api('/api/college/data');
   const c = fromServer(r.data);
   c._version = r.version;
-  Object.assign(state, { liveCollege: c, gen: {}, key: null, preview: null, history: [], applied: null, sim: null, sync: 'saved', signinError: null });
+  Object.assign(state, { liveCollege: c, gen: {}, key: null, preview: null, history: [], applied: null, sim: null, sync: 'saved', signinError: null,
+                         accounts: null, viewing: null, sel: null });
   await loadLatestTimetable();
 }
 
@@ -998,6 +1006,7 @@ async function boot() {
     try {
       const h = await (await fetch('/api/health')).json();
       state.live = h.app === 'samay';
+      state.signupEnabled = !!h.signup;
       if (state.live && h.demo_login) state.demoAccounts = (await api('/api/auth/demo-accounts')).accounts;
     } catch { state.live = state.live || false; }
   }
@@ -1029,9 +1038,58 @@ const ICONS = {
 const icon = (n, cls = 'w-5 h-5') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="${ICONS[n]}"/></svg>`;
 
 /* ------------------------------ layout ------------------------------ */
-const NAV = [['dashboard', 'Dashboard', 'grid'], ['timetable', 'Timetable', 'calendar'], ['data', 'Data', 'table'], ['precheck', 'Pre-check', 'shield'], ['scheme', 'College scheme', 'sliders']];
+const NAV_ITEMS = [['dashboard', 'Dashboard', 'grid'], ['timetable', 'Timetable', 'calendar'], ['data', 'Data', 'table'], ['precheck', 'Pre-check', 'shield'], ['scheme', 'College scheme', 'sliders'], ['accounts', 'Accounts', 'users']];
+const NAV = { map: fn => NAV_ITEMS.filter(([id]) => id !== 'accounts' || state.live).map(fn) };  // Accounts only exist with the server
+
+function signUpPage() {
+  const f = state.signup || {};
+  const field = (id, label, type, ph, auto, hint = '') => `<label class="mt-3 block"><span class="mb-1 block text-sm font-medium text-slate-700">${label}</span>
+    <input id="su-${id}" type="${type}" value="${type === 'password' ? '' : esc(f[id] || '')}" placeholder="${ph}" autocomplete="${auto}" class="${inputCls(false)}"/>
+    ${hint ? `<p class="mt-1 text-xs text-slate-500">${hint}</p>` : ''}</label>`;
+  return `
+  <div class="flex min-h-screen items-center justify-center p-4">
+    <div class="w-full max-w-md ${anim('signup')}">
+      <div class="mb-6 flex items-center gap-3">
+        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-base font-bold text-white">S</div>
+        <div class="leading-tight"><div class="text-lg font-semibold">Samay</div><div class="text-xs text-slate-500">Clash-free college timetables</div></div>
+      </div>
+      <form onsubmit="signUpLive(event)" class="rounded-xl border border-slate-200 bg-white p-6">
+        <h1 class="text-lg font-semibold">Create your college's account</h1>
+        <p class="mt-1 text-sm text-slate-500">You'll be its timetable coordinator. Your college's data is private to your college.</p>
+        ${field('college', 'College name', 'text', 'Guru Nanak Model College', 'organization')}
+        ${field('place', 'City (optional)', 'text', 'Ludhiana', 'address-level2')}
+        ${field('name', 'Your name', 'text', 'Ms. Kaur', 'name')}
+        ${field('email', 'Your email', 'email', 'coordinator@yourcollege.edu', 'email')}
+        ${field('password', 'Password', 'password', '', 'new-password', 'At least 8 characters.')}
+        ${state.signinError ? `<p class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">${esc(state.signinError)}</p>` : ''}
+        <button type="submit" ${state.signingIn ? 'disabled' : ''} class="mt-4 w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60">
+          ${state.signingIn ? 'Creating…' : 'Create account'}</button>
+        <p class="mt-4 text-center text-sm text-slate-600">Already have an account? <button type="button" onclick="state.signupMode = false; state.signinError = null; render()" class="font-medium text-indigo-600 hover:underline">Sign in</button></p>
+      </form>
+    </div>
+  </div>`;
+}
+
+async function signUpLive(ev) {
+  ev?.preventDefault();
+  const v = id => document.getElementById(`su-${id}`).value.trim();
+  const f = { college: v('college'), place: v('place'), name: v('name'), email: v('email') }, password = document.getElementById('su-password').value;
+  state.signup = f;
+  const problem = !f.college ? 'Enter your college name.' : !f.name ? 'Enter your name.' : !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email) ? 'Enter a valid email.' : password.length < 8 ? 'Choose a password of at least 8 characters.' : null;
+  if (problem) { state.signinError = problem; render(); return; }
+  Object.assign(state, { signingIn: true, signinError: null }); render();
+  try {
+    await api('/api/auth/signup', { method: 'POST', body: { college_name: f.college, place: f.place, name: f.name, email: f.email, password } });
+    await loadCollege();
+    Object.assign(state, { signingIn: false, signupMode: false, signup: null, page: 'dashboard' });
+    render(); toast(`Welcome! ${col().name} is ready to set up.`);
+  } catch (e) {
+    Object.assign(state, { signingIn: false, signinError: e.message }); render();
+  }
+}
 
 function signInPage() {
+  if (state.live && state.signupMode) return signUpPage();
   if (state.live) return `
   <div class="flex min-h-screen items-center justify-center p-4">
     <div class="w-full max-w-md ${anim('signin')}">
@@ -1058,6 +1116,8 @@ function signInPage() {
               <div class="text-xs text-slate-500">Timetable coordinator${a.place ? ` · ${esc(a.place)}` : ''}</div></div>
             </button>`).join('')}</div>
           <p class="mt-3 text-xs text-slate-500">Demo accounts sign in without a password. Changes are saved, so you can try everything.</p>` : ''}
+        ${state.signupEnabled ? `<p class="mt-4 border-t border-slate-100 pt-4 text-center text-sm text-slate-600">New college?
+          <button type="button" onclick="state.signupMode = true; state.signinError = null; render()" class="font-medium text-indigo-600 hover:underline">Create an account</button></p>` : ''}
       </form>
       <p class="mt-4 text-center text-xs text-slate-400">Each college's data is private. Colleges can't see each other, or even which other colleges use Samay.</p>
     </div>
@@ -1153,7 +1213,7 @@ function layout() {
 }
 
 function page() {
-  return { dashboard, timetable, data: dataPage, precheck: precheckPage, scheme: schemePage }[state.page]();
+  return { dashboard, timetable, data: dataPage, precheck: precheckPage, scheme: schemePage, accounts: accountsPage }[state.page]();
 }
 
 function overlay() {
@@ -1184,6 +1244,131 @@ function schemeSummary(c) {
 }
 
 /* ------------------------------ pages ------------------------------ */
+// The whole timetable as an Excel file: one sheet per section and per teacher, plus a list of every class.
+function exportExcel() {
+  const c = col(), g = current();
+  if (!g) return;
+  if (!window.XLSX) { toast('Excel export needs an internet connection to load the spreadsheet tool. Try again when online.'); return; }
+  const ix = idx(c), S = c.scheme, AS = A(c);
+  const label = e => { const a = AS[e.a], s = subj(c, a); return { a, s, T: ix.teachers[a.teacher] }; };
+  const header = ['Day', ...ix.P.map(p => `${S.periods[p - 1][0]} (${S.periods[p - 1][1]}–${S.periods[p - 1][2]})`)];
+  const gridSheet = (filter, text) => [header, ...S.days.map(d => [d, ...ix.P.map(p =>
+    g.entries.filter(e => e.day === d && e.period === p && filter(e)).map(text).join('\n'))])];
+  const used = new Set(), sheetName = name => {
+    let n = String(name).replace(/[\[\]:*?/\\]/g, '-').slice(0, 28), k = 2;
+    while (used.has(n)) n = `${String(name).replace(/[\[\]:*?/\\]/g, '-').slice(0, 25)} ${k++}`;
+    used.add(n); return n;
+  };
+  const wb = XLSX.utils.book_new();
+  const add = (name, rows, widths) => {
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = widths || rows[0].map((_, i) => ({ wch: i === 0 ? 8 : 26 }));
+    XLSX.utils.book_append_sheet(wb, ws, sheetName(name));
+  };
+  const all = [['Day', 'Period', 'Time', 'Department', 'Section / lab group', 'Subject', 'Type', 'Teacher', 'Room'],
+    ...[...g.entries].sort((x, y) => S.days.indexOf(x.day) - S.days.indexOf(y.day) || x.period - y.period).map(e => {
+      const { a, s, T } = label(e), p = S.periods[e.period - 1];
+      return [e.day, p[0], `${p[1]}–${p[2]}`, groupDept(c, a.group), gLabel(c, a.group), s.name, KIND[s.kind].label, T.name, e.room];
+    })];
+  add('All classes', all, all[0].map(h => ({ wch: Math.max(10, h.length + 4) })));
+  c.sections.forEach(sec => add(sec.id, gridSheet(e => ix.groups[AS[e.a].group].section === sec.id,
+    e => { const { a, s, T } = label(e), G = ix.groups[a.group]; return `${G.isSub ? G.label + ': ' : ''}${s.short} · ${T.name} · ${e.room}`; })));
+  c.teachers.filter(t => g.entries.some(e => AS[e.a].teacher === t.id)).forEach(t => add(`T - ${t.name}`, gridSheet(e => AS[e.a].teacher === t.id,
+    e => { const { a, s } = label(e); return `${s.short} · ${gLabel(c, a.group)} · ${e.room}`; })));
+  XLSX.writeFile(wb, `${c.name.replace(/[^\w ]+/g, '').trim() || 'timetable'} timetable${g.version ? ' v' + g.version : ''}.xlsx`);
+  toast('Excel file downloaded: a sheet for each section and teacher, plus every class in one list.');
+}
+
+function toggleDeptStatus(id) {
+  const c = col(), d = c.departments.find(x => x.id === id);
+  if (!d) return;
+  d.status = d.status === 'review' ? 'ready' : 'review';
+  dataChanged(c, `${d.name}: ${d.status === 'review' ? 'needs review' : 'ready'}.`, false);
+}
+
+// Setup checklist for a college that is still adding its data; hidden once everything is in place.
+function gettingStarted(c, g) {
+  const n = { departments: c.departments.length, courses: (c.courses || []).length, sections: c.sections.length, teachers: c.teachers.length,
+              rooms: c.rooms.length, subjects: Object.keys(c.subjects).length, assignments: c.assignments.length };
+  const steps = [
+    ['scheme', 'Check your week', 'Working days, period times, breaks and lectures per subject', true, "go('scheme')"],
+    ['departments', 'Add departments', 'Like CSE, ECE, Applied Sciences', n.departments > 0],
+    ['courses', 'Add courses', 'Like B.Tech CSE or MCA, under a department', n.courses > 0],
+    ['sections', 'Add sections', 'Each with its course, semester, students and lab groups', n.sections > 0],
+    ['teachers', 'Add teachers', 'With their department and when they can\'t teach', n.teachers > 0],
+    ['rooms', 'Add classrooms and labs', 'With seats and type', n.rooms > 0],
+    ['subjects', 'Add subjects', 'Lectures, tutorials and labs', n.subjects > 0],
+    ['assignments', 'Say who teaches what', 'Teaching assignments: subject, section or lab group, teacher', n.assignments > 0],
+  ];
+  const done = steps.filter(s => s[3]).length;
+  if (done === steps.length && g) return '';
+  const open = (tab, action) => action || `state.dataTab = '${tab}'; go('data')`;
+  return card(`<div class="mb-3 flex flex-wrap items-center justify-between gap-2"><div>
+      <div class="font-medium">Getting started</div><div class="text-sm text-slate-500">${done} of ${steps.length + 1} steps done. Add your data, or import each list from Excel.</div></div>
+      <div class="h-2 w-40 overflow-hidden rounded-full bg-slate-100"><div class="h-2 rounded-full bg-indigo-600" style="width:${Math.round(100 * done / (steps.length + 1))}%"></div></div></div>
+    <ol class="grid gap-2 sm:grid-cols-2">${[...steps, ['generate', 'Generate your timetable', 'Samay places every class with 0 clashes', !!g, 'runGenerate()']].map(([tab, title, sub, ok, action], i) => `
+      <li><button onclick="${open(tab, action)}" class="flex w-full items-center gap-3 rounded-lg border ${ok ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/40'} p-2.5 text-left">
+        <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${ok ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-xs font-semibold text-slate-600'}">${ok ? icon('check', 'w-3.5 h-3.5') : i + 1}</span>
+        <span class="min-w-0"><span class="block text-sm font-medium">${title}</span><span class="block truncate text-xs text-slate-500">${sub}</span></span></button></li>`).join('')}</ol>`, 'mb-4');
+}
+
+function accountsPage() {
+  if (!state.live) return card('<p class="text-sm text-slate-600">Accounts are managed when Samay runs from its server.</p>');
+  const a = state.accounts;
+  if (!a) { loadAccounts(); return card('<p class="text-sm text-slate-500">Loading accounts…</p>'); }
+  const field = (id, label, type = 'text', ph = '') => `<label class="block"><span class="mb-1 block text-sm font-medium text-slate-700">${label}</span>
+    <input id="${id}" type="${type}" placeholder="${ph}" class="${inputCls(false)}"/></label>`;
+  return `
+  <div class="mb-4"><h1 class="text-2xl font-semibold tracking-tight">Accounts</h1>
+    <p class="text-sm text-slate-500">People who can sign in to ${esc(col().name)}. Everyone here can manage data and timetables.</p></div>
+  <div class="grid gap-4 lg:grid-cols-2">
+    ${card(`<div class="mb-3 font-medium">People</div>
+      <ul class="divide-y divide-slate-100">${a.users.map(u => `
+        <li class="flex items-center justify-between gap-2 py-2.5">
+          <div class="min-w-0"><div class="truncate text-sm font-medium">${esc(u.name)}${u.you ? ' <span class="rounded bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-700">You</span>' : ''}</div>
+          <div class="truncate text-xs text-slate-500">${esc(u.email)} · Timetable coordinator</div></div>
+          ${u.you ? '' : a.confirmRemove === u.id
+            ? `<span class="flex gap-1.5">${btn('Remove', `removeAccount(${u.id})`, 'danger')}${btn('Keep', 'state.accounts.confirmRemove = null; render()')}</span>`
+            : btn('Remove', `state.accounts.confirmRemove = ${u.id}; render()`)}
+        </li>`).join('')}</ul>`)}
+    ${card(`<div class="mb-1 font-medium">Add a coordinator</div>
+      <p class="mb-3 text-sm text-slate-500">Give them this temporary password; they can change it after signing in.</p>
+      <form onsubmit="addAccount(event)" class="space-y-3">
+        ${field('acc-name', 'Name', 'text', 'Mr. Gill')}${field('acc-email', 'Email', 'email', 'gill@yourcollege.edu')}${field('acc-password', 'Temporary password', 'password')}
+        <p class="text-xs text-slate-500">At least 8 characters.</p>
+        <button type="submit" class="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">Add coordinator</button>
+      </form>`)}
+    ${card(`<div class="mb-1 font-medium">Change your password</div>
+      <p class="mb-3 text-sm text-slate-500">You'll stay signed in here and be signed out on other devices.</p>
+      <form onsubmit="changePassword(event)" class="space-y-3">
+        ${field('pw-current', 'Current password', 'password')}${field('pw-new', 'New password', 'password')}
+        <p class="text-xs text-slate-500">At least 8 characters.</p>
+        <button type="submit" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Change password</button>
+      </form>`)}
+  </div>`;
+}
+async function loadAccounts() {
+  try { state.accounts = { users: (await api('/api/users')).users, confirmRemove: null }; } catch (e) { state.accounts = { users: [] }; toast(e.message); }
+  render();
+}
+async function addAccount(ev) {
+  ev.preventDefault();
+  const v = id => document.getElementById(id).value.trim();
+  const body = { name: v('acc-name'), email: v('acc-email'), password: document.getElementById('acc-password').value };
+  const problem = !body.name ? 'Enter their name.' : !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(body.email) ? 'Enter a valid email.' : body.password.length < 8 ? 'The temporary password needs at least 8 characters.' : null;
+  if (problem) { toast(problem); return; }
+  try { const r = await api('/api/users', { method: 'POST', body }); state.accounts = null; toast(r.message); render(); } catch (e) { toast(e.message); }
+}
+async function removeAccount(id) {
+  try { await api(`/api/users/${id}`, { method: 'DELETE' }); state.accounts = null; toast('Account removed.'); render(); } catch (e) { toast(e.message); }
+}
+async function changePassword(ev) {
+  ev.preventDefault();
+  const current = document.getElementById('pw-current').value, next = document.getElementById('pw-new').value;
+  if (next.length < 8) { toast('Choose a new password of at least 8 characters.'); return; }
+  try { const r = await api('/api/auth/password', { method: 'POST', body: { current, new: next } }); toast(r.message); render(); } catch (e) { toast(e.message); }
+}
+
 function dashboard() {
   const c = col(), g = current(), checks = precheck(c);
   const errors = checks.filter(x => x.level === 'error').length, warns = checks.filter(x => x.level === 'warn').length;
@@ -1191,11 +1376,12 @@ function dashboard() {
   return `
   <div class="mb-6 flex flex-wrap items-end justify-between gap-3">
     <div>
-      <div class="text-sm text-slate-500">${c.kind} · ${c.place}</div>
-      <h1 class="text-2xl font-semibold tracking-tight">${c.name}</h1>
+      <div class="text-sm text-slate-500">${esc([c.kind, c.place].filter(Boolean).join(' · ') || c.term)}</div>
+      <h1 class="text-2xl font-semibold tracking-tight">${esc(c.name)}</h1>
     </div>
     <div class="flex gap-2">${btn('Run pre-check', "go('precheck')", 'secondary', 'shield')}${btn(g ? 'Generate again' : 'Generate timetable', 'runGenerate()', 'primary', 'bolt')}</div>
   </div>
+  ${gettingStarted(c, g)}
   <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
     ${stat('Timetable', g ? 'Generated' : 'Not yet', g ? `at ${g.at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Click Generate to create one')}
     ${stat('Conflicts', v ? v.messages.length : '–', v ? (v.messages.length ? 'Open the assistant to fix' : 'Verified by the clash checker') : 'Shown after generating', v ? (v.messages.length ? 'text-red-600' : 'text-emerald-600') : '')}
@@ -1203,11 +1389,12 @@ function dashboard() {
     ${stat('Pre-check', errors ? `${errors} to fix` : 'Ready', `${warns} warning${warns === 1 ? '' : 's'}`, errors ? 'text-red-600' : 'text-emerald-600')}
   </div>
   <div class="mt-4 grid gap-4 lg:grid-cols-3">
-    ${card(`<div class="mb-3 flex items-center justify-between"><div class="font-medium">Departments</div><span class="text-xs text-slate-500">Data submitted by HODs</span></div>
+    ${card(`<div class="mb-3 flex items-center justify-between"><div class="font-medium">Departments</div><span class="text-xs text-slate-500">Click a status to change it</span></div>
       <ul class="divide-y divide-slate-100">${c.departments.map(d => `
         <li class="flex items-center justify-between gap-2 py-2 text-sm"><span><span class="font-medium">${esc(d.name)}</span>
           <span class="block text-xs text-slate-500">${(c.courses || []).filter(x => x.dept === d.id).length} courses · ${c.sections.filter(s => s.dept === d.id).length} sections · ${c.teachers.filter(t => t.dept === d.id).length} teachers</span></span>
-        ${d.status === 'ready' ? '<span class="rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">Ready</span>' : '<span class="rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">2 rows to review</span>'}</li>`).join('')}</ul>`, 'lg:col-span-1')}
+        <button onclick="toggleDeptStatus('${esc(d.id)}')" title="Click to change" class="shrink-0 rounded-md px-2 py-0.5 text-xs font-medium ${d.status === 'review' ? 'bg-amber-50 text-amber-800 hover:bg-amber-100' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}">${d.status === 'review' ? 'Needs review' : 'Ready'}</button></li>`).join('')
+        || '<li class="py-2 text-sm text-slate-500">No departments yet.</li>'}</ul>`, 'lg:col-span-1')}
     ${card(`<div class="mb-3 font-medium">This college's scheme</div>
       <p class="text-sm leading-relaxed text-slate-600">${schemeSummary(c)}</p>
       <div class="mt-3 grid grid-cols-3 gap-2 text-center">
@@ -1240,6 +1427,9 @@ function timetable() {
   const roomOpts = [...new Set(c.rooms.map(r => r.type))].map(t => ({ group: typeName(t) + 's', items: c.rooms.filter(r => r.type === t).map(r => [r.id, r.id]) }));
   const options = { section: sectionOptions(c), teacher: teacherOptions(c), room: roomOpts }[state.view];
   const flat = options.flatMap(o => o.items || [o]);
+  if (!flat.length) return `<h1 class="mb-4 text-2xl font-semibold tracking-tight">Timetable</h1>
+    ${card(`<div class="py-10 text-center text-sm text-slate-600">There are no ${state.view === 'section' ? 'sections' : state.view === 'teacher' ? 'teachers' : 'rooms'} to show yet.
+      <div class="mt-3">${btn('Go to Data', "go('data')")}</div></div>`)}`;
   if (!state.key || !flat.some(o => o[0] === state.key)) state.key = flat[0][0];
   const entries = displayEntries();
   const v = validate(c, entries.filter(e => !e.ghost));
@@ -1272,6 +1462,7 @@ function timetable() {
       ${btn('Simulate a clash', 'simulateClash()', 'secondary')}
       ${btn('Assistant', 'toggleDrawer(true)', 'secondary', 'bot')}`}
       ${btn('Versions', 'openHistory()', 'secondary', 'history')}
+      ${btn('Excel', 'exportExcel()', 'secondary', 'download')}
       ${btn('Print or save PDF', 'window.print()', 'secondary', 'printer')}
     </div>
   </div>
@@ -1439,7 +1630,9 @@ function drawer() {
         ${bubble(`All clear: 0 conflicts in ${c.name}. I can help with changes. I'll always show a preview first and wait for you to apply it.`)}
         ${state.history.length ? btn('Undo last change', 'undoLast()', 'secondary') : ''}
         <div class="text-xs font-medium uppercase tracking-wide text-slate-400">Try asking</div>
-        <div class="flex flex-wrap gap-2">${[`${c.teachers[0].name} is absent on Monday`, `Find free rooms on ${c.scheme.days[2]} P3`, `Move ${Object.values(c.subjects)[1].short} of ${c.sections[0].id} off ${c.scheme.days.at(-1)}`, 'Why does this section have a gap?'].map(q => `<span class="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600">${q}</span>`).join('')}</div>
+        <div class="flex flex-wrap gap-2">${[c.teachers[0] && `${esc(c.teachers[0].name)} is absent on Monday`, `Find free rooms on ${c.scheme.days.at(-1)} P3`,
+          Object.values(c.subjects)[0] && c.sections[0] && `Move ${esc(Object.values(c.subjects)[0].short)} of ${esc(c.sections[0].id)} off ${c.scheme.days.at(-1)}`,
+          'Why does this section have a gap?'].filter(Boolean).map(q => `<span class="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600">${q}</span>`).join('')}</div>
         <div class="text-sm text-slate-500">To see a fix in action, click <b>Simulate a clash</b> on the timetable.</div>`;
     }
   }
@@ -1494,7 +1687,8 @@ const deptBadge = (id, tone = 'slate') => `<span class="rounded ${tone === 'indi
 
 const intOrNull = v => (String(v ?? '').trim() === '' ? null : Number(String(v).trim()));
 const isInt = (n, lo, hi) => Number.isInteger(n) && n >= lo && n <= hi;
-const roomTypes = c => [...new Set([c.scheme.theoryRoomType, ...c.rooms.map(r => r.type), ...Object.values(c.subjects).map(s => s.room).filter(Boolean)])];
+const roomTypes = c => [...new Set([c.scheme.theoryRoomType, ...Object.keys(ROOM_TYPE), ...c.rooms.map(r => r.type), ...Object.values(c.subjects).map(s => s.room).filter(Boolean)])];
+const typeKey = name => String(name || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 const labRoomTypes = c => roomTypes(c).filter(t => t !== c.scheme.theoryRoomType);
 const labLabels = (c, sectionId, n) => {
   const letter = /[A-Za-z]$/.test(sectionId) ? sectionId.slice(-1).toUpperCase() : 'G';
@@ -1503,8 +1697,15 @@ const labLabels = (c, sectionId, n) => {
 };
 const assignmentsOf = (c, pred) => c.assignments.filter(pred).length;
 
-function dataChanged(c, message) {
+// `affectsTimetable` is false for changes that don't change scheduling (a department's name, head or ready status).
+function dataChanged(c, message, affectsTimetable = true) {
   delete c._ix; delete c._A;
+  if (!affectsTimetable) {
+    state.modal = null;
+    toast(message);
+    if (state.live) saveToServer(c);
+    return;
+  }
   const hadTimetable = !!state.gen[c.id], oldVersion = state.gen[c.id]?.version;
   delete state.gen[c.id];
   Object.assign(state, { preview: null, history: [], applied: null, sim: null, modal: null });
@@ -1518,12 +1719,12 @@ function toValues(c, entity, ref) {
   const filterDept = state.deptFilter && state.deptFilter !== 'all' ? state.deptFilter : null;
   if (entity === 'departments') {
     const d = ref != null ? c.departments[ref] : null;
-    return d ? { code: d.id, name: d.name, hod: d.hod || '' } : { code: '', name: '', hod: '' };
+    return d ? { code: d.id, name: d.name, hod: d.hod || '', status: d.status || 'ready' } : { code: '', name: '', hod: '', status: 'ready' };
   }
   if (entity === 'courses') {
     const x = ref != null ? c.courses[ref] : null;
     return x ? { code: x.id, name: x.name, dept: x.dept, years: String(x.years) }
-             : { code: '', name: '', dept: filterDept || c.departments[0].id, years: '4' };
+             : { code: '', name: '', dept: filterDept || c.departments[0]?.id || '', years: '4' };
   }
   if (entity === 'sections') {
     const s = ref != null ? c.sections[ref] : null;
@@ -1534,7 +1735,7 @@ function toValues(c, entity, ref) {
   if (entity === 'teachers') {
     const t = ref != null ? c.teachers[ref] : null;
     return t ? { name: t.name, dept: t.dept, max: String(tMax(c, t)), off: (t.off || []).map(x => [...x]) }
-             : { name: '', dept: filterDept || c.departments[0].id, max: String(c.scheme.rules.teacherMaxPerDay), off: [] };
+             : { name: '', dept: filterDept || c.departments[0]?.id || '', max: String(c.scheme.rules.teacherMaxPerDay), off: [] };
   }
   if (entity === 'rooms') {
     const r = ref != null ? c.rooms[ref] : null;
@@ -1565,7 +1766,8 @@ function validateValues(c, entity, v, ref, seen = new Set()) {
     else if (!/^[A-Z0-9-]{1,10}$/.test(code)) err.code = 'Use up to 10 letters, numbers or "-".';
     else if (taken(c.departments.filter((_, i) => i !== ref).map(d => d.id), code)) err.code = `${code} already exists.`;
     if (!name) err.name = 'Enter the department name.';
-    if (!Object.keys(err).length) record = { id: code, name, hod: String(v.hod || '').trim() || undefined, status: ref != null ? c.departments[ref].status : 'ready' };
+    const status = v.status === 'review' ? 'review' : 'ready';
+    if (!Object.keys(err).length) record = { id: code, name, hod: String(v.hod || '').trim() || undefined, status };
   }
 
   if (entity === 'courses') {
@@ -1626,10 +1828,12 @@ function validateValues(c, entity, v, ref, seen = new Set()) {
     const name = String(v.name || '').trim(), cap = intOrNull(v.cap);
     if (!name) err.name = 'Enter a room name, like LH-103.';
     else if (taken(c.rooms.filter((_, i) => i !== ref).map(r => r.id), name)) err.name = `${name} already exists.`;
-    if (!roomTypes(c).includes(v.type)) err.type = `Unknown room type "${v.type}". Use one of: ${roomTypes(c).map(typeName).join(', ')}.`;
+    const type = v.type === '__new' ? typeKey(v.newType) : v.type;
+    if (v.type === '__new' && !type) err.newType = 'Name the new room type, like Language lab.';
+    else if (v.type !== '__new' && !roomTypes(c).includes(type)) err.type = `Unknown room type "${v.type}". Use one of: ${roomTypes(c).map(typeName).join(', ')}.`;
     if (!isInt(cap, 1, 1000)) err.cap = 'Enter how many students fit (1–1000).';
     if (v.owner !== 'Shared' && !deptIds.includes(v.owner)) err.owner = `Owner must be "Shared" or a department: ${deptIds.join(', ')}.`;
-    if (!Object.keys(err).length) record = { id: name, type: v.type, cap, owner: v.owner };
+    if (!Object.keys(err).length) record = { id: name, type, cap, owner: v.owner };
   }
 
   if (entity === 'subjects') {
@@ -1768,8 +1972,10 @@ function saveForm() {
   const c = col(), m = state.modal;
   const { errors, record } = validateValues(c, m.entity, m.values, m.ref);
   if (!record) { m.errors = errors; render(); return; }
+  // Editing a department's name, head or status (but not its code) doesn't change the timetable.
+  const affects = !(m.entity === 'departments' && m.ref != null && record.id === c.departments[m.ref].id);
   saveRecord(c, m.entity, record, m.ref);
-  dataChanged(c, `${ENT[m.entity].one[0].toUpperCase() + ENT[m.entity].one.slice(1)} ${m.ref == null ? 'added' : 'saved'}.`);
+  dataChanged(c, `${ENT[m.entity].one[0].toUpperCase() + ENT[m.entity].one.slice(1)} ${m.ref == null ? 'added' : 'saved'}.`, affects);
 }
 function askDelete(entity, ref) {
   const c = col();
@@ -1891,19 +2097,24 @@ function checkImportRows(rows) {
 }
 
 function exampleRows(c, entity) {
-  const d = c.departments[0].id, s0 = c.sections[0], t0 = c.teachers[0], sub0 = Object.entries(c.subjects)[0];
+  // Fallbacks so a brand-new college (no data yet) still gets sensible example rows.
+  const d = c.departments[0]?.id || 'CSE', dName = c.departments[0]?.name || 'Computer Science';
+  const s0 = c.sections[0] || { id: `${d}-1A`, dept: d, sem: 1 }, sLast = c.sections.at(-1) || s0;
+  const t0 = c.teachers[0] || { name: 'Dr. Example Teacher', dept: d }, t1 = c.teachers[1] || t0, tLast = c.teachers.at(-1) || t0;
+  const r0 = c.rooms[0] || { id: 'LH-1', type: c.scheme.theoryRoomType }, labType = labRoomTypes(c)[0] || 'computer_lab';
+  const sub0 = Object.entries(c.subjects)[0] || ['CS101', { name: 'Programming', short: 'Prog' }];
   const labGroup = c.sections.find(s => s.subs.length);
   const course0 = courseOf(c, s0.course) || (c.courses || [])[0];
   return {
     departments: [
       { Code: 'ME', Name: 'Mechanical Engineering', 'Head of department': 'Dr. G. S. Brar' },
       { Code: 'CIVIL', Name: 'Civil Engineering', 'Head of department': '' },
-      { Code: d, Name: c.departments[0].name, 'Head of department': '' },
+      { Code: d, Name: dName, 'Head of department': '' },
       { Code: 'Business Studies Dept', Name: 'Business Studies', 'Head of department': '' },
     ],
     courses: [
-      { 'Course code': `M-${d}`, 'Course name': `Masters in ${c.departments[0].name}`, Department: d, 'Duration (years)': 2 },
-      { 'Course code': `DIP-${d}`, 'Course name': `Diploma in ${c.departments[0].name}`, Department: c.departments[0].name, 'Duration (years)': 3 },
+      { 'Course code': `M-${d}`, 'Course name': `Masters in ${dName}`, Department: d, 'Duration (years)': 2 },
+      { 'Course code': `DIP-${d}`, 'Course name': `Diploma in ${dName}`, Department: dName, 'Duration (years)': 3 },
       { 'Course code': course0?.id, 'Course name': course0?.name, Department: course0?.dept, 'Duration (years)': course0?.years },
       { 'Course code': 'PHD', 'Course name': 'Ph.D.', Department: 'Philosophy', 'Duration (years)': 9 },
     ],
@@ -1922,19 +2133,19 @@ function exampleRows(c, entity) {
     ],
     rooms: [
       { Room: 'New Block 1', Type: typeName(c.scheme.theoryRoomType), Capacity: 72, Owner: 'Shared' },
-      { Room: 'New Lab 1', Type: typeName(labRoomTypes(c)[0]), Capacity: 30, Owner: d },
-      { Room: c.rooms[0].id, Type: typeName(c.rooms[0].type), Capacity: 70, Owner: 'Shared' },
+      { Room: 'New Lab 1', Type: typeName(labType), Capacity: 30, Owner: d },
+      { Room: r0.id, Type: typeName(r0.type), Capacity: 70, Owner: 'Shared' },
       { Room: 'Old Hall', Type: 'Basement', Capacity: 0, Owner: 'Shared' },
     ],
     subjects: [
       { Code: 'XX401', Name: 'Machine Learning', 'Short name': 'ML', Type: 'Lecture', 'Room needed': '', 'Lectures per week': '', 'Offered by': d },
-      { Code: 'XX401L', Name: 'Machine Learning Lab', 'Short name': 'ML Lab', Type: 'Lab', 'Room needed': typeName(labRoomTypes(c)[0]), 'Lectures per week': '', 'Offered by': d },
+      { Code: 'XX401L', Name: 'Machine Learning Lab', 'Short name': 'ML Lab', Type: 'Lab', 'Room needed': typeName(labType), 'Lectures per week': '', 'Offered by': d },
       { Code: 'XX403', Name: 'Environmental Studies', 'Short name': 'EVS', Type: 'Lecture', 'Room needed': '', 'Lectures per week': 2, 'Offered by': 'Common' },
       { Code: sub0[0], Name: sub0[1].name, 'Short name': sub0[1].short, Type: 'Lecture', 'Room needed': '', 'Lectures per week': '', 'Offered by': d },
       { Code: 'XX402', Name: 'Ethics', 'Short name': 'Ethics', Type: 'Seminar', 'Room needed': '', 'Lectures per week': 9, 'Offered by': '' },
     ],
     assignments: [
-      { 'Subject code': Object.keys(c.subjects).find(k => c.subjects[k].kind === 'tutorial') || sub0[0], 'Taught to': c.sections.at(-1).id, Teacher: c.teachers.at(-1).name, 'Periods per week': '' },
+      { 'Subject code': Object.keys(c.subjects).find(k => c.subjects[k].kind === 'tutorial') || sub0[0], 'Taught to': sLast.id, Teacher: tLast.name, 'Periods per week': '' },
       { 'Subject code': sub0[0], 'Taught to': s0.id, Teacher: t0.name, 'Periods per week': '' },
       { 'Subject code': Object.keys(c.subjects).find(k => c.subjects[k].kind === 'lab'), 'Taught to': labGroup ? labGroup.id : s0.id, Teacher: t0.name, 'Periods per week': '' },
       { 'Subject code': sub0[0], 'Taught to': s0.id, Teacher: 'Dr. Nobody', 'Periods per week': '' },
@@ -2002,6 +2213,8 @@ function formBody(c, m) {
     return `<div class="grid grid-cols-3 gap-3"><div>${fInput(m, 'code', 'Code', { placeholder: 'ME' })}</div>
       <div class="col-span-2">${fInput(m, 'name', 'Department name', { placeholder: 'Mechanical Engineering' })}</div></div>
       ${fInput(m, 'hod', 'Head of department (optional)', { placeholder: 'Dr. G. S. Brar' })}
+      ${fSelect(m, 'status', 'Data status', [['ready', 'Ready: the department\'s data is complete'], ['review', 'Needs review: still being checked']],
+        { hint: 'Shown on the dashboard so the coordinator knows which departments are done.' })}
       <p class="text-xs text-slate-500">After adding the department, add its courses, then its sections, teachers and subjects.
       Service departments (like Applied Sciences) can have no courses of their own and only teach other departments.</p>`;
   }
@@ -2038,7 +2251,8 @@ function formBody(c, m) {
   }
   if (m.entity === 'rooms') {
     return `${fInput(m, 'name', 'Room name', { placeholder: 'LH-103' })}
-      <div class="grid grid-cols-2 gap-3">${fSelect(m, 'type', 'Type', roomTypes(c).map(t => [t, typeName(t)]))}${fInput(m, 'cap', 'Seats', { type: 'number', placeholder: '70' })}</div>
+      <div class="grid grid-cols-2 gap-3">${fSelect(m, 'type', 'Type', [...roomTypes(c).map(t => [t, typeName(t)]), ['__new', 'Another type…']], { rerender: true })}${fInput(m, 'cap', 'Seats', { type: 'number', placeholder: '70' })}</div>
+      ${v.type === '__new' ? fInput(m, 'newType', 'Name of the new room type', { placeholder: 'Language lab', hint: 'Lab subjects can then ask for this type of room.' }) : ''}
       ${fSelect(m, 'owner', 'Belongs to', [['Shared', 'Shared by all departments'], ...depts], { hint: 'Shared rooms (seminar halls, computer labs) are shared fairly across departments.' })}`;
   }
   if (m.entity === 'subjects') {

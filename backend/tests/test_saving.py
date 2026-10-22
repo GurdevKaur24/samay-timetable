@@ -101,9 +101,20 @@ def test_editing_an_out_of_date_timetable_is_refused(eng):
     generate(eng)
     t = eng.get("/api/timetables/latest").json()
     version, data = load(eng)
+    data["rooms"][0]["capacity"] += 1  # a change that affects scheduling
     eng.put("/api/college/data", json={"version": version, "data": data})
     r = eng.post("/api/timetables/1/revise", json={"entries": t["entries"]})
     assert r.status_code == 409 and "Generate again" in r.json()["detail"]
+
+
+def test_changes_that_do_not_affect_scheduling_keep_the_timetable_current(eng):
+    generate(eng)
+    version, data = load(eng)
+    data["departments"][0].update(status="review", hod="Dr. New Head", name="Computer Science")
+    data["name"] = "Demo Engineering College (renamed)"
+    assert eng.put("/api/college/data", json={"version": version, "data": data}).status_code == 200
+    assert eng.get("/api/timetables/latest").json()["out_of_date"] is False
+    assert eng.get("/api/timetables").json()["timetables"][0]["out_of_date"] is False
 
 
 def test_other_college_cannot_edit_my_timetable(eng, arts):

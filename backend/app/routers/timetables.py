@@ -8,6 +8,7 @@ from solver.validator import validate
 
 from ..auth import CurrentUser, current_user, get_db
 from ..db import Database
+from ..services.fingerprint import schedule_fingerprint
 from ..services.precheck import precheck
 
 router = APIRouter(prefix="/api", tags=["timetables"])
@@ -66,15 +67,17 @@ def job_status(job_id: str, request: Request, user: CurrentUser = Depends(curren
     return job.public()
 
 
-def with_freshness(timetable: dict, current_version: int) -> dict:
-    timetable["out_of_date"] = timetable["built_from"] != current_version
+def with_freshness(timetable: dict, current_fingerprint: str) -> dict:
+    """A timetable is out of date when data that affects scheduling changed after it was made."""
+    timetable["out_of_date"] = timetable.pop("fingerprint", None) != current_fingerprint
     return timetable
 
 
 @router.get("/timetables")
 def list_versions(user: CurrentUser = Depends(current_user), db: Database = Depends(get_db)):
-    current = db.get_data_version(user.college_id)
-    return {"data_version": current, "timetables": [with_freshness(t, current) for t in db.list_timetables(user.college_id)]}
+    data, current = own_data(user, db)
+    fp = schedule_fingerprint(data)
+    return {"data_version": current, "timetables": [with_freshness(t, fp) for t in db.list_timetables(user.college_id)]}
 
 
 @router.get("/timetables/latest")
@@ -92,16 +95,17 @@ def fetch(version: int | None, user: CurrentUser, db: Database) -> dict:
     if timetable is None:
         raise HTTPException(404, "No timetable yet. Generate one first." if version is None else f"There's no timetable v{version}.")
     timetable.setdefault("locked", [])
-    return with_freshness(timetable, db.get_data_version(user.college_id))
+    timetable["fingerprint"] = schedule_fingerprint(timetable["data"])
+    return with_freshness(timetable, schedule_fingerprint(own_data(user, db)[0]))
 
 
 def current_base(version: int, user: CurrentUser, db: Database) -> tuple[dict, dict, int]:
-    """A saved version plus the college's current data; refuses if the data changed after that version was made."""
+    """A saved version plus the college's current data; refuses if scheduling data changed after that version was made."""
     base = db.get_timetable(user.college_id, version)
     if base is None:
         raise HTTPException(404, f"There's no timetable v{version}.")
     data, current = own_data(user, db)
-    if base["built_from"] != current:
+    if schedule_fingerprint(base["data"]) != schedule_fingerprint(data):
         raise HTTPException(409, "Your college's data changed after this timetable was made. Generate again first.")
     return base, data, current
 

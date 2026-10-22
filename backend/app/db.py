@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from .security import hash_password, new_token, token_hash
+from .services.fingerprint import schedule_fingerprint
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS colleges (
@@ -143,7 +144,8 @@ class Database:
             out.append({"version": r["version"], "created_at": r["created_at"], "built_from": result["built_from"],
                         "score": result["metrics"]["score"], "seconds": result["seconds"],
                         "how": result.get("solver_status", "optimal"), "edited_from": result.get("edited_from"),
-                        "restored_from": result.get("restored_from"), "locked": len(result.get("locked", []))})
+                        "restored_from": result.get("restored_from"), "locked": len(result.get("locked", [])),
+                        "fingerprint": schedule_fingerprint(result["data"])})
         return out
 
     def update_timetable_locks(self, college_id: str, version: int, locked: list[dict]) -> None:

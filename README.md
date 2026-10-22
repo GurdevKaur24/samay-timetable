@@ -35,14 +35,17 @@ API so far (each signed-in user only ever sees their own college):
 
 | Area | Endpoints |
 |---|---|
-| Sign-in | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me` |
+| Sign-in | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `POST /api/auth/signup` (new college), `POST /api/auth/password` |
+| Accounts | `GET /api/users`, `POST /api/users` (add a coordinator), `DELETE /api/users/{id}` |
 | College | `GET /api/college` (summary), `GET /api/college/data` (all data), `PUT /api/college/data` (save; checked again on the server) |
 | Pre-check | `GET /api/precheck` |
-| Generate | `POST /api/timetables` starts a run, `GET /api/jobs/{id}` shows its progress |
+| Generate | `POST /api/timetables` starts a run (optionally keeping locked classes), `GET /api/jobs/{id}` shows its progress |
+| Editing and history | `POST /api/timetables/{v}/revise` (moved or swapped classes), `PUT /api/timetables/{v}/locks`, `POST /api/timetables/{v}/restore`, `DELETE /api/timetables/{v}` |
 | Timetables | `GET /api/timetables` (versions), `GET /api/timetables/latest`, `GET /api/timetables/{version}`, `POST /api/timetables/{version}/check`, `POST /api/timetables/{version}/revise` (save an approved change as a new version) |
 
 Every saved timetable has passed the clash checker; each version keeps the data it was built from and is marked
-`out_of_date` when the college's data changes later.
+`out_of_date` when data that affects scheduling changes later (renaming a department or changing its status doesn't).
+New colleges can sign up from the sign-in page (turn off with `SAMAY_SIGNUP=0`).
 
 Frontend (app on http://localhost:5173):
 ```
