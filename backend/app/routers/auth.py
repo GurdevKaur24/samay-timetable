@@ -5,8 +5,10 @@ from pydantic import BaseModel, Field
 
 from ..auth import COOKIE_NAME, CurrentUser, current_user, get_db
 from ..db import SESSION_SECONDS, Database
+from ..schema import CollegeData
 from ..security import DUMMY_HASH, verify_password
 from ..seed import DEMO_USERS
+from ..services.new_college import college_id_for, empty_college
 
 router = APIRouter(prefix="/api/auth", tags=["sign-in"])
 
@@ -75,6 +77,47 @@ def demo_login(body: DemoIn, request: Request, response: Response, db: Database 
     if row is None:
         raise HTTPException(404, "That isn't a demo account.")
     return start_session(row, request, response, db)
+
+
+# ---- a new college signs up --------------------------------------------------------------------------------
+EMAIL = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+
+
+class SignupIn(BaseModel):
+    college_name: str = Field(min_length=2, max_length=120)
+    place: str = Field("", max_length=80)
+    name: str = Field(min_length=1, max_length=80)
+    email: str = Field(pattern=EMAIL, max_length=254)
+    password: str = Field(min_length=8, max_length=200)
+
+
+@router.post("/signup", status_code=status.HTTP_201_CREATED)
+def signup(body: SignupIn, request: Request, response: Response, db: Database = Depends(get_db)):
+    if not request.app.state.signup:
+        raise HTTPException(404, "Not found")
+    email = body.email.strip().lower()
+    if db.find_user_by_email(email):
+        raise HTTPException(409, "An account with that email already exists. Sign in instead.")
+    college_id = college_id_for(body.college_name)
+    data = CollegeData.model_validate(empty_college(college_id, body.college_name.strip(), body.place.strip())).model_dump(mode="json", exclude_none=True)
+    db.add_college(college_id, data["name"], data)
+    db.add_user(email, body.name.strip(), "coordinator", college_id, body.password)
+    return start_session(db.find_user_by_email(email), request, response, db)
+
+
+class PasswordIn(BaseModel):
+    current: str = Field(min_length=1, max_length=200)
+    new: str = Field(min_length=8, max_length=200)
+
+
+@router.post("/password")
+def change_password(body: PasswordIn, request: Request, user: CurrentUser = Depends(current_user), db: Database = Depends(get_db)):
+    if not verify_password(body.current, db.password_hash(user.id) or DUMMY_HASH):
+        raise HTTPException(400, "Your current password isn't right.")
+    if body.new == body.current:
+        raise HTTPException(400, "Choose a new password that's different from the current one.")
+    db.set_password(user.id, body.new, keep_token=request.cookies.get(COOKIE_NAME))
+    return {"changed": True, "message": "Password changed. You've been signed out everywhere else."}
 
 
 @router.post("/logout")

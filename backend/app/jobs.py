@@ -26,11 +26,25 @@ class Job:
     created_at: float = field(default_factory=time.time)
     finished_at: float | None = None
     timetable_version: int | None = None
+    locked: list[dict] = field(default_factory=list)
 
     def public(self) -> dict:
         d = asdict(self)
         d.pop("college_id")
+        d.pop("locked")
         return d
+
+
+def matching_locks(data: dict, locked: list[dict]) -> tuple[list[dict], int]:
+    """Keep only locks that still point at the same class (same subject and group) in the current data.
+    Assignment ids can shift when classes are added or deleted, so the subject and group are checked too."""
+    by_id = {a["id"]: a for a in data["assignments"]}
+    keep = []
+    for lock in locked:
+        a = by_id.get(lock.get("assignment"))
+        if a and a["subject"] == lock.get("subject") and a["group"] == lock.get("group"):
+            keep.append({k: lock[k] for k in ("assignment", "subject", "group", "day", "start", "room")})
+    return keep, len(locked) - len(keep)
 
 
 class JobRunner:
@@ -40,12 +54,12 @@ class JobRunner:
         self.jobs: dict[str, Job] = {}
         self.lock = threading.Lock()
 
-    def start(self, college_id: str) -> Job:
+    def start(self, college_id: str, locked: list[dict] | None = None) -> Job:
         with self.lock:
             for job in self.jobs.values():
                 if job.college_id == college_id and job.status in ("queued", "running"):
                     return job
-            job = Job(id=uuid.uuid4().hex, college_id=college_id)
+            job = Job(id=uuid.uuid4().hex, college_id=college_id, locked=list(locked or []))
             self.jobs[job.id] = job
         self.pool.submit(self._run, job)
         return job
@@ -62,7 +76,8 @@ class JobRunner:
             if loaded is None:
                 raise RuntimeError("Your college's data couldn't be found.")
             data, data_version = loaded
-            result = solve(data, time_limit=self.time_limit)
+            locked, dropped = matching_locks(data, job.locked)
+            result = solve(data, time_limit=self.time_limit, fixed=locked)
             if result["status"] not in ("optimal", "feasible"):
                 job.status, job.message = "failed", f"{result['message']} Run the pre-check to see what to change."
                 return
@@ -77,10 +92,15 @@ class JobRunner:
                 "seconds": result["seconds"],
                 "entries": result["entries"],
                 "metrics": metrics(data, result["entries"]),
+                "locked": locked,
                 "data": data,  # the exact data it was built from, so old versions still display correctly
             })
             job.status = "done"
             job.message = f"Timetable v{job.timetable_version} generated and checked: 0 clashes."
+            if locked:
+                job.message += f" {len(locked)} locked class(es) stayed where they were."
+            if dropped:
+                job.message += f" {dropped} locked class(es) no longer matched your data and were unlocked."
         except Exception as e:  # keep the server running and tell the user plainly
             job.status, job.message = "failed", f"Generation stopped unexpectedly: {e}"
         finally:

@@ -44,6 +44,10 @@ CREATE TABLE IF NOT EXISTS timetables (
     result      TEXT NOT NULL,
     UNIQUE (college_id, version)
 );
+CREATE TABLE IF NOT EXISTS timetable_numbers (
+    college_id  TEXT PRIMARY KEY REFERENCES colleges(id) ON DELETE CASCADE,
+    last        INTEGER NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_users_college ON users(college_id);
 CREATE INDEX IF NOT EXISTS idx_timetables_college ON timetables(college_id);
 """
@@ -119,7 +123,12 @@ class Database:
         """Store a checked timetable as the college's next version number; returns that number."""
         with self.connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
-            version = conn.execute("SELECT COALESCE(MAX(version), 0) + 1 FROM timetables WHERE college_id = ?", (college_id,)).fetchone()[0]
+            # Numbers only go up, even after a version is deleted, so "v3" always means the same timetable.
+            highest = conn.execute("SELECT COALESCE(MAX(version), 0) FROM timetables WHERE college_id = ?", (college_id,)).fetchone()[0]
+            row = conn.execute("SELECT last FROM timetable_numbers WHERE college_id = ?", (college_id,)).fetchone()
+            version = max(highest, row["last"] if row else 0) + 1
+            conn.execute("INSERT INTO timetable_numbers (college_id, last) VALUES (?, ?) ON CONFLICT(college_id) DO UPDATE SET last = excluded.last",
+                         (college_id, version))
             conn.execute("INSERT INTO timetables (college_id, version, created_at, status, result) VALUES (?, ?, ?, 'ok', ?)",
                          (college_id, version, time.time(), json.dumps(result)))
         return version
@@ -132,8 +141,23 @@ class Database:
         for r in rows:
             result = json.loads(r["result"])
             out.append({"version": r["version"], "created_at": r["created_at"], "built_from": result["built_from"],
-                        "score": result["metrics"]["score"], "seconds": result["seconds"]})
+                        "score": result["metrics"]["score"], "seconds": result["seconds"],
+                        "how": result.get("solver_status", "optimal"), "edited_from": result.get("edited_from"),
+                        "restored_from": result.get("restored_from"), "locked": len(result.get("locked", []))})
         return out
+
+    def update_timetable_locks(self, college_id: str, version: int, locked: list[dict]) -> None:
+        with self.connect() as conn:
+            row = conn.execute("SELECT result FROM timetables WHERE college_id = ? AND version = ?", (college_id, version)).fetchone()
+            if row is None:
+                return
+            result = json.loads(row["result"])
+            result["locked"] = locked
+            conn.execute("UPDATE timetables SET result = ? WHERE college_id = ? AND version = ?", (json.dumps(result), college_id, version))
+
+    def delete_timetable(self, college_id: str, version: int) -> bool:
+        with self.connect() as conn:
+            return conn.execute("DELETE FROM timetables WHERE college_id = ? AND version = ?", (college_id, version)).rowcount > 0
 
     def get_timetable(self, college_id: str, version: int | None = None) -> dict | None:
         """One version of a college's timetable (the latest if no version is given)."""
@@ -180,3 +204,23 @@ class Database:
     def delete_session(self, token: str) -> None:
         with self.connect() as conn:
             conn.execute("DELETE FROM sessions WHERE token_hash = ?", (token_hash(token),))
+
+    def list_users(self, college_id: str) -> list[sqlite3.Row]:
+        with self.connect() as conn:
+            return conn.execute("SELECT id, email, name, role FROM users WHERE college_id = ? ORDER BY name", (college_id,)).fetchall()
+
+    def delete_user(self, college_id: str, user_id: int) -> bool:
+        """Removes a user of this college only; their sessions end with them."""
+        with self.connect() as conn:
+            return conn.execute("DELETE FROM users WHERE id = ? AND college_id = ?", (user_id, college_id)).rowcount > 0
+
+    def password_hash(self, user_id: int) -> str | None:
+        with self.connect() as conn:
+            row = conn.execute("SELECT password_hash FROM users WHERE id = ?", (user_id,)).fetchone()
+        return row["password_hash"] if row else None
+
+    def set_password(self, user_id: int, password: str, keep_token: str | None = None) -> None:
+        """New password; every other session of this user is signed out."""
+        with self.connect() as conn:
+            conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (hash_password(password), user_id))
+            conn.execute("DELETE FROM sessions WHERE user_id = ? AND token_hash != ?", (user_id, token_hash(keep_token or "")))

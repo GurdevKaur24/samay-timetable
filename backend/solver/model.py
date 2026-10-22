@@ -15,7 +15,9 @@ PARALLEL_LAB_WEIGHT = 10  # A1 busy while A2 is idle (and vice versa)
 LATE_PERIOD_COST = {6: 1, 7: 3}  # prefer finishing the day early
 
 
-def solve(data: dict, time_limit: float = 20.0, workers: int = 8) -> dict:
+def solve(data: dict, time_limit: float = 20.0, workers: int = 8, fixed: list[dict] | None = None) -> dict:
+    """`fixed` lists locked sessions that must stay exactly where they are:
+    [{"assignment": id, "day": "Mon", "start": 3, "room": "LH-101"}] (start = first period of the session)."""
     c = build(data)
     started = time.perf_counter()
     m = cp_model.CpModel()
@@ -56,6 +58,17 @@ def solve(data: dict, time_limit: float = 20.0, workers: int = 8) -> dict:
         m.Add(sum(v for v, *_ in starts[aid]) == sessions)
         for day in c.days:  # spread a subject across the week (college rule, usually once a day)
             m.Add(sum(v for v, d, *_ in starts[aid] if d == day) <= c.rules["max_same_subject_per_day"])
+
+    for f in fixed or []:
+        aid = f["assignment"]
+        if aid not in c.assignments:
+            return _fail(started, "A locked class no longer exists in your data. Unlock it and generate again.")
+        match = [v for v, day, start, room, _ in starts[aid] if day == f["day"] and start == f["start"] and room == f["room"]]
+        where = f"{f['day']} {c.period_labels.get(f['start'], f['start'])} in {f['room']}"
+        if not match:
+            return _fail(started, f"{c.describe(aid)} is locked on {where}, but it can't be there any more "
+                                  "(the room, the teacher's availability or the timings changed). Unlock it and generate again.")
+        m.Add(match[0] == 1)
 
     by_teacher: dict[str, list[str]] = defaultdict(list)
     by_group: dict[str, list[str]] = defaultdict(list)
@@ -111,6 +124,8 @@ def solve(data: dict, time_limit: float = 20.0, workers: int = 8) -> dict:
 
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         reason = "No timetable can satisfy all the rules with this data." if status == cp_model.INFEASIBLE else "No timetable found within the time limit."
+        if fixed:
+            reason += f" {len(fixed)} class(es) are locked; try unlocking some of them."
         return {"status": "infeasible", "message": reason, "entries": [], "seconds": elapsed}
 
     entries = [

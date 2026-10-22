@@ -265,7 +265,8 @@ function fmtOff(off) {
    In-browser demo generator (greedy). The real app runs Google OR-Tools
    CP-SAT on the server; this keeps the prototype a single file.
 ----------------------------------------------------------------------- */
-function generate(c) {
+// `fixed`: locked sessions [{ a, day, start, room }] placed first, exactly where they are.
+function generate(c, fixed = []) {
   const ix = idx(c), S = c.scheme, days = S.days, P = ix.P;
   const AS = A(c);
   const busy = new Set(), entries = [], tLoad = {}, usedDay = new Set(), dayLoad = {}, unplaced = [];
@@ -308,6 +309,12 @@ function generate(c) {
   }
 
   const remaining = new Map(AS.map(a => [a.i, a.periods / blockOf(c, a)]));
+  for (const f of fixed) {
+    const a = AS[f.a], r = ix.rooms[f.room];
+    if (!a || !r || remaining.get(a.i) <= 0) continue;
+    put(a, f.day, f.start, r);
+    remaining.set(a.i, remaining.get(a.i) - 1);
+  }
 
   // 1) Labs: lab groups of a section go to different labs at the same time (rotation A1→Lab X, A2→Lab Y …).
   c.sections.forEach((sec, si) => {
@@ -375,6 +382,27 @@ function validate(c, entries) {
     subs.forEach(i => (perSub[AS[entries[i].a].group] ||= []).push(i));
     if (whole.length > 1 || (whole.length && subs.length) || Object.values(perSub).some(l => l.length > 1))
       flag(list, `${ix.groups[AS[entries[list[0]].a].group].section} has overlapping classes on ${slot(entries[list[0]])}: ${list.map(i => desc(c, entries[i])).join(' and ')}.`);
+  });
+  // The same rules the server's clash checker uses, so the page never offers a change the server would refuse.
+  entries.forEach((e, i) => {
+    if (e.ghost) return;
+    const a = AS[e.a], T = ix.teachers[a.teacher], r = ix.rooms[e.room], G = ix.groups[a.group];
+    if (!r || r.type !== roomTypeOf(c, a) || r.cap < G.strength) flag([i], `${e.room} doesn't suit ${desc(c, e)} on ${slot(e)} (needs a ${typeName(roomTypeOf(c, a)).toLowerCase()} for ${G.strength}).`);
+    if ((T.off || []).some(([d, p]) => d === e.day && p === e.period)) flag([i], `${T.name} is unavailable on ${slot(e)} but teaches ${desc(c, e)}.`);
+  });
+  group(e => key(AS[e.a].teacher, e.day)).forEach(list => {
+    const T = ix.teachers[AS[entries[list[0]].a].teacher];
+    if (list.length > tMax(c, T)) flag(list, `${T.name} teaches ${list.length} periods on ${entries[list[0]].day}, above the limit of ${tMax(c, T)}.`);
+  });
+  group(e => key(e.a, e.day)).forEach(list => {
+    const a = AS[entries[list[0]].a], b = blockOf(c, a);
+    if (b === 1) return;
+    const sorted = list.slice().sort((x, y) => entries[x].period - entries[y].period), ps = sorted.map(i => entries[i].period);
+    let ok = ps.length % b === 0;
+    for (let k = 0; ok && k < ps.length; k += b)
+      for (let q = k; q < k + b - 1; q++)
+        if (ps[q + 1] !== ps[q] + 1 || ix.breaksAfter.has(ps[q]) || entries[sorted[q]].room !== entries[sorted[q + 1]].room) ok = false;
+    if (!ok) flag(list, `${desc(c, entries[list[0]])} on ${entries[list[0]].day} must be ${b} back-to-back periods in one room, without crossing a break.`);
   });
   const count = {};
   entries.forEach(e => { if (!e.ghost) count[e.a] = (count[e.a] || 0) + 1; });
@@ -453,17 +481,18 @@ const state = {
   // Live mode: the page was opened from the Samay server, so data, sign-in and generating go through the API.
   live: false, liveCollege: null, booting: true, demoAccounts: null, sync: null, staleVersion: null, signinError: null, signingIn: false, signinEmail: '',
 };
-const col = () => state.live ? state.liveCollege : (state.ci === null ? null : COLLEGES[state.ci]);
-const current = () => state.gen[col().id];
+// While an older timetable version is open (read-only), the timetable page shows it with the data it was built from.
+const col = () => state.viewing ? state.viewing.college : state.live ? state.liveCollege : (state.ci === null ? null : COLLEGES[state.ci]);
+const current = () => state.viewing ? state.viewing.gen : state.gen[col().id];
 
 function displayEntries() {
   const g = current();
   if (!g) return [];
   const list = g.entries.map((e, i) => ({ ...e, i }));
-  const pv = state.preview;
+  const pv = state.preview;  // { changes: [{ ei, day, period, room }], text }
   if (!pv) return list;
-  list[pv.ei] = { ...list[pv.ei], day: pv.day, period: pv.period, room: pv.room, preview: true };
-  list.push({ ...g.entries[pv.ei], i: pv.ei, ghost: true });
+  pv.changes.forEach(ch => { list[ch.ei] = { ...list[ch.ei], day: ch.day, period: ch.period, room: ch.room, preview: true }; });
+  pv.changes.forEach(ch => list.push({ ...g.entries[ch.ei], i: ch.ei, ghost: true }));
   return list;
 }
 
@@ -511,7 +540,7 @@ function render() {
   document.getElementById('app').innerHTML = layout();
   [..._shown].forEach(k => { if (!_frame.has(k)) _shown.delete(k); });
 }
-function go(page) { state.page = page; render(); window.scrollTo(0, 0); }
+function go(page) { state.page = page; state.viewing = null; state.sel = null; render(); window.scrollTo(0, 0); }
 // A user belongs to exactly one college and only ever sees that college's data.
 function signIn(i) {
   Object.assign(state, { ci: +i, page: 'dashboard', key: null, preview: null, history: [], applied: null, sim: null, drawer: false });
@@ -522,8 +551,8 @@ function signOut() {
   Object.assign(state, { ci: null, preview: null, history: [], applied: null, sim: null, drawer: false, menu: false, modal: null });
   render();
 }
-function setView(v) { state.view = v; state.key = null; render(); }
-function setKey(k) { state.key = k; render(); }
+function setView(v) { state.view = v; state.key = null; state.sel = null; render(); }
+function setKey(k) { state.key = k; state.sel = null; render(); }
 function toggleDrawer(open) { state.drawer = open ?? !state.drawer; render(); }
 function toast(text) {
   state.toast = text; render();
@@ -538,7 +567,10 @@ function runGenerate() {
     state.generating++;
     if (state.generating >= steps.length) {
       clearInterval(timer);
-      state.gen[col().id] = generate(col());
+      const prev = current(), fixed = prev ? lockList(col(), prev) : [];
+      state.gen[col().id] = generate(col(), fixed);
+      current().locked = new Set(fixed.map(f => sessionKey(f.a, f.day)));
+      state.sel = null;
       state.generating = null; state.preview = null; state.history = []; state.applied = null; state.sim = null;
       state.page = 'timetable';
       const v = validate(col(), current().entries);
@@ -572,16 +604,19 @@ function simulateClash() {
     }
   }
 }
-function previewOption(day, period, room, ei) { state.preview = { ei, day, period: +period, room }; state.applied = null; render(); }
+function previewOption(day, period, room, ei) {
+  const c = col(), g = current();
+  state.preview = { changes: [{ ei, day, period: +period, room }], text: `${desc(c, g.entries[ei])} moves to ${day} ${pLabel(c, +period)} in ${room}.` };
+  state.applied = null; render();
+}
 function discardPreview() { state.preview = null; render(); }
 function applyPreview() {
   const g = current(), pv = state.preview;
   if (!g || !pv) return;
-  const before = g.entries[pv.ei];
-  state.history.push({ ei: pv.ei, from: { ...before } });
-  g.entries[pv.ei] = { ...before, day: pv.day, period: pv.period, room: pv.room };
-  state.applied = `${desc(col(), g.entries[pv.ei])} moved to ${pv.day} ${pLabel(col(), pv.period)} in ${pv.room}.`;
-  state.preview = null; state.sim = null;
+  state.history.push({ changes: pv.changes.map(ch => ({ ei: ch.ei, from: { ...g.entries[ch.ei] } })) });
+  pv.changes.forEach(ch => { g.entries[ch.ei] = { ...g.entries[ch.ei], day: ch.day, period: ch.period, room: ch.room }; });
+  state.applied = pv.text;
+  state.preview = null; state.sim = null; state.sel = null;
   render();
   if (state.live) reviseOnServer(g, 'Change applied');
   else toast('Change applied. You can undo it from the assistant.');
@@ -589,11 +624,188 @@ function applyPreview() {
 function undoLast() {
   const g = current(), h = g && state.history.pop();
   if (!h) return;
-  g.entries[h.ei] = h.from; state.applied = null;
+  h.changes.forEach(ch => { g.entries[ch.ei] = ch.from; });
+  state.applied = null;
   render();
   // Undoing back to a clash (e.g. one added with "Simulate a clash") is shown but never saved.
   if (state.live && !validate(col(), g.entries).messages.length) reviseOnServer(g, 'Change undone');
   else toast(state.live ? 'Change undone on screen only: the result has a clash, so it isn\'t saved.' : 'Change undone.');
+}
+
+/* ------------------------------------------------------------------------------------------------
+   EDITING BY HAND: click a class to select it, then click a green slot to move it or another class
+   to swap them. Every change is previewed and checked with the same rules as the server. Locked
+   classes stay where they are when the timetable is generated again.
+------------------------------------------------------------------------------------------------- */
+const sessionKey = (a, day) => `${a}|${day}`;
+function sessionIdx(g, a, day) {
+  return g.entries.map((_, i) => i).filter(i => g.entries[i].a === a && g.entries[i].day === day)
+    .sort((x, y) => g.entries[x].period - g.entries[y].period);
+}
+const isLocked = (g, a, day) => !!g?.locked?.has(sessionKey(a, day));
+function trial(g, changes) {
+  const byEi = new Map(changes.map(ch => [ch.ei, ch]));
+  return g.entries.map((e, i) => byEi.has(i) ? { ...e, day: byEi.get(i).day, period: byEi.get(i).period, room: byEi.get(i).room } : e);
+}
+const passes = (c, g, changes) => validate(c, trial(g, changes)).messages.length === 0;
+
+// Move one session (a lecture, or a whole lab block) so it starts at `start` on `newDay`. Returns the changes, or null.
+function tryMove(c, g, a, day, newDay, start, onlyRoom = null) {
+  const ix = idx(c), as = A(c)[a], b = blockOf(c, as), idxs = sessionIdx(g, a, day);
+  if (!idxs.length || start + b - 1 > ix.P.length) return null;
+  if (newDay === day && g.entries[idxs[0]].period === start && !onlyRoom) return null;  // that's where it already is
+  const sameDay = g.entries.filter((e, i) => e.a === a && e.day === newDay && !idxs.includes(i)).length / b;
+  if (sameDay >= c.scheme.rules.maxSameSubjectPerDay) return null;  // college rule: spread a subject across the week
+  const fits = c.rooms.filter(r => r.type === roomTypeOf(c, as) && r.cap >= ix.groups[as.group].strength).map(r => r.id);
+  const current = g.entries[idxs[0]].room;
+  const rooms = onlyRoom ? [onlyRoom].filter(r => fits.includes(r)) : [current, ...fits.filter(r => r !== current)].filter(r => fits.includes(r));
+  for (const room of rooms) {
+    const changes = idxs.map((ei, k) => ({ ei, day: newDay, period: start + k, room }));
+    if (passes(c, g, changes)) return changes;
+  }
+  return null;
+}
+
+// Swap two sessions of the same length; tries keeping each room first, then swapping rooms.
+function trySwap(c, g, a1, d1, a2, d2) {
+  const i1 = sessionIdx(g, a1, d1), i2 = sessionIdx(g, a2, d2);
+  if (i1.length !== i2.length) return { error: 'Only classes of the same length can be swapped (a lab with a lab, a lecture with a lecture).' };
+  const s1 = g.entries[i1[0]], s2 = g.entries[i2[0]];
+  let last = null;
+  for (const [r1, r2] of [[s1.room, s2.room], [s2.room, s1.room]]) {
+    const changes = [...i1.map((ei, k) => ({ ei, day: s2.day, period: s2.period + k, room: r1 })),
+                     ...i2.map((ei, k) => ({ ei, day: s1.day, period: s1.period + k, room: r2 }))];
+    const v = validate(c, trial(g, changes));
+    if (!v.messages.length) return { changes };
+    last = v.messages[0];
+  }
+  return { error: `Those two can't be swapped: ${last}` };
+}
+
+function editTargets(c, g) {
+  const out = new Map();
+  if (!state.sel || state.preview || isLocked(g, state.sel.a, state.sel.day)) return out;
+  for (const d of c.scheme.days)
+    for (const p of idx(c).P) {
+      const changes = tryMove(c, g, state.sel.a, state.sel.day, d, p, state.view === 'room' ? state.key : null);
+      if (changes) out.set(`${d}|${p}`, changes);
+    }
+  return out;
+}
+
+function pickSession(a, day) {
+  const c = col(), g = current();
+  if (!g || state.preview || state.viewing) return;
+  const sel = state.sel;
+  if (sel && sel.a === a && sel.day === day) { state.sel = null; render(); return; }
+  if (sel && !isLocked(g, sel.a, sel.day)) {
+    if (isLocked(g, a, day)) { toast('That class is locked. Unlock it first to swap it.'); return; }
+    const r = trySwap(c, g, sel.a, sel.day, a, day);
+    if (r.error) { toast(r.error); return; }
+    const one = g.entries[sessionIdx(g, sel.a, sel.day)[0]], two = g.entries[sessionIdx(g, a, day)[0]];
+    state.preview = { changes: r.changes, text: `${desc(c, one)} (${one.day} ${pLabel(c, one.period)}) and ${desc(c, two)} (${two.day} ${pLabel(c, two.period)}) swap places.` };
+    render(); return;
+  }
+  state.sel = { a, day }; render();
+}
+function moveTo(day, period) {
+  const c = col(), g = current(), sel = state.sel;
+  const changes = sel && tryMove(c, g, sel.a, sel.day, day, period, state.view === 'room' ? state.key : null);
+  if (!changes) return;
+  const e = g.entries[changes[0].ei];
+  state.preview = { changes, text: `${desc(c, e)} moves to ${day} ${pLabel(c, period)} in ${changes[0].room}.` };
+  render();
+}
+function cancelSel() { state.sel = null; render(); }
+
+function lockList(c, g) {
+  return [...(g.locked || [])].map(k => {
+    const [a, day] = [+k.split('|')[0], k.split('|')[1]], idxs = sessionIdx(g, a, day);
+    if (!idxs.length) return null;
+    const e = g.entries[idxs[0]], as = c.assignments[a];
+    return { a, assignment: c._ids?.[a], subject: as[0], group: as[1], day, start: e.period, room: e.room };
+  }).filter(Boolean);
+}
+async function toggleLock() {
+  const c = col(), g = current(), sel = state.sel;
+  if (!g || !sel) return;
+  g.locked ||= new Set();
+  const k = sessionKey(sel.a, sel.day), now = !g.locked.has(k);
+  now ? g.locked.add(k) : g.locked.delete(k);
+  render();
+  if (state.live && g.version) {
+    try {
+      await api(`/api/timetables/${g.version}/locks`, { method: 'PUT', body: { locked: lockList(c, g).map(({ a, ...rest }) => rest) } });
+    } catch (e) { toast(e.message); return; }
+  }
+  toast(now ? 'Locked: this class stays here when you generate again.' : 'Unlocked.');
+}
+
+/* ------------------------------------------------------------------------------------------------
+   TIMETABLE HISTORY: every saved version can be opened (read-only), restored or deleted.
+------------------------------------------------------------------------------------------------- */
+async function openHistory() {
+  if (!state.live) { state.modal = { kind: 'history', list: null }; render(); return; }
+  try {
+    const r = await api('/api/timetables');
+    state.modal = { kind: 'history', list: r.timetables, confirmDelete: null };
+    render();
+  } catch (e) { toast(e.message); }
+}
+async function viewVersion(v) {
+  try {
+    const t = await api(`/api/timetables/${v}`);
+    const college = fromServer(t.data), pos = new Map(college._ids.map((id, i) => [id, i]));
+    const entries = t.entries.filter(e => pos.has(e.assignment)).map(e => ({ a: pos.get(e.assignment), day: e.day, period: e.period, room: e.room }));
+    const locked = new Set((t.locked || []).filter(l => pos.has(l.assignment)).map(l => sessionKey(pos.get(l.assignment), l.day)));
+    const latest = current() && !state.viewing ? current().version : null;
+    Object.assign(state, { modal: null, drawer: false, preview: null, sel: null, page: 'timetable', key: null,
+      viewing: { version: v, college, outOfDate: t.out_of_date, gen: { entries, unplaced: [], at: new Date(t.created_at * 1000), version: v, locked } } });
+    if (latest === v) state.viewing = null;  // that's the one already shown
+    render();
+  } catch (e) { toast(e.message); }
+}
+function backToLatest() { state.viewing = null; state.sel = null; render(); }
+async function restoreVersion(v) {
+  try {
+    const r = await api(`/api/timetables/${v}/restore`, { method: 'POST' });
+    Object.assign(state, { viewing: null, modal: null, sel: null, preview: null, history: [] });
+    await loadLatestTimetable(); state.page = 'timetable'; render(); toast(r.message);
+  } catch (e) { toast(e.message); }
+}
+async function deleteVersion(v) {
+  try {
+    await api(`/api/timetables/${v}`, { method: 'DELETE' });
+    if (state.viewing?.version === v) state.viewing = null;
+    await loadLatestTimetable();
+    await openHistory(); toast(`Timetable v${v} deleted.`);
+  } catch (e) { toast(e.message); }
+}
+function historyBody() {
+  const m = state.modal;
+  if (!m.list) return `<p class="text-sm text-slate-600">Timetable versions are saved when Samay runs from its server. In this demo, only the current timetable is kept.</p>`;
+  if (!m.list.length) return `<p class="text-sm text-slate-600">No timetables yet. Generate one first.</p>`;
+  const latest = m.list[0].version;
+  const how = t => t.how === 'edited' ? `Edited from v${t.edited_from}` : t.how === 'restored' ? `Restored from v${t.restored_from}` : 'Generated';
+  return `<p class="text-sm text-slate-500">Every timetable you generate or change is kept. Open any version to look at it, make an older one the latest again, or delete versions you don't need.</p>
+    <div class="divide-y divide-slate-100 rounded-lg border border-slate-200">${m.list.map(t => `
+      <div class="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5">
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2 text-sm"><span class="font-semibold">v${t.version}</span>
+            ${t.version === latest ? '<span class="rounded bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-700">Latest</span>' : ''}
+            ${t.out_of_date ? '<span class="rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-800" title="Your data changed after this version was made">Older data</span>' : ''}
+            <span class="text-slate-500">${how(t)}</span></div>
+          <div class="text-xs text-slate-500">${new Date(t.created_at * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })} · score ${t.score}/100${t.locked ? ` · ${t.locked} locked` : ''}</div>
+        </div>
+        <div class="flex flex-wrap gap-1.5">
+          ${btn('View', `viewVersion(${t.version})`)}
+          ${t.version !== latest && !t.out_of_date ? btn('Restore', `restoreVersion(${t.version})`) : ''}
+          ${m.confirmDelete === t.version
+            ? `${btn('Delete v' + t.version, `deleteVersion(${t.version})`, 'danger')}${btn('Keep', 'state.modal.confirmDelete = null; render()')}`
+            : btn('Delete', `state.modal.confirmDelete = ${t.version}; render()`)}
+        </div>
+      </div>`).join('')}</div>
+    <p class="text-xs text-slate-500">Versions marked "Older data" were made before your latest data changes. You can view or delete them, but not restore them: generate again instead.</p>`;
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -684,6 +896,7 @@ async function loadLatestTimetable() {
     state.gen[c.id] = {
       entries: t.entries.filter(e => pos.has(e.assignment)).map(e => ({ a: pos.get(e.assignment), day: e.day, period: e.period, room: e.room })),
       unplaced: [], at: new Date(t.created_at * 1000), version: t.version,
+      locked: new Set((t.locked || []).filter(l => pos.has(l.assignment)).map(l => sessionKey(pos.get(l.assignment), l.day))),
     };
     state.staleVersion = null;
   } catch (e) {
@@ -745,7 +958,12 @@ async function runGenerateLive() {
   const c = col();
   state.generating = 0; render();
   try {
-    let job = await api('/api/timetables', { method: 'POST' });
+    const prev = current();
+    let locked = prev ? lockList(c, prev).map(({ a, ...rest }) => rest) : [];
+    if (!prev && state.staleVersion) {  // data changed since: reuse that version's locks; the server drops any that no longer match
+      locked = (await api(`/api/timetables/${state.staleVersion}`).catch(() => ({}))).locked || [];
+    }
+    let job = await api('/api/timetables', { method: 'POST', body: { locked } });
     const started = Date.now();
     while (job.status === 'queued' || job.status === 'running') {
       state.generating = Math.min(2, Math.floor((Date.now() - started) / 900)); render();
@@ -766,7 +984,8 @@ async function reviseOnServer(g, what) {
   const c = col();
   try {
     const r = await api(`/api/timetables/${g.version}/revise`, { method: 'POST', body: {
-      entries: g.entries.map(e => ({ assignment: c._ids[e.a], day: e.day, period: e.period, room: e.room })) } });
+      entries: g.entries.map(e => ({ assignment: c._ids[e.a], day: e.day, period: e.period, room: e.room })),
+      locked: lockList(c, g).map(({ a, ...rest }) => rest) } });
     g.version = r.version;
     render(); toast(`${what}. ${r.message}`);
   } catch (e) {
@@ -802,6 +1021,10 @@ const ICONS = {
   check: 'M5 12l4 4 10-10',
   x: 'M6 6l12 12M18 6L6 18',
   building: 'M4 20h16M6 20V6l6-3 6 3v14M10 9h.01M14 9h.01M10 13h.01M14 13h.01M10 17h4',
+  lock: 'M7 11V8a5 5 0 0110 0v3M6 11h12v9H6z',
+  history: 'M3 12a9 9 0 109-9 9 9 0 00-7 3.4M3 4v4h4M12 7v5l3 3',
+  users: 'M16 20v-1a4 4 0 00-4-4H7a4 4 0 00-4 4v1M9.5 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM21 20v-1a4 4 0 00-3-3.9M16 4.1a3.5 3.5 0 010 6.8',
+  download: 'M12 4v11M7 10l5 5 5-5M5 20h14',
 };
 const icon = (n, cls = 'w-5 h-5') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="${ICONS[n]}"/></svg>`;
 
@@ -1012,7 +1235,7 @@ function timetable() {
       <p class="mt-1 max-w-md text-sm text-slate-500">${state.staleVersion
         ? `Timetable v${state.staleVersion} was made before your latest changes, so it may not match your data any more. Generate again to get an up-to-date timetable. Older versions stay saved.`
         : `Samay places every class for ${esc(c.name)} while making sure no teacher, room or section is ever double-booked.`}</p>
-      <div class="mt-4">${btn('Generate timetable', 'runGenerate()', 'primary', 'bolt')}</div></div>`)}`;
+      <div class="mt-4 flex justify-center gap-2">${btn('Generate timetable', 'runGenerate()', 'primary', 'bolt')}${state.live && state.staleVersion ? btn('Versions', 'openHistory()', 'secondary', 'history') : ''}</div></div>`)}`;
 
   const roomOpts = [...new Set(c.rooms.map(r => r.type))].map(t => ({ group: typeName(t) + 's', items: c.rooms.filter(r => r.type === t).map(r => [r.id, r.id]) }));
   const options = { section: sectionOptions(c), teacher: teacherOptions(c), room: roomOpts }[state.view];
@@ -1022,6 +1245,9 @@ function timetable() {
   const v = validate(c, entries.filter(e => !e.ghost));
   const base = validate(c, g.entries);
   const m = metrics(c, g.entries);
+  if (state.sel && !sessionIdx(g, state.sel.a, state.sel.day).length) state.sel = null;
+  state.targets = editTargets(c, g);
+  const nLocked = g.locked?.size || 0;
   const title = state.view === 'section' ? state.key : state.view === 'teacher' ? ix.teachers[state.key].name : `${state.key} (${typeName(ix.rooms[state.key].type)})`;
   const sec = state.view === 'section' ? c.sections.find(s => s.id === state.key) : null, T = state.view === 'teacher' ? ix.teachers[state.key] : null;
   const subtitle = sec ? `${deptName(c, sec.dept)} · ${courseOf(c, sec.course)?.name || ''}${sec.sem ? ` · Semester ${sec.sem}` : ''}`
@@ -1042,11 +1268,14 @@ function timetable() {
     <div><div class="flex items-center gap-3"><h1 class="text-2xl font-semibold tracking-tight">${esc(title)}</h1>${badge}</div>
       <p class="mt-0.5 text-sm text-slate-500">${g.version ? `Timetable v${g.version} · ` : ''}${esc(subtitle)}</p></div>
     <div class="flex flex-wrap gap-2">
+      ${state.viewing ? '' : `${btn(nLocked ? `Generate again · keeps ${nLocked} locked` : 'Generate again', 'runGenerate()', 'secondary', 'bolt')}
       ${btn('Simulate a clash', 'simulateClash()', 'secondary')}
-      ${btn('Assistant', 'toggleDrawer(true)', 'secondary', 'bot')}
+      ${btn('Assistant', 'toggleDrawer(true)', 'secondary', 'bot')}`}
+      ${btn('Versions', 'openHistory()', 'secondary', 'history')}
       ${btn('Print or save PDF', 'window.print()', 'secondary', 'printer')}
     </div>
   </div>
+  ${editBar(c, g)}
   <div class="no-print mb-4 flex flex-wrap items-center gap-3">
     <div class="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
       ${[['section', 'Section'], ['teacher', 'Teacher'], ['room', 'Room']].map(([id, l]) => `<button onclick="setView('${id}')" class="rounded-md px-3 py-1.5 text-sm ${state.view === id ? 'bg-indigo-600 font-medium text-white' : 'text-slate-600 hover:bg-slate-50'}">${l}</button>`).join('')}
@@ -1071,6 +1300,32 @@ function timetable() {
   <p class="no-print mt-3 text-xs text-slate-400">${state.live
     ? 'Generated on the Samay server with Google OR-Tools (CP-SAT) and saved only after the clash checker found 0 problems.'
     : 'Demo mode: this page uses a simple in-browser generator. Open Samay from its server to generate with Google OR-Tools (CP-SAT) and save your work.'}</p>`;
+}
+
+function editBar(c, g) {
+  const bar = (tone, text, buttons) => `<div class="no-print mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm ${tone}">
+    <span>${text}</span><span class="flex flex-wrap gap-2">${buttons}</span></div>`;
+  if (state.viewing) {
+    const v = state.viewing;
+    return bar('border-slate-300 bg-slate-100 text-slate-800',
+      `<b>Viewing timetable v${v.version}</b> (read-only)${v.outOfDate ? ', made from older data, so it may not match your current teachers, rooms or classes' : ''}.`,
+      `${!v.outOfDate ? btn('Make this the latest', `restoreVersion(${v.version})`, 'primary') : ''}${btn('Back to latest', 'backToLatest()')}`);
+  }
+  if (state.preview) {
+    const before = validate(c, g.entries).messages.length, after = validate(c, displayEntries().filter(e => !e.ghost)).messages.length;
+    return bar('border-amber-200 bg-amber-50 text-amber-900', `<b>Preview:</b> ${esc(state.preview.text)} Conflicts: ${before} → ${after}. Nothing changes until you apply.`,
+      `${btn('Apply change', 'applyPreview()', 'primary', 'check')}${btn('Discard', 'discardPreview()')}`);
+  }
+  if (!state.sel) return `<p class="no-print mb-3 text-xs text-slate-500">Tip: click a class to move it to a free slot, swap it with another class, or lock it in place before generating again.</p>`;
+  const idxs = sessionIdx(g, state.sel.a, state.sel.day), e = g.entries[idxs[0]], last = g.entries[idxs.at(-1)];
+  const when = `${e.day} ${pLabel(c, e.period)}${idxs.length > 1 ? '–' + pLabel(c, last.period) : ''}`;
+  const locked = isLocked(g, state.sel.a, state.sel.day), n = state.targets.size;
+  const text = `<b>${esc(desc(c, e))}</b> · ${when} · ${esc(e.room)}. ` + (locked
+    ? 'Locked: it stays here when you generate again. Unlock it to move it.'
+    : n ? `${n} free slot${n > 1 ? 's' : ''} shown in green: click one to move it, or click another class to swap.`
+        : 'No free slot for it in this view. Click another class to swap, or try the teacher or room view.');
+  return bar('border-indigo-200 bg-indigo-50 text-indigo-900', text,
+    `${btn(locked ? 'Unlock' : 'Lock in place', 'toggleLock()', 'secondary', 'lock')}${btn('Cancel', 'cancelSel()')}`);
 }
 
 function grid(c, entries, bad) {
@@ -1112,9 +1367,12 @@ function inView(c, e) {
   return e.room === state.key;
 }
 
+const moveHere = (d, p, tall = true) => `<button onclick="moveTo('${d}', ${p})" class="flex ${tall ? 'h-[60px]' : 'py-1'} w-full items-center justify-center rounded-lg border-2 border-dashed border-emerald-400 bg-emerald-50 text-[11px] font-medium text-emerald-700 hover:bg-emerald-100">Move here</button>`;
+
 function cell(c, items, bad, d, p) {
-  const ix = idx(c);
-  if (!items.length) return `<div class="h-[60px] rounded-lg border border-dashed border-slate-200"></div>`;
+  const ix = idx(c), target = state.targets?.has(`${d}|${p}`);
+  const selGroup = state.sel ? A(c)[state.sel.a].group : null;
+  if (!items.length) return target ? moveHere(d, p) : `<div class="h-[60px] rounded-lg border border-dashed border-slate-200"></div>`;
   if (state.view === 'section') {
     const subs = ix.subsOf[state.key];
     const whole = items.filter(e => !ix.groups[A(c)[e.a].group].isSub);
@@ -1122,6 +1380,7 @@ function cell(c, items, bad, d, p) {
     if (subItems.length && subs.length) {
       const parts = subs.map(g => {
         const mine = subItems.filter(e => A(c)[e.a].group === g);
+        if (!mine.length && target && selGroup === g) return moveHere(d, p, false);
         return mine.length ? mine.map(e => block(c, e, bad)).join('') : `<div class="rounded-md border border-dashed border-slate-200 px-2 py-1 text-[11px] text-slate-400">${ix.groups[g].label} · free</div>`;
       }).join('');
       return `<div class="space-y-1">${whole.map(e => block(c, e, bad)).join('')}${parts}</div>`;
@@ -1132,14 +1391,19 @@ function cell(c, items, bad, d, p) {
 
 function block(c, e, bad) {
   const ix = idx(c), a = A(c)[e.a], s = subj(c, a), T = ix.teachers[a.teacher], G = ix.groups[a.group];
+  const g = current(), selected = state.sel && state.sel.a === e.a && state.sel.day === e.day && !e.ghost && !e.preview;
+  const locked = !e.ghost && isLocked(g, e.a, e.day);
   let extra = '';
   if (e.ghost) extra = ' opacity-40';
   else if (e.preview) extra = ' outline outline-2 outline-dashed outline-amber-500 outline-offset-1';
+  else if (selected) extra = ' ring-2 ring-indigo-500';
   else if (bad.has(e.i)) extra = ' ring-2 ring-red-500';
   const line2 = state.view === 'section' ? `${T.name} · ${e.room}` : state.view === 'teacher' ? `${gLabel(c, a.group)} · ${e.room}` : `${gLabel(c, a.group)} · ${T.name}`;
   const tag = G.isSub && state.view === 'section' ? `<span class="mr-1 rounded bg-white/80 px-1 text-[10px] font-semibold">${G.label}</span>` : '';
-  const note = e.preview ? '<span class="text-[10px] font-semibold text-amber-700">New</span>' : e.ghost ? '<span class="text-[10px] font-semibold text-slate-500">Moving</span>' : '';
-  return `<div class="tt-cell rounded-lg border px-2 py-1.5 ${KIND[s.kind].cls}${extra}" title="${s.name} · ${KIND[s.kind].label}">
+  const note = e.preview ? '<span class="text-[10px] font-semibold text-amber-700">New</span>' : e.ghost ? '<span class="text-[10px] font-semibold text-slate-500">Moving</span>'
+    : locked ? `<span class="text-slate-500" title="Locked in place">${icon('lock', 'w-3 h-3')}</span>` : '';
+  const clickable = g && !e.ghost && !e.preview && !state.preview && !state.viewing;
+  return `<div ${clickable ? `onclick="pickSession(${e.a}, '${e.day}')" role="button" tabindex="0"` : ''} class="tt-cell rounded-lg border px-2 py-1.5 ${KIND[s.kind].cls}${extra}${clickable ? ' cursor-pointer hover:brightness-95' : ''}" title="${esc(s.name)} · ${KIND[s.kind].label}${locked ? ' · locked' : ''}">
     <div class="flex items-center justify-between gap-1"><span class="truncate text-[13px] font-semibold ${e.ghost ? 'line-through' : ''}">${tag}${s.short}</span>${note}</div>
     <div class="truncate text-[11px] opacity-75">${line2}</div></div>`;
 }
@@ -1154,7 +1418,7 @@ function drawer() {
     if (state.preview) {
       const pv = state.preview, after = validate(c, displayEntries().filter(e => !e.ghost));
       body = `
-        ${bubble(`Here's a preview. <b>${desc(c, g.entries[pv.ei])}</b> moves to <b>${pv.day} ${pLabel(c, pv.period)}</b> in <b>${pv.room}</b>. The changed cell is outlined on the grid.`)}
+        ${bubble(`Here's a preview. ${esc(pv.text)} The changed cells are outlined on the grid.`)}
         <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Conflicts: ${v.messages.length} → ${after.messages.length}. Nothing is saved until you apply.</div>
         <div class="flex gap-2">${btn('Apply change', 'applyPreview()', 'primary', 'check')}${btn('Discard', 'discardPreview()', 'secondary')}</div>`;
     } else if (v.messages.length) {
@@ -1814,6 +2078,7 @@ function modal() {
         <div class="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">${foot}</div>
       </div></div>`;
 
+  if (m.kind === 'history') return shell('Timetable versions', historyBody(), btn('Close', 'closeModal()'), true);
   if (m.kind === 'scheme') {
     return shell(`Edit scheme · ${esc(c.name)}`, schemeForm(c, m),
       `${btn('Cancel', 'closeModal()')}${btn('Save scheme', 'saveScheme()', 'primary', 'check')}`, true);

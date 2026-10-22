@@ -47,5 +47,5 @@ def metrics(data: dict, entries: list[dict]) -> dict:
         "last_period_classes": last_period,
         "teacher_load_min": min(loads),
         "teacher_load_max": max(loads),
-        "rooms_used_pct": round(100 * len({(e["room"], e["day"], e["period"]) for e in entries}) / (len(c.rooms) * len(c.days) * len(c.periods))),
+        "rooms_used_pct": round(100 * len({(e["room"], e["day"], e["period"]) for e in entries}) / room_slots) if (room_slots := len(c.rooms) * len(c.days) * len(c.periods)) else 0,
     }

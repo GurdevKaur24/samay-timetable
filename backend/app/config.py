@@ -6,6 +6,8 @@ WEB_DIR = Path(os.environ.get("SAMAY_WEB_DIR", BACKEND_DIR.parent / "prototype")
 DB_PATH = Path(os.environ.get("SAMAY_DB", BACKEND_DIR / "data" / "samay.db"))
 # Set SAMAY_COOKIE_SECURE=1 when serving over HTTPS so the sign-in cookie is never sent over plain HTTP.
 COOKIE_SECURE = os.environ.get("SAMAY_COOKIE_SECURE", "0") == "1"
+# Anyone can create a new college account from the sign-in page. Turn off with SAMAY_SIGNUP=0.
+SIGNUP = os.environ.get("SAMAY_SIGNUP", "1") == "1"
 # One-click sign-in for the seed demo accounts (no password). Turn off for a real launch: SAMAY_DEMO_LOGIN=0.
 DEMO_LOGIN = os.environ.get("SAMAY_DEMO_LOGIN", "1") == "1"
 SOLVE_SECONDS = float(os.environ.get("SAMAY_SOLVE_SECONDS", "30"))  # time limit for one generation run
