@@ -1758,7 +1758,7 @@ function timetable() {
         ? `<button onclick="openHistory()" title="Teachers see this version" class="inline-flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100">${icon('check', 'w-4 h-4')}Published</button>`
         : btn('Publish', `publishVersion(${g.version})`, 'primary', 'check')) : ''}
       ${state.viewing || isViewer() ? '' : `${btn(nLocked ? `Generate again · keeps ${nLocked} locked` : 'Generate again', 'runGenerate()', 'secondary', 'bolt')}
-      ${btn('Simulate a clash', 'simulateClash()', 'secondary')}
+      ${canSimulate() ? btn('Simulate a clash', 'simulateClash()', 'secondary') : ''}
       ${btn('Assistant', 'toggleDrawer(true)', 'secondary', 'bot')}`}
       ${isViewer() ? '' : btn('Versions', 'openHistory()', 'secondary', 'history')}
       ${btn('Excel', 'exportExcel()', 'secondary', 'download')}
@@ -1915,17 +1915,7 @@ function drawer() {
         <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Conflicts: ${v.messages.length} → ${after.messages.length}. Nothing is saved until you apply.</div>
         <div class="flex gap-2">${btn('Apply change', 'applyPreview()', 'primary', 'check')}${btn('Discard', 'discardPreview()', 'secondary')}</div>`;
     } else if (v.messages.length) {
-      const ei = state.sim && v.bad.has(state.sim.ei) ? state.sim.ei : [...v.bad][0];
-      const opts = freeSlots(c, g.entries, ei, 3);
-      body = `
-        ${bubble(`I found ${v.messages.length} conflict${v.messages.length > 1 ? 's' : ''}:`)}
-        <ul class="space-y-1 text-sm">${v.messages.map(m => `<li class="rounded-md bg-red-50 px-3 py-2 text-red-800">${m}</li>`).join('')}</ul>
-        ${bubble(`I can move <b>${desc(c, g.entries[ei])}</b> to a free slot. Everyone involved is free there and no other class has to move:`)}
-        <div class="space-y-2">${opts.map((o, n) => `
-          <div class="flex items-center justify-between gap-2 rounded-lg border border-slate-200 p-3">
-            <div class="text-sm"><div class="font-medium">Option ${n + 1}: ${o.day} ${pLabel(c, o.period)}</div><div class="text-xs text-slate-500">Room ${o.room}</div></div>
-            ${btn('Preview', `previewOption('${o.day}', ${o.period}, '${o.room}', ${ei})`, 'secondary')}
-          </div>`).join('') || '<div class="text-sm text-slate-500">No free slot found. Try freeing a room or changing the teacher.</div>'}</div>`;
+      body = clashHelp(c, g, v);
     } else {
       body = `
         ${state.applied ? `<div class="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">${state.applied} 0 conflicts.</div>` : ''}
@@ -1935,7 +1925,7 @@ function drawer() {
         <div class="flex flex-wrap gap-2">${[c.teachers[0] && `${esc(c.teachers[0].name)} is absent on Monday`, `Find free rooms on ${c.scheme.days.at(-1)} P3`,
           Object.values(c.subjects)[0] && c.sections[0] && `Move ${esc(Object.values(c.subjects)[0].short)} of ${esc(c.sections[0].id)} off ${c.scheme.days.at(-1)}`,
           'Why does this section have a gap?'].filter(Boolean).map(q => `<span class="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600">${q}</span>`).join('')}</div>
-        <div class="text-sm text-slate-500">To see a fix in action, click <b>Simulate a clash</b> on the timetable.</div>`;
+        ${canSimulate() ? '<div class="text-sm text-slate-500">To see a fix in action, click <b>Simulate a clash</b> on the timetable.</div>' : ''}`;
     }
   }
   return `<aside class="no-print fixed bottom-0 right-0 top-14 z-40 flex w-full max-w-[390px] flex-col border-l border-slate-200 bg-white shadow-xl ${anim('drawer')}">
@@ -1956,6 +1946,22 @@ function drawer() {
     </div></aside>`;
 }
 const bubble = html => `<div class="rounded-lg bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">${html}</div>`;
+// The clashes in the timetable on screen, with up to 3 free slots to move one class to (each opens a preview).
+function clashHelp(c, g, v) {
+  const ei = state.sim && v.bad.has(state.sim.ei) ? state.sim.ei : [...v.bad][0];
+  const opts = freeSlots(c, g.entries, ei, 3);
+  return `
+    ${bubble(`I found ${v.messages.length} conflict${v.messages.length > 1 ? 's' : ''}:`)}
+    <ul class="space-y-1 text-sm">${v.messages.map(m => `<li class="rounded-md bg-red-50 px-3 py-2 text-red-800">${m}</li>`).join('')}</ul>
+    ${bubble(`I can move <b>${desc(c, g.entries[ei])}</b> to a free slot. Everyone involved is free there and no other class has to move:`)}
+    <div class="space-y-2">${opts.map((o, n) => `
+      <div class="flex items-center justify-between gap-2 rounded-lg border border-slate-200 p-3">
+        <div class="text-sm"><div class="font-medium">Option ${n + 1}: ${o.day} ${pLabel(c, o.period)}</div><div class="text-xs text-slate-500">Room ${o.room}</div></div>
+        ${btn('Preview', `previewOption('${o.day}', ${o.period}, '${o.room}', ${ei})`, 'secondary')}
+      </div>`).join('') || '<div class="text-sm text-slate-500">No free slot found. Try freeing a room or changing the teacher.</div>'}</div>`;
+}
+// "Simulate a clash" is a demo aid: shown in the offline demo and while one-click demo sign-in is on.
+const canSimulate = () => !state.live || !!state.demoAccounts?.length;
 
 /* ------------------------------------------------------------------------------------------------
    AI ASSISTANT (live mode, when the server has an Anthropic API key): a chat with Claude, which can
@@ -1966,8 +1972,7 @@ const bubble = html => `<div class="rounded-lg bg-slate-50 p-3 text-sm leading-r
 const chatText = t => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
 function chatBody(c, g) {
   const m = state.chat.messages;
-  const ideas = [g && validate(c, g.entries).messages.length ? 'Are there any clashes? Fix them.' : null,
-    c.teachers[0] && `${c.teachers[0].name} is absent on ${c.scheme.days[0]}. Which classes need to move?`,
+  const ideas = [c.teachers[0] && `${c.teachers[0].name} is absent on ${c.scheme.days[0]}. Which classes need to move?`,
     c.sections[0] && `Show ${c.sections[0].id}'s timetable for ${c.scheme.days.at(-1)}`,
     `Which rooms are free on ${c.scheme.days[2] || c.scheme.days[0]} ${pLabel(c, 3)}?`].filter(Boolean);
   const intro = !m.length ? `${bubble(g ? `Hi! Ask me about ${esc(c.name)}'s timetable in plain words. I can find clashes, free slots and rooms, and suggest changes. I'll always show a preview first; nothing changes until you apply it.`
@@ -1987,9 +1992,12 @@ function chatBody(c, g) {
     preview = `<div class="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">${esc(state.applied)} Saved with 0 conflicts.</div>
       ${state.history.length ? btn('Undo last change', 'undoLast()', 'secondary') : ''}`;
   }
+  // A clash on screen that isn't saved (e.g. from "Simulate a clash") is fixed here: the AI only sees saved timetables.
+  const v = g && !state.preview ? validate(c, g.entries) : null;
+  const clashes = v?.messages.length ? `${clashHelp(c, g, v)}<div class="border-t border-slate-100 pt-2 text-xs text-slate-400">${state.sim ? "This clash is only on your screen and isn't saved. " : ''}You can also ask me anything below.</div>` : '';
   const thinking = state.chat.sending ? `<div class="mr-4 flex items-center gap-2 rounded-lg bg-slate-50 p-3 text-sm text-slate-500">
     <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent"></span>Looking at your timetable…</div>` : '';
-  return intro + turns + preview + thinking;
+  return clashes + intro + turns + preview + thinking;
 }
 function askChat(text) { state.chat.draft = text; sendChat(); }
 async function sendChat(ev) {
