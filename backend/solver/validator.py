@@ -84,6 +84,22 @@ def validate(data: dict, entries: list[dict]) -> list[dict]:
             if len(sub_items) > 1:
                 add("group_clash", f"{c.group_label(sub_id)} has two classes on {slot}: " + " and ".join(c.describe(i["assignment"]) for i in sub_items) + ".")
 
+    # Electives: while any batch of a group runs, its sections have no other class (batches may run in parallel).
+    for gid, e in c.electives.items():
+        busy_times = {(i["day"], i["period"]) for bid in e["batches"] for i in per_assignment.get(bid, [])}
+        for section in e["sections"]:
+            for day, period in sorted(busy_times):
+                others = section_slots.get((section, day, period), [])
+                if others:
+                    add("group_clash", f"{section} has {c.describe(others[0]['assignment'])} on {c.slot_label(day, period)}, "
+                                       f"during {e['name']}.")
+        for other_id, other in c.electives.items():
+            if other_id <= gid or not set(e["sections"]) & set(other["sections"]):
+                continue
+            other_times = set().union(*({(i["day"], i["period"]) for i in per_assignment.get(b, [])} for b in other["batches"]))
+            for day, period in sorted(busy_times & other_times):
+                add("group_clash", f"{e['name']} and {other['name']} share sections but both run on {c.slot_label(day, period)}.")
+
     for aid, a in c.assignments.items():
         got = len(per_assignment.get(aid, []))
         if got != a["periods"]:

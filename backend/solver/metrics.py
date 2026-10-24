@@ -18,7 +18,10 @@ def metrics(data: dict, entries: list[dict]) -> dict:
         g = c.groups[a["group"]]
         teacher_load[a["teacher"]] += 1
         # Students are the sub-sections (or the whole section if it has none).
-        targets = [g.id] if g.is_sub else (c.subsections[g.section] or [g.section])
+        if g.elective:  # the students of every section in the elective group are in class
+            targets = [u for sec in c.electives[g.elective]["sections"] for u in (c.subsections[sec] or [sec])]
+        else:
+            targets = [g.id] if g.is_sub else (c.subsections[g.section] or [g.section])
         for t in targets:
             busy[(t, e["day"])].add(e["period"])
         if g.is_sub:

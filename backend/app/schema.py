@@ -8,6 +8,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from solver.college import batch_count, weekly_periods
+
 ALL_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 TIME = r"^([01]\d|2[0-3]):[0-5]\d$"
 Kind = Literal["theory", "tutorial", "lab"]
@@ -38,6 +40,7 @@ class Rules(Model):
     lab_sessions_per_week: int = Field(1, ge=1, le=7)
     max_same_subject_per_day: int = Field(1, ge=1, le=4)
     teacher_max_per_day: int = Field(5, ge=1, le=16)
+    elective_class_size: int = Field(70, ge=1, le=1000, description="Most students in one elective class; bigger electives are split into batches.")
 
 
 class Scheme(Model):
@@ -142,6 +145,24 @@ class Assignment(Model):
     periods: int | None = Field(None, ge=1)
 
 
+class ElectiveOption(Model):
+    """One subject students can choose in an elective group. Samay splits it into batches of at most the class size."""
+    subject: str
+    students: int = Field(ge=1, le=5000, description="How many students chose it.")
+    teachers: list[str] = Field(min_length=1, description="One teacher per batch, in order (the same teacher may take several).")
+    batches: int | None = Field(None, ge=1, le=20, description="Number of batches; worked out from the class size if left out.")
+
+
+class Elective(Model):
+    """Subjects students choose between (e.g. Departmental Elective-II). While any of its classes runs, every section in
+    `sections` is kept free (any of their students may be in it). Running its classes at the same time is preferred."""
+    id: str = Field(min_length=1, max_length=16, pattern=r"^[A-Za-z0-9-]+$")
+    name: str = Field(min_length=1)
+    sections: list[str] = Field(min_length=1, description="Sections whose students choose from it (can be from several departments).")
+    options: list[ElectiveOption] = Field(min_length=1)
+    periods: int | None = Field(None, ge=1, description="Periods a week; from the college rules if left out.")
+
+
 class CollegeData(Model):
     id: str = Field(min_length=1)
     name: str = Field(min_length=1)
@@ -156,6 +177,7 @@ class CollegeData(Model):
     rooms: list[Room] = []
     subjects: list[Subject] = []
     assignments: list[Assignment] = []
+    electives: list[Elective] = []
 
     @model_validator(mode="after")
     def check_references(self):
@@ -225,6 +247,39 @@ class CollegeData(Model):
             if (a.subject, a.group) in seen:
                 problems.append(f"{a.subject} is assigned to {a.group} twice.")
             seen.add((a.subject, a.group))
+
+        size = self.scheme.rules.elective_class_size
+        if dupes := sorted({e.id for e in self.electives if [x.id for x in self.electives].count(e.id) > 1}):
+            problems.append(f"Two elective groups have the same code: {', '.join(dupes)}.")
+        for e in self.electives:
+            if bad := [x for x in e.sections if x not in sections]:
+                problems.append(f"{e.name} is for unknown section(s): {', '.join(bad)}.")
+            if len(set(e.sections)) != len(e.sections):
+                problems.append(f"{e.name} lists a section twice.")
+            kinds = set()
+            for o in e.options:
+                s = subjects.get(o.subject)
+                if s is None:
+                    problems.append(f"{e.name} has an unknown subject {o.subject}.")
+                    continue
+                kinds.add("lab" if s.kind == "lab" else "class")
+                if bad := [t for t in o.teachers if t not in teachers]:
+                    problems.append(f"{e.name}: {s.short} has unknown teacher(s) {', '.join(bad)}.")
+                n = batch_count(o.students, o.batches, size)
+                if len(o.teachers) < n:
+                    problems.append(f"{e.name}: {s.short} has {o.students} students, so {n} batches of up to {size}, "
+                                    f"but only {len(o.teachers)} teacher(s). Add a teacher for each batch (the same teacher can take more than one).")
+            if len(kinds) > 1:
+                problems.append(f"{e.name} mixes labs and lectures. Put lab electives in their own elective group.")
+            weekly = {weekly_periods({}, subjects[o.subject].model_dump(), self.scheme.rules.model_dump(), self.scheme.lab_block)
+                      for o in e.options if o.subject in subjects}
+            if e.periods is None and len(weekly) > 1:
+                problems.append(f"The subjects in {e.name} have different periods a week ({', '.join(map(str, sorted(weekly)))}). "
+                                "They run together, so set the periods a week on the elective group.")
+            if len({o.subject for o in e.options}) != len(e.options):
+                problems.append(f"{e.name} lists a subject twice.")
+            if e.periods is not None and "lab" in kinds and e.periods % self.scheme.lab_block:
+                problems.append(f"{e.name} has {e.periods} periods, which isn't a multiple of the lab length ({self.scheme.lab_block}).")
 
         if problems:
             raise ValueError(" ".join(problems))

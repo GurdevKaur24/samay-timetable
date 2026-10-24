@@ -66,6 +66,11 @@ cd frontend; npm run dev            # http://localhost:5173
 - **Weekly periods** come from the college's `rules` (e.g. `lectures_per_week: 3`); a subject (`per_week`) or an
   assignment (`periods`) can override it. Every college sets its own; never assume one number for all colleges.
 - **Period / slot**: one cell of the day × period grid. Lunch and breaks are not schedulable.
+- **Elective group** (`electives`): students of several sections (possibly from several departments, e.g. an open
+  elective) choose one of its subjects. The coordinator types how many students chose each subject; a subject with more
+  than the college's `elective_class_size` (default 70) becomes batches (CV-1, CV-2), one teacher each (the same teacher
+  may take several). Which students sit in which batch is up to the college. `solver.college.build` turns batches into
+  assignments with ids `GROUP~SUBJECT~N`. Normal subjects never split (only labs, into lab groups).
 
 ## Hard rules (never violated, checked by `solver/validator.py`)
 1. A teacher, room, section or sub-section is never in two places in the same slot.
@@ -74,9 +79,11 @@ cd frontend; npm run dev            # http://localhost:5173
 4. Every assignment gets exactly its required weekly periods.
 5. Labs are consecutive blocks (block_len) on one day, never crossing lunch or breaks.
 6. Teacher unavailability and teacher max periods per day are respected.
+7. While any class of an elective group runs, the group's sections have no other class (or other elective group).
 
 ## Soft rules (objective)
-Spread a subject across days (≤ 1 theory period of a subject per day where possible), few idle gaps, A1/A2 labs side by side.
+Spread a subject across days (≤ 1 theory period of a subject per day where possible), few idle gaps, A1/A2 labs side by side,
+an elective group's classes at the same time (in different rooms) where possible.
 
 ## Multi-college privacy (non-negotiable)
 - Every user belongs to exactly one college. They see only that college's data and never learn which other colleges exist.

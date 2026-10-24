@@ -234,8 +234,15 @@ function idx(c) {
       subsOf[s.id].push(id);
     });
   });
+  // Elective batches: each is its own group (the students who chose it); `electives` lists the sections it keeps busy.
+  const electives = {};
+  (c.electives || []).forEach(e => { electives[e.id] = { name: e.name, sections: [...e.sections], batches: [] }; });
+  electiveBatches(c).forEach(b => {
+    groups[b.id] = { id: b.id, section: b.id, label: b.label, strength: b.strength, isSub: false, elective: b.elective };
+    electives[b.elective].batches.push(b.id);
+  });
   c._ix = {
-    groups, subsOf,
+    groups, subsOf, electives,
     teachers: Object.fromEntries(c.teachers.map(t => [t.id, t])),
     rooms: Object.fromEntries(c.rooms.map(r => [r.id, r])),
     P: c.scheme.periods.map((_, i) => i + 1),
@@ -250,13 +257,33 @@ function weekly(c, subjectId, override) {
   if (s.perWeek != null) return s.perWeek;
   return s.kind === 'lab' ? R.labSessionsPerWeek * c.scheme.labBlock : R.lecturesPerWeek;
 }
-function A(c) { return c._A || (c._A = c.assignments.map((a, i) => ({ i, subject: a[0], group: a[1], teacher: a[2], periods: weekly(c, a[0], a[3]) }))); }
+function A(c) {
+  return c._A || (c._A = [...c.assignments.map((a, i) => ({ i, subject: a[0], group: a[1], teacher: a[2], periods: weekly(c, a[0], a[3]) })),
+    ...electiveBatches(c).map((b, k) => ({ i: c.assignments.length + k, subject: b.subject, group: b.id, teacher: b.teacher, periods: b.periods, elective: b.elective, id: b.id }))]);
+}
+// Each elective subject as batches of at most the elective class size (ids match the server's: GROUP~SUBJECT~N).
+function electiveBatches(c) {
+  const size = c.scheme.rules.electiveClassSize || 70;
+  return (c.electives || []).flatMap(e => e.options.flatMap(o => {
+    const s = c.subjects[o.subject];
+    if (!s) return [];
+    const n = o.batches || Math.max(1, Math.ceil(o.students / size));
+    return Array.from({ length: n }, (_, k) => ({
+      id: `${e.id}~${o.subject}~${k + 1}`, elective: e.id, subject: o.subject, teacher: o.teachers[k], label: n > 1 ? `${s.short}-${k + 1}` : s.short,
+      strength: Math.floor(o.students / n) + (k < o.students % n ? 1 : 0), periods: e.periods ?? weekly(c, o.subject),
+    })).filter(b => b.teacher);
+  }));
+}
+// Server ids of A(c), in the same order (used to read and save timetables).
+const allIds = c => A(c).map(a => a.id ?? c._ids?.[a.i] ?? assignmentId(a.i));
+// The sections whose students a group is: its own section, or every section of an elective group.
+const secsOf = (c, g) => { const G = idx(c).groups[g]; return G.elective ? idx(c).electives[G.elective].sections : [G.section]; };
 const subj = (c, a) => c.subjects[a.subject];
 const blockOf = (c, a) => subj(c, a).kind === 'lab' ? c.scheme.labBlock : 1;
 const roomTypeOf = (c, a) => subj(c, a).room || c.scheme.theoryRoomType;
-const gLabel = (c, g) => { const G = idx(c).groups[g]; return G.isSub ? `${G.section} ${G.label}` : g; };
+const gLabel = (c, g) => { const G = idx(c).groups[g]; return G.elective ? `${G.label} (${idx(c).electives[G.elective].name})` : G.isSub ? `${G.section} ${G.label}` : g; };
 const pLabel = (c, p) => c.scheme.periods[p - 1][0];
-const desc = (c, e) => { const a = A(c)[e.a]; return `${gLabel(c, a.group)} ${subj(c, a).short}`; };
+const desc = (c, e) => { const a = A(c)[e.a]; return a.elective ? gLabel(c, a.group) : `${gLabel(c, a.group)} ${subj(c, a).short}`; };
 const tMax = (c, t) => t.max || c.scheme.rules.teacherMaxPerDay;
 function fmtOff(off) {
   const byDay = {};
@@ -277,6 +304,7 @@ function generate(c, fixed = []) {
 
   function groupFree(g, d, p) {
     const G = ix.groups[g];
+    if (G.elective) return secsOf(c, g).every(s => groupFree(s, d, p));
     if (busy.has(key('g', G.section, d, p))) return false;
     return G.isSub ? !busy.has(key('g', g, d, p)) : !ix.subsOf[g].some(s => busy.has(key('g', s, d, p)));
   }
@@ -296,6 +324,7 @@ function generate(c, fixed = []) {
     const b = blockOf(c, a), sec = ix.groups[a.group].section, placed = [];
     for (let p = s; p < s + b; p++) {
       busy.add(key('t', a.teacher, d, p)); busy.add(key('r', r.id, d, p)); busy.add(key('g', a.group, d, p));
+      if (a.elective) secsOf(c, a.group).forEach(sec => busy.add(key('g', sec, d, p)));
       const e = { a: a.i, day: d, period: p, room: r.id };
       entries.push(e); placed.push(e);
     }
@@ -306,7 +335,10 @@ function generate(c, fixed = []) {
   }
   function undo(m) {
     const { a, d, s, r, placed } = m, b = blockOf(c, a), sec = ix.groups[a.group].section;
-    for (let p = s; p < s + b; p++) { busy.delete(key('t', a.teacher, d, p)); busy.delete(key('r', r.id, d, p)); busy.delete(key('g', a.group, d, p)); }
+    for (let p = s; p < s + b; p++) {
+      busy.delete(key('t', a.teacher, d, p)); busy.delete(key('r', r.id, d, p)); busy.delete(key('g', a.group, d, p));
+      if (a.elective) secsOf(c, a.group).forEach(sec => busy.delete(key('g', sec, d, p)));
+    }
     placed.forEach(e => entries.splice(entries.indexOf(e), 1));
     tLoad[key(a.teacher, d)] -= b; dayLoad[key(sec, d)] -= b; usedDay.delete(key(a.i, d));
   }
@@ -386,6 +418,23 @@ function validate(c, entries) {
     if (whole.length > 1 || (whole.length && subs.length) || Object.values(perSub).some(l => l.length > 1))
       flag(list, `${ix.groups[AS[entries[list[0]].a].group].section} has overlapping classes on ${slot(entries[list[0]])}: ${list.map(i => desc(c, entries[i])).join(' and ')}.`);
   });
+  // Electives: while any class of an elective group runs, its sections have no other class (and no other elective).
+  const electiveAt = new Map();  // section|day|period -> { elective id: [entry indexes] }
+  entries.forEach((e, i) => {
+    if (e.ghost) return;
+    const G = ix.groups[AS[e.a].group];
+    if (!G.elective) return;
+    ix.electives[G.elective].sections.forEach(s => { const k = key(s, e.day, e.period), m = electiveAt.get(k) || electiveAt.set(k, {}).get(k); (m[G.elective] ||= []).push(i); });
+  });
+  electiveAt.forEach((m, k) => {
+    const ids = Object.keys(m);
+    if (ids.length > 1) flag(ids.flatMap(id => m[id]), `${k.split('|')[0]} has ${ids.map(id => ix.electives[id].name).join(' and ')} at the same time.`);
+  });
+  entries.forEach((e, i) => {
+    if (e.ghost || ix.groups[AS[e.a].group].elective) return;
+    const m = electiveAt.get(key(ix.groups[AS[e.a].group].section, e.day, e.period));
+    if (m) { const id = Object.keys(m)[0]; flag([i, ...m[id]], `${ix.groups[AS[e.a].group].section} has ${desc(c, e)} on ${slot(e)}, during ${ix.electives[id].name}.`); }
+  });
   // The same rules the server's clash checker uses, so the page never offers a change the server would refuse.
   entries.forEach((e, i) => {
     if (e.ghost) return;
@@ -409,7 +458,7 @@ function validate(c, entries) {
   });
   const count = {};
   entries.forEach(e => { if (!e.ghost) count[e.a] = (count[e.a] || 0) + 1; });
-  AS.forEach(a => { if ((count[a.i] || 0) !== a.periods) messages.push(`${gLabel(c, a.group)} ${subj(c, a).short} has ${count[a.i] || 0} of ${a.periods} periods.`); });
+  AS.forEach(a => { if ((count[a.i] || 0) !== a.periods) messages.push(`${a.elective ? gLabel(c, a.group) : `${gLabel(c, a.group)} ${subj(c, a).short}`} has ${count[a.i] || 0} of ${a.periods} periods.`); });
   return { messages, bad, pairs };
 }
 
@@ -418,7 +467,8 @@ function metrics(c, entries) {
   const ix = idx(c), units = {}, subBusy = {}, load = {};
   entries.forEach(e => {
     const a = A(c)[e.a], G = ix.groups[a.group];
-    const targets = G.isSub ? [G.id] : (ix.subsOf[G.section].length ? ix.subsOf[G.section] : [G.section]);
+    const units = s => (ix.subsOf[s].length ? ix.subsOf[s] : [s]);
+    const targets = G.elective ? secsOf(c, G.id).flatMap(units) : G.isSub ? [G.id] : units(G.section);
     targets.forEach(t => (units[key(t, e.day)] ||= new Set()).add(e.period));
     if (G.isSub) (subBusy[key(G.section, e.day, e.period)] ||= new Set()).add(G.id);
     load[a.teacher] = (load[a.teacher] || 0) + 1;
@@ -453,7 +503,9 @@ function precheck(c) {
   c.sections.forEach(s => {
     const whole = A(c).filter(a => a.group === s.id).reduce((x, a) => x + a.periods, 0);
     const subs = ix.subsOf[s.id].map(g => A(c).filter(a => a.group === g).reduce((x, a) => x + a.periods, 0));
-    const need = whole + (subs.length ? Math.max(...subs) : 0);
+    const electives = Object.values(ix.electives).filter(e => e.sections.includes(s.id) && e.batches.length)
+      .reduce((x, e) => x + A(c).find(a => a.group === e.batches[0]).periods, 0);
+    const need = whole + (subs.length ? Math.max(...subs) : 0) + electives;
     out.push(need > slots
       ? { level: 'error', text: `${s.id} needs ${need} periods but the week has only ${slots}.`, fix: 'Sections' }
       : { level: 'ok', text: `${s.id}: ${need} of ${slots} weekly periods needed.` });
@@ -530,6 +582,8 @@ function freeSlots(c, entries, ei, limit) {
       if (gBusy) continue;
       const r = rooms.find(r => !busyR.has(key(r.id, k)));
       if (!r) continue;
+      const trialEntries = entries.map((e, j) => j === ei ? { ...e, day: d, period: p, room: r.id } : e);
+      if (validate(c, trialEntries).bad.has(ei)) continue;  // e.g. an elective of this section runs then
       out.push({ day: d, period: p, room: r.id });
       if (out.length >= limit) return out;
     }
@@ -602,7 +656,7 @@ function simulateClash() {
   const ix = idx(c), E = g.entries;
   for (let i = 0; i < E.length; i++) {
     const a = A(c)[E[i].a];
-    if (blockOf(c, a) !== 1 || ix.groups[a.group].isSub) continue;
+    if (blockOf(c, a) !== 1 || ix.groups[a.group].isSub || a.elective) continue;
     for (const o of E) {
       const b = A(c)[o.a];
       if (b.teacher !== a.teacher || b.group === a.group) continue;
@@ -739,6 +793,7 @@ function lockList(c, g) {
     const [a, day] = [+k.split('|')[0], k.split('|')[1]], idxs = sessionIdx(g, a, day);
     if (!idxs.length) return null;
     const e = g.entries[idxs[0]], as = c.assignments[a];
+    if (!as) return null;  // elective batches can't be locked
     return { a, assignment: c._ids?.[a], subject: as[0], group: as[1], day, start: e.period, room: e.room };
   }).filter(Boolean);
 }
@@ -772,7 +827,7 @@ async function openHistory() {
 async function viewVersion(v) {
   try {
     const t = await api(`/api/timetables/${v}`);
-    const college = fromServer(t.data), pos = new Map(college._ids.map((id, i) => [id, i]));
+    const college = fromServer(t.data), pos = new Map(allIds(college).map((id, i) => [id, i]));
     const entries = t.entries.filter(e => pos.has(e.assignment)).map(e => ({ a: pos.get(e.assignment), day: e.day, period: e.period, room: e.room }));
     const locked = new Set((t.locked || []).filter(l => pos.has(l.assignment)).map(l => sessionKey(pos.get(l.assignment), l.day)));
     const latest = current() && !state.viewing ? current().version : null;
@@ -862,7 +917,8 @@ function fromServer(d) {
       breaks: S.breaks.map(b => ({ after: b.after, label: b.label, time: `${S.periods[b.after - 1].end}–${S.periods[b.after].start}` })),
       theoryRoomType: S.theory_room_type, labPrefix: S.lab_prefix, labBlock: S.lab_block,
       rules: { lecturesPerWeek: S.rules.lectures_per_week, labSessionsPerWeek: S.rules.lab_sessions_per_week,
-               maxSameSubjectPerDay: S.rules.max_same_subject_per_day, teacherMaxPerDay: S.rules.teacher_max_per_day },
+               maxSameSubjectPerDay: S.rules.max_same_subject_per_day, teacherMaxPerDay: S.rules.teacher_max_per_day,
+               electiveClassSize: S.rules.elective_class_size ?? 70 },
     },
     departments: d.departments.map(x => ({ ...x })),
     courses: (d.courses || []).map(x => ({ ...x })),
@@ -874,6 +930,7 @@ function fromServer(d) {
     subjects: Object.fromEntries(d.subjects.map(s => [s.id, { short: s.short, name: s.name, kind: s.kind, ...(s.dept ? { dept: s.dept } : {}),
                                                             ...(s.room_type ? { room: s.room_type } : {}), ...(s.per_week != null ? { perWeek: s.per_week } : {}) }])),
     assignments: d.assignments.map(a => a.periods != null ? [a.subject, a.group, a.teacher, a.periods] : [a.subject, a.group, a.teacher]),
+    electives: (d.electives || []).map(e => JSON.parse(JSON.stringify(e))),
     _ids: d.assignments.map(a => a.id),
   };
 }
@@ -885,7 +942,8 @@ function toServer(c) {
       days: S.days, periods: S.periods.map(([label, start, end]) => ({ label, start, end })), breaks: S.breaks.map(b => ({ after: b.after, label: b.label })),
       theory_room_type: S.theoryRoomType, lab_block: S.labBlock, lab_prefix: S.labPrefix,
       rules: { lectures_per_week: S.rules.lecturesPerWeek, lab_sessions_per_week: S.rules.labSessionsPerWeek,
-               max_same_subject_per_day: S.rules.maxSameSubjectPerDay, teacher_max_per_day: S.rules.teacherMaxPerDay },
+               max_same_subject_per_day: S.rules.maxSameSubjectPerDay, teacher_max_per_day: S.rules.teacherMaxPerDay,
+               elective_class_size: S.rules.electiveClassSize || 70 },
     },
     departments: c.departments.map(d => clean({ id: d.id, name: d.name, hod: d.hod, status: d.status })),
     courses: (c.courses || []).map(x => clean({ id: x.id, name: x.name, dept: x.dept, years: x.years })),
@@ -895,6 +953,8 @@ function toServer(c) {
     rooms: c.rooms.map(r => ({ id: r.id, type: r.type, capacity: r.cap, owner: r.owner })),
     subjects: Object.entries(c.subjects).map(([id, s]) => clean({ id, short: s.short, name: s.name, kind: s.kind, dept: s.dept, room_type: s.room, per_week: s.perWeek })),
     assignments: c.assignments.map((a, i) => clean({ id: assignmentId(i), subject: a[0], group: a[1], teacher: a[2], periods: a[3] })),
+    electives: (c.electives || []).map(e => clean({ id: e.id, name: e.name, sections: e.sections, periods: e.periods,
+      options: e.options.map(o => clean({ subject: o.subject, students: o.students, teachers: o.teachers, batches: o.batches })) })),
   };
 }
 
@@ -910,7 +970,7 @@ async function loadCollege() {
 async function loadPublishedForHod() {
   try {
     const t = await api('/api/published');
-    const college = fromServer(t.data), pos = new Map(college._ids.map((id, i) => [id, i]));
+    const college = fromServer(t.data), pos = new Map(allIds(college).map((id, i) => [id, i]));
     state.hodPublished = { college, gen: { entries: t.entries.filter(e => pos.has(e.assignment)).map(e => ({ a: pos.get(e.assignment), day: e.day, period: e.period, room: e.room })),
                                            unplaced: [], at: new Date(t.published_at * 1000), version: t.version, locked: new Set() } };
     state.published = { version: t.version, published_at: t.published_at };
@@ -927,7 +987,7 @@ async function loadLatestTimetable() {
     const t = await api('/api/timetables/latest');
     state.published = t.published;
     if (t.out_of_date) { delete state.gen[c.id]; state.staleVersion = t.version; return; }
-    const pos = new Map(c._ids.map((id, i) => [id, i]));
+    const pos = new Map(allIds(c).map((id, i) => [id, i]));
     state.gen[c.id] = {
       entries: t.entries.filter(e => pos.has(e.assignment)).map(e => ({ a: pos.get(e.assignment), day: e.day, period: e.period, room: e.room })),
       unplaced: [], at: new Date(t.created_at * 1000), version: t.version,
@@ -955,7 +1015,7 @@ async function loadTeacher(collegeName) {
   c.name = collegeName;
   Object.assign(state, { liveCollege: c, gen: {}, teacherHome: h, view: 'teacher', key: h.me.id, preview: null, history: [], sel: null, viewing: null, modal: null, signinError: null });
   if (h.published) {
-    const pos = new Map(c._ids.map((id, i) => [id, i]));
+    const pos = new Map(allIds(c).map((id, i) => [id, i]));
     state.gen[c.id] = { entries: h.published.entries.filter(e => pos.has(e.assignment)).map(e => ({ a: pos.get(e.assignment), day: e.day, period: e.period, room: e.room })),
                         unplaced: [], at: new Date(h.published.published_at * 1000), version: h.published.version, locked: new Set() };
   }
@@ -1057,7 +1117,7 @@ async function reviseOnServer(g, what) {
   const c = col();
   try {
     const r = await api(`/api/timetables/${g.version}/revise`, { method: 'POST', body: {
-      entries: g.entries.map(e => ({ assignment: c._ids[e.a], day: e.day, period: e.period, room: e.room })),
+      entries: g.entries.map(e => ({ assignment: allIds(c)[e.a], day: e.day, period: e.period, room: e.room })),
       locked: lockList(c, g).map(({ a, ...rest }) => rest) } });
     g.version = r.version;
     render(); toast(`${what}. ${r.message}`);
@@ -1359,8 +1419,8 @@ function exportExcel() {
       return [e.day, p[0], `${p[1]}–${p[2]}`, groupDept(c, a.group), gLabel(c, a.group), s.name, KIND[s.kind].label, T.name, e.room];
     })];
   add('All classes', all, all[0].map(h => ({ wch: Math.max(10, h.length + 4) })));
-  c.sections.forEach(sec => add(sec.id, gridSheet(e => ix.groups[AS[e.a].group].section === sec.id,
-    e => { const { a, s, T } = label(e), G = ix.groups[a.group]; return `${G.isSub ? G.label + ': ' : ''}${s.short} · ${T.name} · ${e.room}`; })));
+  c.sections.forEach(sec => add(sec.id, gridSheet(e => secsOf(c, AS[e.a].group).includes(sec.id),
+    e => { const { a, s, T } = label(e), G = ix.groups[a.group]; return `${G.elective ? ix.electives[G.elective].name + ': ' + G.label : `${G.isSub ? G.label + ': ' : ''}${s.short}`} · ${T.name} · ${e.room}`; })));
   c.teachers.filter(t => g.entries.some(e => AS[e.a].teacher === t.id)).forEach(t => add(`T - ${t.name}`, gridSheet(e => AS[e.a].teacher === t.id,
     e => { const { a, s } = label(e); return `${s.short} · ${gLabel(c, a.group)} · ${e.room}`; })));
   XLSX.writeFile(wb, `${c.name.replace(/[^\w ]+/g, '').trim() || 'timetable'} timetable${g.version ? ' v' + g.version : ''}.xlsx`);
@@ -1816,7 +1876,7 @@ function editBar(c, g) {
     : n ? `${n} free slot${n > 1 ? 's' : ''} shown in green: click one to move it, or click another class to swap.`
         : 'No free slot for it in this view. Click another class to swap, or try the teacher or room view.');
   return bar('border-indigo-200 bg-indigo-50 text-indigo-900', text,
-    `${btn(locked ? 'Unlock' : 'Lock in place', 'toggleLock()', 'secondary', 'lock')}${btn('Cancel', 'cancelSel()')}`);
+    `${A(c)[state.sel.a].elective ? '' : btn(locked ? 'Unlock' : 'Lock in place', 'toggleLock()', 'secondary', 'lock')}${btn('Cancel', 'cancelSel()')}`);
 }
 
 function grid(c, entries, bad) {
@@ -1853,7 +1913,7 @@ function grid(c, entries, bad) {
 
 function inView(c, e) {
   const a = A(c)[e.a], ix = idx(c);
-  if (state.view === 'section') return ix.groups[a.group].section === state.key;
+  if (state.view === 'section') return secsOf(c, a.group).includes(state.key);
   if (state.view === 'teacher') return a.teacher === state.key;
   return e.room === state.key;
 }
@@ -1889,13 +1949,14 @@ function block(c, e, bad) {
   else if (e.preview) extra = ' outline outline-2 outline-dashed outline-amber-500 outline-offset-1';
   else if (selected) extra = ' ring-2 ring-indigo-500';
   else if (bad.has(e.i)) extra = ' ring-2 ring-red-500';
-  const line2 = state.view === 'section' ? `${T.name} · ${e.room}` : state.view === 'teacher' ? `${gLabel(c, a.group)} · ${e.room}` : `${gLabel(c, a.group)} · ${T.name}`;
-  const tag = G.isSub && state.view === 'section' ? `<span class="mr-1 rounded bg-white/80 px-1 text-[10px] font-semibold">${G.label}</span>` : '';
+  const line2 = state.view === 'section' ? `${T.name} · ${e.room}` : state.view === 'teacher' ? `${G.elective ? ix.electives[G.elective].name : gLabel(c, a.group)} · ${e.room}` : `${G.elective ? ix.electives[G.elective].name : gLabel(c, a.group)} · ${T.name}`;
+  const tag = G.elective ? `<span class="mr-1 rounded bg-white/80 px-1 text-[10px] font-semibold" title="${esc(ix.electives[G.elective].name)}">${esc((c.electives || []).find(x => x.id === G.elective)?.id || 'Elective')}</span>`
+    : G.isSub && state.view === 'section' ? `<span class="mr-1 rounded bg-white/80 px-1 text-[10px] font-semibold">${G.label}</span>` : '';
   const note = e.preview ? '<span class="text-[10px] font-semibold text-amber-700">New</span>' : e.ghost ? '<span class="text-[10px] font-semibold text-slate-500">Moving</span>'
     : locked ? `<span class="text-slate-500" title="Locked in place">${icon('lock', 'w-3 h-3')}</span>` : '';
   const clickable = g && !e.ghost && !e.preview && !state.preview && !state.viewing && !isViewer();
   return `<div ${clickable ? `onclick="pickSession(${e.a}, '${e.day}')" role="button" tabindex="0"` : ''} class="tt-cell rounded-lg border px-2 py-1.5 ${KIND[s.kind].cls}${extra}${clickable ? ' cursor-pointer hover:brightness-95' : ''}" title="${esc(s.name)} · ${KIND[s.kind].label}${locked ? ' · locked' : ''}">
-    <div class="flex items-center justify-between gap-1"><span class="truncate text-[13px] font-semibold ${e.ghost ? 'line-through' : ''}">${tag}${s.short}</span>${note}</div>
+    <div class="flex items-center justify-between gap-1"><span class="truncate text-[13px] font-semibold ${e.ghost ? 'line-through' : ''}">${tag}${G.elective ? esc(G.label) : s.short}</span>${note}</div>
     <div class="truncate text-[11px] opacity-75">${line2}</div></div>`;
 }
 
@@ -2030,7 +2091,7 @@ function showProposal(p) {
     state.chat.messages.push({ role: 'assistant', content: 'The timetable changed while I was working on that, so I can\'t show the preview. Please ask again.', error: true });
     return;
   }
-  const pos = new Map(c._ids.map((id, i) => [id, i]));
+  const pos = new Map(allIds(c).map((id, i) => [id, i]));
   const changes = p.changes.map(ch => ({ ei: g.entries.findIndex(e => e.a === pos.get(ch.assignment) && e.day === ch.from_day && e.period === ch.from_period),
                                          day: ch.day, period: ch.period, room: ch.room }));
   if (changes.some(ch => ch.ei < 0)) {
@@ -2058,6 +2119,7 @@ const ENT = {
   subjects: { label: 'Subjects', one: 'subject' },
   rooms: { label: 'Rooms', one: 'room' },
   assignments: { label: 'Teaching assignments', one: 'teaching assignment' },
+  electives: { label: 'Electives', one: 'elective group' },
 };
 // Spreadsheet columns for import and for the downloadable template.
 const COLUMNS = {
@@ -2073,7 +2135,7 @@ const deptName = (c, id) => c.departments.find(d => d.id === id)?.name ?? id;
 const courseOf = (c, id) => (c.courses || []).find(x => x.id === id);
 const sectionOf = (c, groupId) => c.sections.find(s => s.id === idx(c).groups[groupId]?.section);
 // The department whose students a group belongs to.
-const groupDept = (c, groupId) => sectionOf(c, groupId)?.dept;
+const groupDept = (c, groupId) => sectionOf(c, secsOf(c, groupId)[0])?.dept;
 const isGuest = (c, a) => idx(c).teachers[a[2] ?? a.teacher]?.dept !== groupDept(c, a[1] ?? a.group);
 const deptBadge = (id, tone = 'slate') => `<span class="rounded ${tone === 'indigo' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'} px-1.5 py-0.5 text-[11px] font-medium">${esc(id)}</span>`;
 
@@ -2108,6 +2170,7 @@ function dataChanged(c, message, affectsTimetable = true) {
 
 /* ---- current record → form values (strings, as typed) ---- */
 function toValues(c, entity, ref) {
+  if (entity === 'electives') return electiveValues(c, ref);
   const filterDept = state.deptFilter && state.deptFilter !== 'all' ? state.deptFilter : null;
   if (entity === 'departments') {
     const d = ref != null ? c.departments[ref] : null;
@@ -2146,6 +2209,7 @@ function toValues(c, entity, ref) {
 
 /* ---- the one place where every rule for good data lives ---- */
 function validateValues(c, entity, v, ref, seen = new Set()) {
+  if (entity === 'electives') return validateElective(c, v, ref);
   const ix = idx(c), err = {}, S = c.scheme;
   const deptIds = c.departments.map(d => d.id);
   const taken = (list, val) => list.some(x => x.toLowerCase() === String(val).toLowerCase()) || seen.has(String(val).toLowerCase());
@@ -2315,6 +2379,7 @@ function saveRecord(c, entity, record, ref) {
       const i = old.subs.findIndex(u => a[1] === `${old.id}/${u.label}`);
       if (i >= 0) a[1] = `${record.id}/${record.subs[i].label}`;
     });
+    (c.electives || []).forEach(e => { e.sections = e.sections.map(x => x === old.id ? record.id : x); });
     c.sections[ref] = record;
   } else if (entity === 'teachers') {
     ref == null ? c.teachers.push(record) : (c.teachers[ref] = record);
@@ -2326,7 +2391,11 @@ function saveRecord(c, entity, record, ref) {
       Object.entries(c.subjects).forEach(([k, s]) => rebuilt[k === ref ? record.code : k] = k === ref ? record.subject : s);
       c.subjects = rebuilt;
       c.assignments.forEach(a => { if (a[0] === ref) a[0] = record.code; });
+      (c.electives || []).forEach(e => e.options.forEach(o => { if (o.subject === ref) o.subject = record.code; }));
     } else c.subjects[record.code] = record.subject;
+  } else if (entity === 'electives') {
+    c.electives ||= [];
+    ref == null ? c.electives.push(record) : (c.electives[ref] = record);
   } else {
     ref == null ? c.assignments.push(record) : (c.assignments[ref] = record);
   }
@@ -2343,17 +2412,19 @@ function deleteBlockReason(c, entity, ref) {
     const x = c.courses[ref], n = c.sections.filter(s => s.course === x.id).length;
     return n ? `${x.name} has ${n} section(s). Move or delete those first.` : null;
   }
+  const inElectives = pred => (c.electives || []).filter(pred).map(e => e.name);
   if (entity === 'sections') {
-    const s = c.sections[ref], n = assignmentsOf(c, a => a[1] === s.id || a[1].startsWith(`${s.id}/`));
-    return n ? `${s.id} has ${n} teaching assignment(s). Delete those first.` : null;
+    const s = c.sections[ref], n = assignmentsOf(c, a => a[1] === s.id || a[1].startsWith(`${s.id}/`)), el = inElectives(e => e.sections.includes(s.id));
+    return n ? `${s.id} has ${n} teaching assignment(s). Delete those first.` : el.length ? `${s.id} takes ${el.join(', ')}. Remove it from there first.` : null;
   }
   if (entity === 'teachers') {
-    const t = c.teachers[ref], n = assignmentsOf(c, a => a[2] === t.id);
-    return n ? `${t.name} teaches ${n} class(es). Give them to another teacher or delete them first.` : null;
+    const t = c.teachers[ref], n = assignmentsOf(c, a => a[2] === t.id), el = inElectives(e => e.options.some(o => o.teachers.includes(t.id)));
+    return n ? `${t.name} teaches ${n} class(es). Give them to another teacher or delete them first.`
+      : el.length ? `${t.name} teaches in ${el.join(', ')}. Choose another teacher there first.` : null;
   }
   if (entity === 'subjects') {
-    const n = assignmentsOf(c, a => a[0] === ref);
-    return n ? `${c.subjects[ref].short} is taught in ${n} class(es). Delete those first.` : null;
+    const n = assignmentsOf(c, a => a[0] === ref), el = inElectives(e => e.options.some(o => o.subject === ref));
+    return n ? `${c.subjects[ref].short} is taught in ${n} class(es). Delete those first.` : el.length ? `${c.subjects[ref].short} is an option in ${el.join(', ')}. Remove it there first.` : null;
   }
   return null;
 }
@@ -2362,7 +2433,96 @@ const recordName = (c, entity, ref) => ({
   sections: () => c.sections[ref].id, teachers: () => c.teachers[ref].name, rooms: () => c.rooms[ref].id,
   subjects: () => `${ref} ${c.subjects[ref].name}`,
   assignments: () => { const a = c.assignments[ref]; return `${c.subjects[a[0]].short} for ${gLabel(c, a[1])}`; },
+  electives: () => c.electives[ref].name,
 }[entity]());
+
+/* ------------------------------------------------------------------------------------------------
+   ELECTIVES: students of several sections choose between subjects (e.g. Departmental Elective-I).
+   The coordinator types how many students chose each subject; Samay splits a subject into batches of
+   at most the college's elective class size (one teacher per batch). While any of its classes runs,
+   the group's sections have nothing else; running the options at the same time is preferred.
+------------------------------------------------------------------------------------------------- */
+const batchCount = (c, o) => o.batches || Math.max(1, Math.ceil((Number(o.students) || 0) / (c.scheme.rules.electiveClassSize || 70)));
+function electiveValues(c, ref) {
+  const e = ref != null ? c.electives[ref] : null;
+  return e ? { code: e.id, name: e.name, sections: [...e.sections], periods: e.periods != null ? String(e.periods) : '',
+               options: e.options.map(o => ({ subject: o.subject, students: String(o.students), teachers: [...o.teachers] })) }
+           : { code: '', name: '', sections: [], periods: '', options: [{ subject: '', students: '', teachers: [] }] };
+}
+function eo(i, field, value, rerender) { state.modal.values.options[i][field] = value; if (rerender) render(); }
+function eot(i, k, value) { state.modal.values.options[i].teachers[k] = value; }
+function toggleElectiveSection(id) {
+  const s = state.modal.values.sections, i = s.indexOf(id);
+  i >= 0 ? s.splice(i, 1) : s.push(id);
+}
+function addElectiveOption() { state.modal.values.options.push({ subject: '', students: '', teachers: [] }); render(); }
+function removeElectiveOption(i) { state.modal.values.options.splice(i, 1); render(); }
+
+function electiveForm(c, m) {
+  const v = m.values, ix = idx(c), size = c.scheme.rules.electiveClassSize || 70;
+  const subjectOpts = [['', 'Choose a subject…'], ...Object.entries(c.subjects).map(([k, s]) => [k, `${k} · ${s.name} (${KIND[s.kind].label})`])];
+  const teacherOpts = [['', 'Choose a teacher…'], ...c.teachers.map(t => [t.id, `${t.name} · ${t.dept}`])];
+  const sectionsHtml = c.departments.map(d => {
+    const list = c.sections.filter(s => s.dept === d.id);
+    return list.length ? `<div><div class="mb-1 text-xs font-medium text-slate-500">${esc(d.name)}</div><div class="flex flex-wrap gap-x-4 gap-y-1">${list.map(s => `
+      <label class="inline-flex items-center gap-1.5 text-sm"><input type="checkbox" ${v.sections.includes(s.id) ? 'checked' : ''} onchange="toggleElectiveSection('${esc(s.id)}')" class="h-4 w-4 accent-indigo-600"/>${esc(s.id)}${s.sem ? ` <span class="text-xs text-slate-400">Sem ${s.sem}</span>` : ''}</label>`).join('')}</div></div>` : '';
+  }).join('');
+  const options = v.options.map((o, i) => {
+    const n = batchCount(c, o);
+    return `<div class="rounded-lg border border-slate-200 p-3">
+      <div class="grid gap-2 sm:grid-cols-[1fr_8rem_auto] sm:items-end">
+        <label class="block"><span class="mb-1 block text-xs font-medium text-slate-600">Subject</span>
+          <select onchange="eo(${i}, 'subject', this.value)" class="${inputCls(false)}">${optionsHtml(subjectOpts, o.subject)}</select></label>
+        <label class="block"><span class="mb-1 block text-xs font-medium text-slate-600">Students</span>
+          <input type="number" min="1" value="${esc(o.students)}" oninput="eo(${i}, 'students', this.value)" onchange="render()" class="${inputCls(false)}"/></label>
+        ${v.options.length > 1 ? `<button onclick="removeElectiveOption(${i})" class="rounded-md px-2 py-2 text-xs text-slate-500 hover:bg-red-50 hover:text-red-700">Remove</button>` : '<span></span>'}
+      </div>
+      <p class="mt-2 text-xs text-slate-500">${Number(o.students) > 0 ? (n > 1 ? `${o.students} students → <b>${n} batches</b> of up to ${size}. Choose a teacher for each (the same teacher can take more than one).` : 'Fits in one class.') : 'Type how many students chose it.'}</p>
+      <div class="mt-2 grid gap-2 sm:grid-cols-2">${Array.from({ length: n }, (_, k) => `
+        <label class="block"><span class="mb-1 block text-xs font-medium text-slate-600">${n > 1 ? `Teacher, batch ${k + 1}` : 'Teacher'}</span>
+          <select onchange="eot(${i}, ${k}, this.value)" class="${inputCls(false)}">${optionsHtml(teacherOpts, o.teachers[k] || '')}</select></label>`).join('')}</div>
+    </div>`;
+  }).join('');
+  const fieldErr2 = f => m.errors[f] ? `<p class="mt-1 text-xs text-red-600">${esc(m.errors[f])}</p>` : '';
+  return `<p class="text-sm text-slate-500">Students of the chosen sections pick one of these subjects. Samay keeps those sections free whenever one of these classes runs,
+      and tries to run them all at the same time in different rooms. Which students go to which batch is up to you.</p>
+    <div class="grid grid-cols-3 gap-3"><div>${fInput(m, 'code', 'Code', { placeholder: 'DE-I' })}</div>
+      <div class="col-span-2">${fInput(m, 'name', 'Name', { placeholder: 'Departmental Elective-I' })}</div></div>
+    <div><span class="mb-1 block text-sm font-medium text-slate-700">Taken by students of</span>
+      <div class="space-y-2 rounded-lg border border-slate-200 p-3">${sectionsHtml || '<p class="text-sm text-slate-500">Add sections first.</p>'}</div>${fieldErr2('sections')}</div>
+    <div><span class="mb-1 block text-sm font-medium text-slate-700">Subjects to choose from</span>
+      <div class="space-y-2">${options}</div>
+      <button onclick="addElectiveOption()" class="mt-2 text-sm font-medium text-indigo-600 hover:underline">+ Add another subject</button>${fieldErr2('options')}</div>
+    <div class="grid grid-cols-2 gap-3">${fInput(m, 'periods', 'Periods a week (optional)', { type: 'number', placeholder: String(c.scheme.rules.lecturesPerWeek), hint: 'Leave blank to use the college rule.' })}
+      <div class="self-end text-xs text-slate-500">Class size for electives: up to ${size} students (change it in the college scheme).</div></div>`;
+}
+
+function validateElective(c, v, ref) {
+  const err = {}, code = String(v.code || '').trim().toUpperCase(), name = String(v.name || '').trim();
+  if (!/^[A-Z0-9-]{1,16}$/.test(code)) err.code = 'Use up to 16 letters, numbers or "-", like DE-I.';
+  else if ((c.electives || []).some((e, i) => i !== ref && e.id.toUpperCase() === code)) err.code = `${code} already exists.`;
+  if (!name) err.name = 'Enter a name, like Departmental Elective-I.';
+  if (!v.sections.length) err.sections = 'Choose the sections whose students take it.';
+  const per = intOrNull(v.periods);
+  if (per !== null && !isInt(per, 1, c.scheme.days.length * idx(c).P.length)) err.periods = 'Enter a whole number, or leave blank.';
+  const options = [], problems = [], kinds = new Set(), weeks = new Set();
+  v.options.forEach((o, i) => {
+    const s = c.subjects[o.subject], students = intOrNull(o.students), n = batchCount(c, o);
+    if (!s) { problems.push(`Choose a subject for row ${i + 1}.`); return; }
+    if (options.some(x => x.subject === o.subject)) problems.push(`${s.short} is listed twice.`);
+    if (!isInt(students, 1, 5000)) problems.push(`Enter how many students chose ${s.short}.`);
+    const teachers = Array.from({ length: n }, (_, k) => o.teachers[k]);
+    if (teachers.some(t => !t)) problems.push(`Choose a teacher for every batch of ${s.short}.`);
+    kinds.add(s.kind === 'lab' ? 'lab' : 'class'); weeks.add(weekly(c, o.subject));
+    options.push({ subject: o.subject, students, teachers });
+  });
+  if (!v.options.length) problems.push('Add at least one subject.');
+  if (kinds.size > 1) problems.push('Labs and lectures can\'t be mixed. Put lab electives in their own elective group.');
+  if (per === null && weeks.size > 1) problems.push('These subjects have different periods a week. They run together, so set the periods a week here.');
+  if (kinds.has('lab') && per !== null && per % c.scheme.labBlock) err.periods = `Labs run in blocks of ${c.scheme.labBlock} periods, so use a multiple of ${c.scheme.labBlock}.`;
+  if (problems.length) err.options = problems.join(' ');
+  return { errors: err, record: Object.keys(err).length ? null : { id: code, name, sections: [...v.sections], options, ...(per !== null ? { periods: per } : {}) } };
+}
 
 /* ---- modal actions ---- */
 function openForm(entity, ref = null) {
@@ -2619,6 +2779,7 @@ function teacherOptions(c, firstDept) {
 }
 
 function formBody(c, m) {
+  if (m.entity === 'electives') return electiveForm(c, m);
   const ix = idx(c), v = m.values, depts = c.departments.filter(d => !isHod() || d.id === state.me.dept).map(d => [d.id, `${d.id} · ${d.name}`]);
   if (m.entity === 'departments') {
     return `<div class="grid grid-cols-3 gap-3"><div>${fInput(m, 'code', 'Code', { placeholder: 'ME' })}</div>
@@ -2711,7 +2872,7 @@ function modal() {
   }
   if (m.kind === 'form') {
     return shell(`${m.ref == null ? 'Add' : 'Edit'} ${ENT[m.entity].one}`, formBody(c, m),
-      `${btn('Cancel', 'closeModal()')}${btn(m.ref == null ? `Add ${ENT[m.entity].one}` : 'Save changes', 'saveForm()', 'primary', 'check')}`);
+      `${btn('Cancel', 'closeModal()')}${btn(m.ref == null ? `Add ${ENT[m.entity].one}` : 'Save changes', 'saveForm()', 'primary', 'check')}`, m.entity === 'electives');
   }
   if (m.kind === 'confirm') {
     return m.blocked
@@ -2774,7 +2935,7 @@ function dataPage() {
     <button onclick="openForm('${tab}', ${JSON.stringify(ref).replace(/"/g, '&quot;')})" class="rounded-md px-2 py-1 font-medium text-indigo-600 hover:bg-indigo-50">Edit</button>
     <button onclick="askDelete('${tab}', ${JSON.stringify(ref).replace(/"/g, '&quot;')})" class="rounded-md px-2 py-1 text-slate-500 hover:bg-red-50 hover:text-red-700">Delete</button></td>`;
   const f = isHod() ? state.me.dept : state.deptFilter && state.deptFilter !== 'all' && c.departments.some(d => d.id === state.deptFilter) ? state.deptFilter : null;
-  if (isHod() && ['departments', 'rooms'].includes(tab)) { state.dataTab = 'courses'; return dataPage(); }
+  if (isHod() && ['departments', 'rooms', 'electives'].includes(tab)) { state.dataTab = 'courses'; return dataPage(); }
   const editable = ref => !isHod() || canHodEdit(c, tab, ref);
   const courses = c.courses || [];
 
@@ -2794,7 +2955,8 @@ function dataPage() {
     teachers: c.teachers.map((t, i) => [t, i]).filter(([t]) => !f || t.dept === f || teachesIn[t.id]?.has(f)),
     subjects: Object.entries(c.subjects).filter(([code, s]) => !f || s.dept === f || subjectTaughtTo(code).has(f)),
     rooms: c.rooms.map((r, i) => [r, i]).filter(([r]) => !f || r.owner === f || r.owner === 'Shared'),
-    assignments: A(c).filter(inDept),
+    assignments: A(c).filter(a => !a.elective && inDept(a)),
+    electives: (c.electives || []).map((e, i) => [e, i]).filter(([e]) => !f || e.sections.some(x => c.sections.find(s => s.id === x)?.dept === f)),
   };
   const counts = Object.fromEntries(Object.entries(list).map(([k, v]) => [k, v.length]));
   const deptChips = set => [...set].filter(Boolean).map(d => deptBadge(d)).join(' ');
@@ -2837,10 +2999,17 @@ function dataPage() {
         ${td(esc(T.name) + (T.dept !== sd ? guestBadge(T.dept) : ''))}${td(`${a.periods} <span class="text-xs ${own ? 'text-amber-700' : 'text-slate-400'}">${own ? 'set here' : 'default'}</span>`)}${actions(a.i)}</tr>`;
     })],
   };
+  views.electives = () => [['Code', 'Elective group', 'Taken by', 'Subjects (students → batches)', 'Periods a week'], list.electives.map(([e, i]) => `<tr>
+    ${td(esc(e.id), 'font-mono text-xs')}${td(esc(e.name), 'font-medium')}
+    ${td(e.sections.map(x => `<span class="mr-1 inline-block rounded bg-slate-100 px-1.5 py-0.5 text-xs">${esc(x)}</span>`).join(''))}
+    ${td(e.options.map(o => { const n = batchCount(c, o), s = c.subjects[o.subject];
+      return `<div class="whitespace-nowrap text-xs"><b>${esc(s?.short || o.subject)}</b> · ${o.students} students${n > 1 ? ` → ${n} batches` : ''} · ${o.teachers.slice(0, n).map(t => esc(ix.teachers[t]?.name || t)).join(', ')}</div>`; }).join(''))}
+    ${td(e.periods ?? (e.options[0] ? weekly(c, e.options[0].subject) : '–'))}${actions(i)}</tr>`)];
   const [heads, rows] = views[tab]();
   const hint = {
     departments: 'Each department has its own courses, sections, teachers and subjects. Teachers can still teach other departments\' students.',
     courses: 'Courses (programmes) belong to a department, like B.Tech CSE or MCA. Sections belong to a course and semester.',
+    electives: `Subjects students choose between, like Departmental Elective-I or an open elective. Type how many students chose each one: a subject with more than ${c.scheme.rules.electiveClassSize || 70} students is split into batches. While an elective runs, its sections have no other class.`,
     assignments: `Who teaches what to whom. Lectures go to a whole section; labs go to one lab group. A teacher from another department is marked "Guest". Default: ${c.scheme.rules.lecturesPerWeek} lectures a week per subject.`,
   }[tab];
   return `
@@ -2850,10 +3019,10 @@ function dataPage() {
     <div class="flex flex-wrap gap-2">
       ${tab !== 'departments' && !isHod() ? `<select onchange="state.deptFilter = this.value; render()" aria-label="Filter by department" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
         ${optionsHtml([['all', 'All departments'], ...c.departments.map(d => [d.id, d.name])], f || 'all')}</select>` : ''}
-      ${btn('Import from Excel', `openImport('${tab}')`, 'secondary', 'table')}${btn(`Add ${ENT[tab].one}`, `openForm('${tab}')`, 'primary')}</div>
+      ${COLUMNS[tab] ? btn('Import from Excel', `openImport('${tab}')`, 'secondary', 'table') : ''}${btn(`Add ${ENT[tab].one}`, `openForm('${tab}')`, 'primary')}</div>
   </div>
   <div class="mb-3 flex gap-1 overflow-x-auto border-b border-slate-200">
-    ${Object.entries(ENT).filter(([k]) => !isHod() || !['departments', 'rooms'].includes(k)).map(([k, e]) => `<button onclick="state.dataTab='${k}'; render()" class="-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm ${k === tab ? 'border-indigo-600 font-medium text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-700'}">
+    ${Object.entries(ENT).filter(([k]) => !isHod() || !['departments', 'rooms', 'electives'].includes(k)).map(([k, e]) => `<button onclick="state.dataTab='${k}'; render()" class="-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm ${k === tab ? 'border-indigo-600 font-medium text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-700'}">
       ${e.label} <span class="ml-1 rounded-full bg-slate-100 px-1.5 text-xs text-slate-600">${counts[k]}</span></button>`).join('')}
   </div>
   ${f && tab !== 'departments' ? `<p class="mb-3 text-sm text-slate-500">Showing ${esc(deptName(c, f))}${tab === 'teachers' ? ', including guest teachers who teach its students' : tab === 'rooms' ? ' rooms and shared rooms' : tab === 'assignments' ? ': classes for its students and classes its teachers give elsewhere' : ''}.</p>` : ''}
@@ -2862,7 +3031,7 @@ function dataPage() {
     <tbody class="divide-y divide-slate-100">${rows.join('')}</tbody></table></div>`)
     : card(`<div class="py-10 text-center"><div class="font-medium">No ${ENT[tab].label.toLowerCase()} yet</div>
       <p class="mt-1 text-sm text-slate-500">Add them one by one or import a spreadsheet.</p>
-      <div class="mt-4 flex justify-center gap-2">${btn('Import from Excel', `openImport('${tab}')`)}${btn(`Add ${ENT[tab].one}`, `openForm('${tab}')`, 'primary')}</div></div>`)}`;
+      <div class="mt-4 flex justify-center gap-2">${COLUMNS[tab] ? btn('Import from Excel', `openImport('${tab}')`) : ''}${btn(`Add ${ENT[tab].one}`, `openForm('${tab}')`, 'primary')}</div></div>`)}`;
 }
 
 function precheckPage() {
@@ -2913,6 +3082,7 @@ function openScheme() {
       periods: S.periods.map(([, start, end], i) => ({ start, end, brk: S.breaks.find(b => b.after === i + 1)?.label || '' })),
       lecturesPerWeek: String(S.rules.lecturesPerWeek), labSessionsPerWeek: String(S.rules.labSessionsPerWeek),
       labBlock: String(S.labBlock), maxSame: String(S.rules.maxSameSubjectPerDay), teacherMax: String(S.rules.teacherMaxPerDay),
+      electiveSize: String(S.rules.electiveClassSize || 70),
       theoryRoomType: S.theoryRoomType, labNaming: S.labPrefix === 'section' ? 'section' : 'prefix', labPrefix: S.labPrefix === 'section' ? 'G' : S.labPrefix,
     },
   };
@@ -2958,6 +3128,7 @@ function checkScheme(c, v) {
   if (!isInt(block, 1, Math.max(1, ps.length))) err.labBlock = `Enter 1–${ps.length || 1} periods.`;
   if (!isInt(tmax, 1, Math.max(1, ps.length))) err.teacherMax = `Enter 1–${ps.length || 1} periods.`;
   if (v.labNaming === 'prefix' && !/^[A-Za-z]{1,3}$/.test(String(v.labPrefix || '').trim())) err.labPrefix = 'Use 1–3 letters, like G or L.';
+  if (!isInt(n('electiveSize'), 1, 1000)) err.electiveSize = 'Enter how many students fit in one elective class, like 70.';
 
   // Existing data must still fit the new scheme.
   if (!err.maxSame) {
@@ -2994,7 +3165,7 @@ function saveScheme() {
     rules: {
       ...c.scheme.rules,
       lecturesPerWeek: intOrNull(v.lecturesPerWeek), labSessionsPerWeek: intOrNull(v.labSessionsPerWeek),
-      maxSameSubjectPerDay: intOrNull(v.maxSame), teacherMaxPerDay: intOrNull(v.teacherMax),
+      maxSameSubjectPerDay: intOrNull(v.maxSame), teacherMaxPerDay: intOrNull(v.teacherMax), electiveClassSize: intOrNull(v.electiveSize),
     },
   };
   dataChanged(c, `Scheme saved.${dropped ? ` ${dropped} unavailable slot(s) on removed days or periods were cleared.` : ''}`);
@@ -3035,6 +3206,7 @@ function schemeForm(c, m) {
         ${num('lecturesPerWeek', 'Lectures per subject a week', 'For example 3.')}
         ${num('maxSame', 'Same subject per day, at most', 'Usually 1, so subjects spread over the week.')}
         ${num('teacherMax', 'Teacher periods a day, at most', 'Default for teachers.')}
+        ${num('electiveSize', 'Students in one elective class, at most', 'Bigger electives are split into batches.')}
       </div>`)}
     ${section('Labs', 'How practical classes run.', `
       <div class="grid gap-3 sm:grid-cols-3">

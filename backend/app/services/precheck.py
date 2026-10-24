@@ -41,7 +41,8 @@ def precheck(data: dict) -> list[dict]:
     for section, subs in c.subsections.items():
         whole = sum(a["periods"] for a in c.assignments.values() if a["group"] == section)
         labs = max((sum(a["periods"] for a in c.assignments.values() if a["group"] == g) for g in subs), default=0)
-        need = whole + labs
+        electives = sum(c.assignments[e["batches"][0]]["periods"] for e in c.electives.values() if section in e["sections"])
+        need = whole + labs + electives
         if need > slots:
             out.append({"level": "error", "text": f"{section} needs {need} periods but the week has only {slots}.", "fix": "sections"})
         else:
@@ -64,6 +65,18 @@ def precheck(data: dict) -> list[dict]:
         if key not in reported and not any(r["type"] == room_type and r["capacity"] >= g.strength for r in c.rooms.values()):
             reported.add(key)
             out.append({"level": "error", "text": f"No {type_name(room_type).lower()} is big enough for {c.group_label(g.id)} ({g.strength} students).", "fix": "rooms"})
+
+    # An elective group's classes are best run together, each needing its own big-enough room at that time.
+    for e in c.electives.values():
+        by_type: dict[str, list[int]] = defaultdict(list)
+        for bid in e["batches"]:
+            by_type[c.room_type(bid)].append(c.groups[c.assignments[bid]["group"]].strength)
+        for room_type, sizes in by_type.items():
+            caps = sorted((r["capacity"] for r in c.rooms.values() if r["type"] == room_type), reverse=True)
+            if len(caps) < len(sizes) or any(cap < size for cap, size in zip(caps, sorted(sizes, reverse=True))):
+                out.append({"level": "warn", "text": f"{e['name']} has {len(sizes)} classes ({', '.join(map(str, sorted(sizes, reverse=True)))} students) but not enough "
+                            f"big {type_name(room_type).lower()}s to run them all at the same time. They'll be placed at different times, which keeps "
+                            f"its sections busy for longer.", "fix": "rooms"})
 
     for tid, t in c.teachers.items():
         if off := sorted(c.unavailable.get(tid, ()), key=lambda x: (c.days.index(x[0]), x[1])):

@@ -12,6 +12,7 @@ from ortools.sat.python import cp_model
 from .college import build
 
 PARALLEL_LAB_WEIGHT = 10  # A1 busy while A2 is idle (and vice versa)
+ELECTIVE_SPREAD_WEIGHT = 4  # per period an elective group keeps its sections busy: prefer its options at the same time
 LATE_PERIOD_COST = {6: 1, 7: 3}  # prefer finishing the day early
 
 
@@ -70,6 +71,22 @@ def solve(data: dict, time_limit: float = 20.0, workers: int = 8, fixed: list[di
                                   "(the room, the teacher's availability or the timings changed). Unlock it and generate again.")
         m.Add(match[0] == 1)
 
+    # Electives: whenever any batch of a group runs, the group's sections have nothing else (any of their students may
+    # be in it). Batches may run in parallel (different students); running them together is preferred (soft).
+    elective_busy: dict[tuple, list] = defaultdict(list)  # (section, day, period) -> "group is running" indicators
+    for gid, e in c.electives.items():
+        for day in c.days:
+            for p in c.periods:
+                vs = [v for bid in e["batches"] for v in occ.get((bid, day, p), [])]
+                if not vs:
+                    continue
+                running = m.NewBoolVar(f"e_{gid}_{day}_{p}")
+                for v in vs:
+                    m.Add(running >= v)
+                cost_terms.append(ELECTIVE_SPREAD_WEIGHT * running)
+                for section in e["sections"]:
+                    elective_busy[(section, day, p)].append(running)
+
     by_teacher: dict[str, list[str]] = defaultdict(list)
     by_group: dict[str, list[str]] = defaultdict(list)
     for aid, a in c.assignments.items():
@@ -89,7 +106,7 @@ def solve(data: dict, time_limit: float = 20.0, workers: int = 8, fixed: list[di
                 if len(vs) > 1:
                     m.AddAtMostOne(vs)
             for section, subs in c.subsections.items():
-                whole = busy(by_group[section], day, p)
+                whole = busy(by_group[section], day, p) + elective_busy.get((section, day, p), [])
                 for sub in subs or [None]:
                     vs = whole + (busy(by_group[sub], day, p) if sub else [])
                     if len(vs) > 1:
