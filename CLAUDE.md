@@ -23,6 +23,10 @@ Full product plan and roadmap: `docs/requirements.md`.
     department names, heads or ready status). Revise/restore refuse out-of-date versions.
   - Locks: `{assignment, subject, group, day, start, room}`; the solver's `fixed=` keeps them in place; locks that no
     longer match the class (subject/group changed) are dropped with a message. Version numbers never repeat.
+  - AI assistant (`routers/assistant.py`, coordinators only): Claude (`claude-opus-5-5`, tool runner) with the read-only
+    tools in `services/assistant_tools.py`, bound to the signed-in college. `propose_change` only checks moves with the
+    validator and returns a proposal; the page previews it and saves through `/revise`. On only when `ANTHROPIC_API_KEY`
+    is set (never in the code); `SAMAY_ASSISTANT=0` turns it off. Tests replace Claude with a stand-in.
   - Sign-up (`SAMAY_SIGNUP`, default on) creates a college from `services/new_college.py` (Mon–Fri, 7 periods, lunch).
   - Roles: `coordinator` (everything; `coordinator_only` guards the timetables and users routers), `hod` (`users.dept_id`;
     may read college data and save it, but `services/departments.hod_problems` refuses any change outside their

@@ -12,3 +12,5 @@ SIGNUP = os.environ.get("SAMAY_SIGNUP", "1") == "1"
 DEMO_LOGIN = os.environ.get("SAMAY_DEMO_LOGIN", "1") == "1"
 SOLVE_SECONDS = float(os.environ.get("SAMAY_SOLVE_SECONDS", "30"))  # time limit for one generation run
 ALLOWED_ORIGINS = [o for o in os.environ.get("SAMAY_ORIGINS", "http://localhost:5173,http://localhost:5500").split(",") if o]
+# The AI assistant needs an Anthropic API key in the environment (never in the code). SAMAY_ASSISTANT=0 turns it off.
+ASSISTANT = os.environ.get("SAMAY_ASSISTANT", "1") != "0" and bool(os.environ.get("ANTHROPIC_API_KEY"))

@@ -42,6 +42,7 @@ API so far (each signed-in user only ever sees their own college):
 | Generate | `POST /api/timetables` starts a run (optionally keeping locked classes), `GET /api/jobs/{id}` shows its progress |
 | Editing and history | `POST /api/timetables/{v}/revise` (moved or swapped classes), `PUT /api/timetables/{v}/locks`, `POST /api/timetables/{v}/restore`, `DELETE /api/timetables/{v}` |
 | Publishing | `POST /api/timetables/{v}/publish` (the version teachers see), `DELETE /api/published`, `GET /api/published` (anyone signed in) |
+| AI assistant | `POST /api/assistant/chat` (coordinators; needs `ANTHROPIC_API_KEY`). Suggests changes; you apply them |
 | Teachers | `GET /api/teacher` (their record and the published timetable), `PUT /api/teacher/unavailable` (periods they can't teach) |
 | Timetables | `GET /api/timetables` (versions), `GET /api/timetables/latest`, `GET /api/timetables/{version}`, `POST /api/timetables/{version}/check`, `POST /api/timetables/{version}/revise` (save an approved change as a new version) |
 
@@ -50,6 +51,12 @@ classes to any teacher) and see the published timetable. Teachers see the publis
 Every saved timetable has passed the clash checker; each version keeps the data it was built from and is marked
 `out_of_date` when data that affects scheduling changes later (renaming a department or changing its status doesn't).
 New colleges can sign up from the sign-in page (turn off with `SAMAY_SIGNUP=0`).
+
+**AI assistant (optional).** Set your Anthropic API key in the terminal before starting the server, e.g. in PowerShell
+`$env:ANTHROPIC_API_KEY = "..."` (or `setx ANTHROPIC_API_KEY "..."` once, then open a new terminal). Never put the key in
+a file in this project. The coordinator's Assistant panel then chats with Claude, which can look at the timetable and
+propose moves; every proposal is checked for clashes, shown as a preview, and saved only when you click Apply. Without a
+key, the panel keeps its built-in suggestions.
 
 Frontend (app on http://localhost:5173):
 ```

@@ -14,7 +14,7 @@ HODS = {u["college"]: u for u in _USERS if u["role"] == "hod"}
 
 @pytest.fixture
 def app(tmp_path):
-    return create_app(db_path=tmp_path / "test.db", solve_seconds=20)
+    return create_app(db_path=tmp_path / "test.db", solve_seconds=20, assistant_chat=None)  # tests never call Claude
 
 
 @pytest.fixture
