@@ -9,11 +9,27 @@
       "password": "demo-eng-Samay-2026"
     },
     {
+      "email": "a.kumar@demo-eng.example",
+      "name": "Dr. A. Kumar",
+      "role": "teacher",
+      "teacher": "T01",
+      "college": "demo-eng",
+      "password": "demo-eng-Teacher-2026"
+    },
+    {
       "email": "coordinator@city-arts.example",
       "name": "Timetable Coordinator",
       "role": "coordinator",
       "college": "city-arts",
       "password": "city-arts-Samay-2026"
+    },
+    {
+      "email": "arjun.mehta@city-arts.example",
+      "name": "Mr. Arjun Mehta",
+      "role": "teacher",
+      "teacher": "C2",
+      "college": "city-arts",
+      "password": "city-arts-Teacher-2026"
     }
   ]
 }

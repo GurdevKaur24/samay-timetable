@@ -4,7 +4,7 @@ session, so one college can never ask for another's data."""
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ValidationError
 
-from ..auth import CurrentUser, current_user, get_db
+from ..auth import CurrentUser, coordinator_only, get_db
 from ..db import Database
 from ..schema import CollegeData
 
@@ -21,7 +21,7 @@ def own_data(user: CurrentUser, db: Database) -> dict:
 
 
 @router.get("")
-def college_summary(user: CurrentUser = Depends(current_user), db: Database = Depends(get_db)):
+def college_summary(user: CurrentUser = Depends(coordinator_only), db: Database = Depends(get_db)):
     data = own_data(user, db)
     return {
         "name": data["name"], "place": data.get("place", ""), "term": data.get("term", ""), "kind": data.get("kind", ""),
@@ -32,7 +32,7 @@ def college_summary(user: CurrentUser = Depends(current_user), db: Database = De
 
 
 @router.get("/data")
-def college_data(user: CurrentUser = Depends(current_user), db: Database = Depends(get_db)):
+def college_data(user: CurrentUser = Depends(coordinator_only), db: Database = Depends(get_db)):
     return {"version": db.get_data_version(user.college_id), "data": own_data(user, db)}
 
 
@@ -51,7 +51,7 @@ def plain_errors(e: ValidationError) -> list[str]:
 
 
 @router.put("/data")
-def save_college_data(body: SaveData, user: CurrentUser = Depends(current_user), db: Database = Depends(get_db)):
+def save_college_data(body: SaveData, user: CurrentUser = Depends(coordinator_only), db: Database = Depends(get_db)):
     """Replace the signed-in user's college data after checking all of it. The college id always comes from the session."""
     conflict = "Someone else changed your college's data after you opened it. Reload to see the latest, then try again."
     if body.version != db.get_data_version(user.college_id):

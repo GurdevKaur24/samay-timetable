@@ -57,7 +57,7 @@ def test_add_a_coordinator_who_can_then_sign_in(eng, make_client):
     r = eng.post("/api/users", json={"name": "Mr. Gill", "email": "gill@demo-eng.example", "password": "temporary-pass"})
     assert r.status_code == 201
     people = eng.get("/api/users").json()["users"]
-    assert {p["email"] for p in people} == {"coordinator@demo-eng.example", "gill@demo-eng.example"}
+    assert {p["email"] for p in people} == {"coordinator@demo-eng.example", "a.kumar@demo-eng.example", "gill@demo-eng.example"}
     assert sum(p["you"] for p in people) == 1
     other = make_client()
     signed_in = other.post("/api/auth/login", json={"email": "gill@demo-eng.example", "password": "temporary-pass"})
@@ -65,7 +65,7 @@ def test_add_a_coordinator_who_can_then_sign_in(eng, make_client):
 
 
 def test_users_list_shows_only_my_college(eng, arts):
-    assert {p["email"] for p in arts.get("/api/users").json()["users"]} == {"coordinator@city-arts.example"}
+    assert {p["email"] for p in arts.get("/api/users").json()["users"]} == {"coordinator@city-arts.example", "arjun.mehta@city-arts.example"}
 
 
 def test_remove_a_coordinator_but_not_yourself_or_another_colleges(eng, arts):
@@ -74,7 +74,7 @@ def test_remove_a_coordinator_but_not_yourself_or_another_colleges(eng, arts):
     assert eng.delete(f"/api/users/{me}").status_code == 400
     assert arts.delete(f"/api/users/{new_id}").status_code == 404  # other college can't touch it
     assert eng.delete(f"/api/users/{new_id}").status_code == 200
-    assert len(eng.get("/api/users").json()["users"]) == 1
+    assert new_id not in [p["id"] for p in eng.get("/api/users").json()["users"]]
 
 
 def test_change_password_signs_out_other_devices(make_client):

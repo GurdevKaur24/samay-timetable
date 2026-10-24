@@ -3,7 +3,7 @@ import json
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 
-from ..auth import COOKIE_NAME, CurrentUser, current_user, get_db
+from ..auth import COOKIE_NAME, ROLES, CurrentUser, current_user, get_db, user_from_row
 from ..db import SESSION_SECONDS, Database
 from ..schema import CollegeData
 from ..security import DUMMY_HASH, verify_password
@@ -21,7 +21,9 @@ class LoginIn(BaseModel):
 
 
 def me_payload(user: CurrentUser) -> dict:
-    return {"user": {"name": user.name, "email": user.email, "role": user.role}, "college": {"name": user.college_name}}
+    return {"user": {"name": user.name, "email": user.email, "role": user.role, "role_label": ROLES.get(user.role, user.role),
+                     "teacher": user.teacher_id},
+            "college": {"name": user.college_name}}
 
 
 @router.post("/login")
@@ -42,8 +44,7 @@ def start_session(row, request: Request, response: Response, db: Database) -> di
     token = db.create_session(row["id"])
     response.set_cookie(COOKIE_NAME, token, max_age=SESSION_SECONDS, httponly=True, samesite="lax",
                         secure=request.app.state.cookie_secure, path="/")
-    user = db.user_for_token(token)
-    return me_payload(CurrentUser(user["id"], user["email"], user["name"], user["role"], user["college_id"], user["college_name"]))
+    return me_payload(user_from_row(db.user_for_token(token)))
 
 
 # ---- demo accounts: only while demo sign-in is switched on (SAMAY_DEMO_LOGIN) --------------------------------
@@ -60,7 +61,8 @@ def demo_accounts(request: Request, db: Database = Depends(get_db)):
         row = db.find_user_by_email(u["email"])
         data = db.get_college_data(row["college_id"]) if row else None
         if data:
-            out.append({"email": u["email"], "role": u["role"], "college": data["name"], "place": data.get("place", "")})
+            out.append({"email": u["email"], "role": u["role"], "role_label": ROLES.get(u["role"], u["role"]), "name": u["name"],
+                        "college": data["name"], "place": data.get("place", "")})
     return {"accounts": out}
 
 

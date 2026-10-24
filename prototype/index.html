@@ -483,7 +483,10 @@ const state = {
   gen: {}, drawer: false, preview: null, history: [], applied: null, sim: null, generating: null, toast: null,
   // Live mode: the page was opened from the Samay server, so data, sign-in and generating go through the API.
   live: false, liveCollege: null, booting: true, demoAccounts: null, sync: null, staleVersion: null, signinError: null, signingIn: false, signinEmail: '',
+  // Who is signed in (live mode): a coordinator manages everything; a teacher sees the published timetable and sets their free times.
+  role: 'coordinator', me: null, teacherHome: null, published: null, avail: null,
 };
+const isTeacher = () => state.live && state.role === 'teacher';
 // While an older timetable version is open (read-only), the timetable page shows it with the data it was built from.
 const col = () => state.viewing ? state.viewing.college : state.live ? state.liveCollege : (state.ci === null ? null : COLLEGES[state.ci]);
 const current = () => state.viewing ? state.viewing.gen : state.gen[col().id];
@@ -755,6 +758,7 @@ async function openHistory() {
   if (!state.live) { state.modal = { kind: 'history', list: null }; render(); return; }
   try {
     const r = await api('/api/timetables');
+    state.published = r.published;
     state.modal = { kind: 'history', list: r.timetables, confirmDelete: null };
     render();
   } catch (e) { toast(e.message); }
@@ -792,7 +796,7 @@ function historyBody() {
   const m = state.modal;
   if (!m.list) return `<p class="text-sm text-slate-600">Timetable versions are saved when Samay runs from its server. In this demo, only the current timetable is kept.</p>`;
   if (!m.list.length) return `<p class="text-sm text-slate-600">No timetables yet. Generate one first.</p>`;
-  const latest = m.list[0].version;
+  const latest = m.list[0].version, pub = state.published?.version;
   const how = t => t.how === 'edited' ? `Edited from v${t.edited_from}` : t.how === 'restored' ? `Restored from v${t.restored_from}` : 'Generated';
   return `<p class="text-sm text-slate-500">Every timetable you generate or change is kept. Open any version to look at it, make an older one the latest again, or delete versions you don't need.</p>
     <div class="divide-y divide-slate-100 rounded-lg border border-slate-200">${m.list.map(t => `
@@ -800,19 +804,22 @@ function historyBody() {
         <div class="min-w-0">
           <div class="flex flex-wrap items-center gap-2 text-sm"><span class="font-semibold">v${t.version}</span>
             ${t.version === latest ? '<span class="rounded bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-700">Latest</span>' : ''}
+            ${t.version === pub ? '<span class="rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700" title="Teachers see this version">Published</span>' : ''}
             ${t.out_of_date ? '<span class="rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-800" title="Your data changed after this version was made">Older data</span>' : ''}
             <span class="text-slate-500">${how(t)}</span></div>
           <div class="text-xs text-slate-500">${new Date(t.created_at * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })} · score ${t.score}/100${t.locked ? ` · ${t.locked} locked` : ''}</div>
         </div>
         <div class="flex flex-wrap gap-1.5">
           ${btn('View', `viewVersion(${t.version})`)}
+          ${t.version !== pub && !t.out_of_date ? btn('Publish', `publishVersion(${t.version})`) : ''}
+          ${t.version === pub ? btn('Stop publishing', 'unpublish()') : ''}
           ${t.version !== latest && !t.out_of_date ? btn('Restore', `restoreVersion(${t.version})`) : ''}
-          ${m.confirmDelete === t.version
+          ${t.version === pub ? '' : m.confirmDelete === t.version
             ? `${btn('Delete v' + t.version, `deleteVersion(${t.version})`, 'danger')}${btn('Keep', 'state.modal.confirmDelete = null; render()')}`
             : btn('Delete', `state.modal.confirmDelete = ${t.version}; render()`)}
         </div>
       </div>`).join('')}</div>
-    <p class="text-xs text-slate-500">Versions marked "Older data" were made before your latest data changes. You can view or delete them, but not restore them: generate again instead.</p>`;
+    <p class="text-xs text-slate-500">Teachers see only the published version. Versions marked "Older data" were made before your latest data changes. You can view or delete them, but not publish or restore them: generate again instead.</p>`;
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -899,6 +906,7 @@ async function loadLatestTimetable() {
   const c = col();
   try {
     const t = await api('/api/timetables/latest');
+    state.published = t.published;
     if (t.out_of_date) { delete state.gen[c.id]; state.staleVersion = t.version; return; }
     const pos = new Map(c._ids.map((id, i) => [id, i]));
     state.gen[c.id] = {
@@ -909,8 +917,45 @@ async function loadLatestTimetable() {
     state.staleVersion = null;
   } catch (e) {
     if (e.status !== 404) throw e;
-    delete state.gen[c.id]; state.staleVersion = null;
+    delete state.gen[c.id]; state.staleVersion = null; state.published = null;
   }
+}
+
+// After signing in: coordinators load the whole college; teachers only their own page and the published timetable.
+async function loadSignedIn(me) {
+  Object.assign(state, { role: me.user.role, me: me.user, avail: null, published: null });
+  if (me.user.role === 'teacher') { await loadTeacher(me.college.name); state.page = 'mine'; }
+  else { await loadCollege(); Object.assign(state, { page: 'dashboard', view: 'section', key: null }); }
+}
+
+async function loadTeacher(collegeName) {
+  const h = await api('/api/teacher');
+  const empty = { id: 'college', name: collegeName, scheme: h.scheme, departments: [], courses: [], sections: [], teachers: [], rooms: [], subjects: [], assignments: [] };
+  const c = fromServer(h.published ? h.published.data : empty);
+  c.name = collegeName;
+  Object.assign(state, { liveCollege: c, gen: {}, teacherHome: h, view: 'teacher', key: h.me.id, preview: null, history: [], sel: null, viewing: null, modal: null, signinError: null });
+  if (h.published) {
+    const pos = new Map(c._ids.map((id, i) => [id, i]));
+    state.gen[c.id] = { entries: h.published.entries.filter(e => pos.has(e.assignment)).map(e => ({ a: pos.get(e.assignment), day: e.day, period: e.period, room: e.room })),
+                        unplaced: [], at: new Date(h.published.published_at * 1000), version: h.published.version, locked: new Set() };
+  }
+}
+
+async function publishVersion(v) {
+  try {
+    const r = await api(`/api/timetables/${v}/publish`, { method: 'POST' });
+    state.published = r.published;
+    if (state.modal?.kind === 'history') await openHistory();
+    render(); toast(r.message);
+  } catch (e) { toast(e.message); }
+}
+async function unpublish() {
+  try {
+    const r = await api('/api/published', { method: 'DELETE' });
+    state.published = null;
+    if (state.modal?.kind === 'history') await openHistory();
+    render(); toast(r.message);
+  } catch (e) { toast(e.message); }
 }
 
 async function signInLive(ev) {
@@ -920,9 +965,8 @@ async function signInLive(ev) {
   if (!email || !password) { state.signinError = 'Enter your email and password.'; render(); return; }
   Object.assign(state, { signingIn: true, signinError: null }); render();
   try {
-    await api('/api/auth/login', { method: 'POST', body: { email, password } });
-    await loadCollege();
-    Object.assign(state, { signingIn: false, page: 'dashboard', drawer: false });
+    await loadSignedIn(await api('/api/auth/login', { method: 'POST', body: { email, password } }));
+    Object.assign(state, { signingIn: false, drawer: false });
     render(); toast(`Signed in to ${col().name}.`);
   } catch (e) {
     Object.assign(state, { signingIn: false, signinError: e.message }); render();
@@ -932,9 +976,8 @@ async function signInLive(ev) {
 async function signInDemo(email) {
   Object.assign(state, { signingIn: true, signinError: null }); render();
   try {
-    await api('/api/auth/demo', { method: 'POST', body: { email } });
-    await loadCollege();
-    Object.assign(state, { signingIn: false, page: 'dashboard', drawer: false });
+    await loadSignedIn(await api('/api/auth/demo', { method: 'POST', body: { email } }));
+    Object.assign(state, { signingIn: false, drawer: false });
     render(); toast(`Signed in to ${col().name} (demo account).`);
   } catch (e) {
     Object.assign(state, { signingIn: false, signinError: e.message }); render();
@@ -943,7 +986,8 @@ async function signInDemo(email) {
 
 async function signOutLive() {
   await api('/api/auth/logout', { method: 'POST' }).catch(() => {});
-  Object.assign(state, { liveCollege: null, gen: {}, preview: null, history: [], applied: null, sim: null, drawer: false, menu: false, modal: null, staleVersion: null });
+  Object.assign(state, { liveCollege: null, gen: {}, preview: null, history: [], applied: null, sim: null, drawer: false, menu: false, modal: null, staleVersion: null,
+                         role: 'coordinator', me: null, teacherHome: null, published: null, avail: null });
   render();
 }
 
@@ -1011,7 +1055,7 @@ async function boot() {
     } catch { state.live = state.live || false; }
   }
   if (state.live) {
-    try { await api('/api/auth/me'); await loadCollege(); } catch { /* not signed in yet */ }
+    try { await loadSignedIn(await api('/api/auth/me')); } catch { /* not signed in yet */ }
   }
   state.booting = false;
   render();
@@ -1034,12 +1078,15 @@ const ICONS = {
   history: 'M3 12a9 9 0 109-9 9 9 0 00-7 3.4M3 4v4h4M12 7v5l3 3',
   users: 'M16 20v-1a4 4 0 00-4-4H7a4 4 0 00-4 4v1M9.5 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM21 20v-1a4 4 0 00-3-3.9M16 4.1a3.5 3.5 0 010 6.8',
   download: 'M12 4v11M7 10l5 5 5-5M5 20h14',
+  clock: 'M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5l3 2',
+  user: 'M18 20v-1a5 5 0 00-5-5h-2a5 5 0 00-5 5v1M12 11a4 4 0 100-8 4 4 0 000 8z',
 };
 const icon = (n, cls = 'w-5 h-5') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="${ICONS[n]}"/></svg>`;
 
 /* ------------------------------ layout ------------------------------ */
 const NAV_ITEMS = [['dashboard', 'Dashboard', 'grid'], ['timetable', 'Timetable', 'calendar'], ['data', 'Data', 'table'], ['precheck', 'Pre-check', 'shield'], ['scheme', 'College scheme', 'sliders'], ['accounts', 'Accounts', 'users']];
-const NAV = { map: fn => NAV_ITEMS.filter(([id]) => id !== 'accounts' || state.live).map(fn) };  // Accounts only exist with the server
+const TEACHER_NAV = [['mine', 'My timetable', 'calendar'], ['timetable', 'All timetables', 'grid'], ['availability', "When I can't teach", 'clock'], ['account', 'My account', 'user']];
+const NAV = { map: fn => (isTeacher() ? TEACHER_NAV : NAV_ITEMS.filter(([id]) => id !== 'accounts' || state.live)).map(fn) };  // Accounts only exist with the server
 
 function signUpPage() {
   const f = state.signup || {};
@@ -1111,9 +1158,9 @@ function signInPage() {
           <div class="my-5 flex items-center gap-3 text-xs text-slate-400"><span class="h-px flex-1 bg-slate-200"></span>Or try a demo account<span class="h-px flex-1 bg-slate-200"></span></div>
           <div class="space-y-2">${state.demoAccounts.map(a => `
             <button type="button" onclick="signInDemo('${esc(a.email)}')" ${state.signingIn ? 'disabled' : ''} class="flex w-full items-center gap-3 rounded-lg border border-slate-200 p-3 text-left hover:border-indigo-300 hover:bg-indigo-50/40 disabled:opacity-60">
-              <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">${icon('building')}</div>
+              <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">${icon(a.role === 'teacher' ? 'user' : 'building')}</div>
               <div class="min-w-0"><div class="truncate text-sm font-medium">${esc(a.college)}</div>
-              <div class="text-xs text-slate-500">Timetable coordinator${a.place ? ` · ${esc(a.place)}` : ''}</div></div>
+              <div class="text-xs text-slate-500">${a.role === 'teacher' ? `${esc(a.name)} · ` : ''}${esc(a.role_label || 'Timetable coordinator')}${a.place ? ` · ${esc(a.place)}` : ''}</div></div>
             </button>`).join('')}</div>
           <p class="mt-3 text-xs text-slate-500">Demo accounts sign in without a password. Changes are saved, so you can try everything.</p>` : ''}
         ${state.signupEnabled ? `<p class="mt-4 border-t border-slate-100 pt-4 text-center text-sm text-slate-600">New college?
@@ -1177,11 +1224,11 @@ function layout() {
     </div>
     <span class="hidden rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-600 md:inline">${c.term}</span>
     <div class="relative ml-auto flex items-center gap-2">
-      ${syncBadge()}
-      <span class="hidden rounded-md bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 sm:inline">Timetable coordinator</span>
-      <button onclick="state.menu = !state.menu; render()" class="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-300" aria-label="Account menu">TC</button>
+      ${isTeacher() ? '' : syncBadge()}
+      <span class="hidden rounded-md bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 sm:inline">${esc(state.live && state.me ? state.me.role_label : 'Timetable coordinator')}</span>
+      <button onclick="state.menu = !state.menu; render()" class="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-300" aria-label="Account menu">${esc(initials(state.live && state.me ? state.me.name : 'Timetable Coordinator'))}</button>
       ${state.menu ? `<div class="absolute right-0 top-10 w-56 rounded-lg border border-slate-200 bg-white p-1 shadow-lg ${anim('menu')}">
-        <div class="px-3 py-2 text-xs text-slate-500">Signed in to<div class="truncate text-sm font-medium text-slate-900">${c.name}</div></div>
+        <div class="px-3 py-2 text-xs text-slate-500">${state.live && state.me ? `<div class="truncate text-sm font-medium text-slate-900">${esc(state.me.name)}</div><div class="mb-1 truncate">${esc(state.me.email)}</div>` : ''}Signed in to<div class="truncate text-sm font-medium text-slate-900">${esc(c.name)}</div></div>
         <button onclick="signOut()" class="w-full rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">Sign out</button>
       </div>` : ''}
     </div>
@@ -1193,7 +1240,7 @@ function layout() {
           <button onclick="go('${id}')" class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm ${state.page === id ? 'bg-indigo-50 font-medium text-indigo-700' : 'text-slate-600 hover:bg-slate-50'}">
             ${icon(ic)}${label}</button>`).join('')}
       </nav>
-      <button onclick="toggleDrawer(true)" class="mt-3 flex w-full items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">${icon('bot')}Assistant</button>
+      ${isTeacher() ? '' : `<button onclick="toggleDrawer(true)" class="mt-3 flex w-full items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">${icon('bot')}Assistant</button>`}
       <div class="mt-auto rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-500">
         <div class="mb-1 flex items-center gap-1.5 font-medium text-slate-700">${icon('shield', 'w-4 h-4')}Private to your college</div>
         Only people from ${c.name} can see this data. Other colleges can't.
@@ -1213,7 +1260,9 @@ function layout() {
 }
 
 function page() {
-  return { dashboard, timetable, data: dataPage, precheck: precheckPage, scheme: schemePage, accounts: accountsPage }[state.page]();
+  const pages = isTeacher() ? { mine: teacherHome, timetable, availability: availabilityPage, account: accountPage }
+    : { dashboard, timetable, data: dataPage, precheck: precheckPage, scheme: schemePage, accounts: accountsPage };
+  return (pages[state.page] || Object.values(pages)[0])();
 }
 
 function overlay() {
@@ -1314,48 +1363,66 @@ function gettingStarted(c, g) {
 
 function accountsPage() {
   if (!state.live) return card('<p class="text-sm text-slate-600">Accounts are managed when Samay runs from its server.</p>');
-  const a = state.accounts;
+  const a = state.accounts, c = col();
   if (!a) { loadAccounts(); return card('<p class="text-sm text-slate-500">Loading accounts…</p>'); }
-  const field = (id, label, type = 'text', ph = '') => `<label class="block"><span class="mb-1 block text-sm font-medium text-slate-700">${label}</span>
-    <input id="${id}" type="${type}" placeholder="${ph}" class="${inputCls(false)}"/></label>`;
+  const field = (id, label, type = 'text', ph = '', value = '') => `<label class="block"><span class="mb-1 block text-sm font-medium text-slate-700">${label}</span>
+    <input id="${id}" type="${type}" placeholder="${ph}" value="${esc(value)}" class="${inputCls(false)}"/></label>`;
+  const teacherName = id => c.teachers.find(t => t.id === id)?.name;
+  const withAccount = new Set(a.users.map(u => u.teacher).filter(Boolean));
+  const free = c.teachers.filter(t => !withAccount.has(t.id));
+  const asTeacher = a.role === 'teacher', picked = c.teachers.find(t => t.id === a.teacher);
   return `
   <div class="mb-4"><h1 class="text-2xl font-semibold tracking-tight">Accounts</h1>
-    <p class="text-sm text-slate-500">People who can sign in to ${esc(col().name)}. Everyone here can manage data and timetables.</p></div>
+    <p class="text-sm text-slate-500">People who can sign in to ${esc(c.name)}. Coordinators manage data and timetables. Teachers see the published timetable and say when they can't teach.</p></div>
   <div class="grid gap-4 lg:grid-cols-2">
     ${card(`<div class="mb-3 font-medium">People</div>
       <ul class="divide-y divide-slate-100">${a.users.map(u => `
         <li class="flex items-center justify-between gap-2 py-2.5">
           <div class="min-w-0"><div class="truncate text-sm font-medium">${esc(u.name)}${u.you ? ' <span class="rounded bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-700">You</span>' : ''}</div>
-          <div class="truncate text-xs text-slate-500">${esc(u.email)} · Timetable coordinator</div></div>
+          <div class="truncate text-xs text-slate-500">${esc(u.email)} · ${esc(u.role_label)}${u.teacher ? ` (${esc(teacherName(u.teacher) || 'teacher record removed')})` : ''}</div></div>
           ${u.you ? '' : a.confirmRemove === u.id
             ? `<span class="flex gap-1.5">${btn('Remove', `removeAccount(${u.id})`, 'danger')}${btn('Keep', 'state.accounts.confirmRemove = null; render()')}</span>`
             : btn('Remove', `state.accounts.confirmRemove = ${u.id}; render()`)}
         </li>`).join('')}</ul>`)}
-    ${card(`<div class="mb-1 font-medium">Add a coordinator</div>
+    ${card(`<div class="mb-1 font-medium">Add a person</div>
       <p class="mb-3 text-sm text-slate-500">Give them this temporary password; they can change it after signing in.</p>
       <form onsubmit="addAccount(event)" class="space-y-3">
-        ${field('acc-name', 'Name', 'text', 'Mr. Gill')}${field('acc-email', 'Email', 'email', 'gill@yourcollege.edu')}${field('acc-password', 'Temporary password', 'password')}
+        <label class="block"><span class="mb-1 block text-sm font-medium text-slate-700">They are a</span>
+          <select onchange="state.accounts.role = this.value; state.accounts.teacher = ''; render()" class="${inputCls(false)}">
+            ${optionsHtml([['coordinator', 'Timetable coordinator (manages everything)'], ['teacher', 'Teacher (sees the timetable, sets free times)']], a.role || 'coordinator')}</select></label>
+        ${asTeacher ? `<label class="block"><span class="mb-1 block text-sm font-medium text-slate-700">Which teacher?</span>
+          <select onchange="state.accounts.teacher = this.value; render()" class="${inputCls(false)}">
+            <option value="">Choose a teacher…</option>${free.map(t => `<option value="${esc(t.id)}" ${t.id === a.teacher ? 'selected' : ''}>${esc(t.name)} · ${esc(deptName(c, t.dept))}</option>`).join('')}</select>
+          <span class="mt-1 block text-xs text-slate-500">${free.length ? "Teachers who already have an account aren't listed." : 'Every teacher already has an account. Add teachers on the Data page first.'}</span></label>` : ''}
+        ${field('acc-name', 'Name', 'text', 'Mr. Gill', picked?.name || '')}${field('acc-email', 'Email', 'email', asTeacher ? 'teacher@yourcollege.edu' : 'gill@yourcollege.edu')}${field('acc-password', 'Temporary password', 'password')}
         <p class="text-xs text-slate-500">At least 8 characters.</p>
-        <button type="submit" class="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">Add coordinator</button>
+        <button type="submit" class="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">${asTeacher ? 'Add teacher' : 'Add coordinator'}</button>
       </form>`)}
-    ${card(`<div class="mb-1 font-medium">Change your password</div>
-      <p class="mb-3 text-sm text-slate-500">You'll stay signed in here and be signed out on other devices.</p>
-      <form onsubmit="changePassword(event)" class="space-y-3">
-        ${field('pw-current', 'Current password', 'password')}${field('pw-new', 'New password', 'password')}
-        <p class="text-xs text-slate-500">At least 8 characters.</p>
-        <button type="submit" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Change password</button>
-      </form>`)}
+    ${passwordCard()}
   </div>`;
 }
+function passwordCard() {
+  const field = (id, label) => `<label class="block"><span class="mb-1 block text-sm font-medium text-slate-700">${label}</span>
+    <input id="${id}" type="password" class="${inputCls(false)}"/></label>`;
+  return card(`<div class="mb-1 font-medium">Change your password</div>
+    <p class="mb-3 text-sm text-slate-500">You'll stay signed in here and be signed out on other devices.</p>
+    <form onsubmit="changePassword(event)" class="space-y-3">
+      ${field('pw-current', 'Current password')}${field('pw-new', 'New password')}
+      <p class="text-xs text-slate-500">At least 8 characters.</p>
+      <button type="submit" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Change password</button>
+    </form>`);
+}
 async function loadAccounts() {
-  try { state.accounts = { users: (await api('/api/users')).users, confirmRemove: null }; } catch (e) { state.accounts = { users: [] }; toast(e.message); }
+  try { state.accounts = { users: (await api('/api/users')).users, confirmRemove: null, role: 'coordinator', teacher: '' }; } catch (e) { state.accounts = { users: [] }; toast(e.message); }
   render();
 }
 async function addAccount(ev) {
   ev.preventDefault();
-  const v = id => document.getElementById(id).value.trim();
-  const body = { name: v('acc-name'), email: v('acc-email'), password: document.getElementById('acc-password').value };
-  const problem = !body.name ? 'Enter their name.' : !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(body.email) ? 'Enter a valid email.' : body.password.length < 8 ? 'The temporary password needs at least 8 characters.' : null;
+  const v = id => document.getElementById(id).value.trim(), a = state.accounts;
+  const body = { name: v('acc-name'), email: v('acc-email'), password: document.getElementById('acc-password').value, role: a.role || 'coordinator',
+                 ...(a.role === 'teacher' ? { teacher: a.teacher } : {}) };
+  const problem = a.role === 'teacher' && !a.teacher ? 'Choose which teacher this account is for.' : !body.name ? 'Enter their name.'
+    : !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(body.email) ? 'Enter a valid email.' : body.password.length < 8 ? 'The temporary password needs at least 8 characters.' : null;
   if (problem) { toast(problem); return; }
   try { const r = await api('/api/users', { method: 'POST', body }); state.accounts = null; toast(r.message); render(); } catch (e) { toast(e.message); }
 }
@@ -1367,6 +1434,136 @@ async function changePassword(ev) {
   const current = document.getElementById('pw-current').value, next = document.getElementById('pw-new').value;
   if (next.length < 8) { toast('Choose a new password of at least 8 characters.'); return; }
   try { const r = await api('/api/auth/password', { method: 'POST', body: { current, new: next } }); toast(r.message); render(); } catch (e) { toast(e.message); }
+}
+
+/* ------------------------------------------------------------------------------------------------
+   TEACHER PAGES: their own week from the published timetable, every published timetable (read-only),
+   the periods they can't teach, and their account.
+------------------------------------------------------------------------------------------------- */
+const initials = name => String(name).replace(/^(Dr|Prof|Mr|Mrs|Ms|Er)\.?\s+/i, '').split(/[\s.]+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('') || '?';
+// Draw part of the page for one teacher, section or room without changing what the Timetable page shows.
+function withView(view, key, fn) {
+  const keep = [state.view, state.key];
+  state.view = view; state.key = key;
+  try { return fn(); } finally { [state.view, state.key] = keep; }
+}
+function notPublishedCard() {
+  return card(`<div class="flex flex-col items-center py-12 text-center">
+    <div class="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">${icon('calendar', 'w-6 h-6')}</div>
+    <div class="text-lg font-medium">No timetable published yet</div>
+    <p class="mt-1 max-w-md text-sm text-slate-500">Your timetable coordinator hasn't published this term's timetable yet. It will appear here as soon as they do.
+      Meanwhile, tell Samay when you can't teach so the timetable leaves those periods free.</p>
+    <div class="mt-4">${btn("When I can't teach", "go('availability')", 'primary', 'clock')}</div></div>`);
+}
+// My classes on one day, with back-to-back periods of the same class shown as one.
+function myClassesOn(c, g, teacherId, day) {
+  const AS = A(c), mine = g.entries.filter(e => e.day === day && AS[e.a].teacher === teacherId).sort((x, y) => x.period - y.period);
+  const out = [];
+  mine.forEach(e => {
+    const last = out.at(-1);
+    if (last && last.a === e.a && last.to === e.period - 1 && last.room === e.room) last.to = e.period;
+    else out.push({ a: e.a, from: e.period, to: e.period, room: e.room });
+  });
+  return out;
+}
+function teacherHome() {
+  const c = col(), g = current(), me = state.teacherHome.me, S = c.scheme;
+  const head = `<div class="mb-4 flex flex-wrap items-end justify-between gap-3">
+    <div><div class="text-sm text-slate-500">${esc(me.dept_name || deptName(c, me.dept))}</div><h1 class="text-2xl font-semibold tracking-tight">Hello, ${esc(me.name)}</h1></div>
+    ${g ? `<div class="no-print flex gap-2">${btn('Print or save PDF', 'window.print()', 'secondary', 'printer')}</div>` : ''}</div>`;
+  if (!g) return head + notPublishedCard();
+  const AS = A(c), mine = g.entries.filter(e => AS[e.a].teacher === me.id);
+  const today = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date().getDay()];
+  const teachesToday = S.days.includes(today);
+  const hasClasses = d => myClassesOn(c, g, me.id, d).length > 0;
+  const nextDay = S.days.find((d, i) => i > S.days.indexOf(today) && hasClasses(d)) || S.days.find(hasClasses);
+  const showDay = teachesToday && hasClasses(today) ? today : nextDay;
+  const list = showDay ? myClassesOn(c, g, me.id, showDay) : [];
+  const perDay = S.days.map(d => [d, mine.filter(e => e.day === d).length]);
+  const busiest = perDay.reduce((x, y) => (y[1] > x[1] ? y : x), ['', 0]);
+  const groups = new Set(mine.map(e => gLabel(c, AS[e.a].group)));
+  const heading = !showDay ? 'No classes this week' : showDay === today ? `Today · ${today}` : teachesToday ? `No classes today. Next: ${showDay}` : `No classes today (${today}). Next: ${showDay}`;
+  return `${head}
+  <div class="print-only mb-3"><div class="text-lg font-semibold">${esc(c.name)} · ${esc(me.name)}</div>
+    <div class="text-xs text-slate-500">${esc(c.term)} · Published timetable v${g.version}</div></div>
+  <div class="no-print grid gap-4 lg:grid-cols-3">
+    ${card(`<div class="mb-3 font-medium">${heading}</div>
+      ${list.length ? `<ol class="space-y-2">${list.map(x => {
+        const a = AS[x.a], sj = subj(c, a), from = S.periods[x.from - 1], to = S.periods[x.to - 1];
+        return `<li class="flex gap-3 rounded-lg border p-2.5 ${KIND[sj.kind].cls}">
+          <div class="w-20 shrink-0 text-xs"><div class="font-semibold">${from[1]}–${to[2]}</div><div class="opacity-75">${esc(from[0])}${x.to > x.from ? '–' + esc(to[0]) : ''}</div></div>
+          <div class="min-w-0"><div class="truncate text-sm font-semibold">${esc(sj.name)}</div>
+            <div class="truncate text-xs opacity-75">${esc(gLabel(c, a.group))} · ${esc(x.room)} · ${KIND[sj.kind].label}</div></div></li>`; }).join('')}</ol>`
+        : '<p class="text-sm text-slate-500">You have no classes in the published timetable.</p>'}`, 'lg:col-span-2')}
+    <div class="grid content-start gap-3">
+      ${stat('Periods a week', mine.length, `with ${groups.size} section${groups.size === 1 ? '' : 's'} or lab group${groups.size === 1 ? '' : 's'}`)}
+      ${stat('Busiest day', busiest[1] ? busiest[0] : '–', busiest[1] ? `${busiest[1]} periods` : '')}
+    </div>
+  </div>
+  <div class="mb-2 mt-6 flex items-center justify-between"><h2 class="font-semibold">My week</h2>
+    <span class="no-print text-xs text-slate-500">Published timetable v${g.version}</span></div>
+  <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2">${withView('teacher', me.id, () => grid(c, g.entries.map((e, i) => ({ ...e, i })), new Set()))}</div>
+  <p class="no-print mt-3 text-xs text-slate-400">To see any section's, teacher's or room's timetable, open All timetables.</p>`;
+}
+
+function availabilityPage() {
+  const h = state.teacherHome, S = h.scheme, me = h.me;
+  state.avail ||= { off: me.unavailable.map(x => [...x]), saving: false, clashes: [] };
+  const v = state.avail, isOff = (d, p) => v.off.some(([od, op]) => od === d && op === p);
+  const changed = JSON.stringify([...v.off].sort()) !== JSON.stringify([...me.unavailable].sort());
+  const c = col(), g = current(), AS = g ? A(c) : [];
+  const teaching = new Set(g ? g.entries.filter(e => AS[e.a].teacher === me.id).map(e => `${e.day}|${e.period}`) : []);
+  return `
+  <div class="mb-4"><h1 class="text-2xl font-semibold tracking-tight">When I can't teach</h1>
+    <p class="text-sm text-slate-500">Click the periods you're not available, then save. The next timetable your coordinator generates will keep them free.</p></div>
+  ${card(`<div class="overflow-x-auto"><table class="w-full min-w-[640px] table-fixed border-separate border-spacing-1">
+      <thead><tr><th class="w-14"></th>${S.periods.map(p => `<th class="px-1 pb-1 text-left font-normal"><div class="text-xs font-semibold text-slate-700">${esc(p.label)}</div><div class="text-[10px] text-slate-400">${p.start}–${p.end}</div></th>`).join('')}</tr></thead>
+      <tbody>${S.days.map(d => `<tr><th class="pr-2 text-left text-sm font-semibold text-slate-700">${d}</th>${S.periods.map((_, i) => {
+        const p = i + 1, off = isOff(d, p), busy = teaching.has(`${d}|${p}`);
+        return `<td><button onclick="toggleAvail('${d}', ${p})" aria-pressed="${off}" aria-label="${d} ${esc(S.periods[i].label)}: ${off ? "can't teach" : 'available'}"
+          class="flex h-12 w-full flex-col items-center justify-center rounded-lg border text-[11px] font-medium ${off ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'}">
+          ${off ? "Can't teach" : 'Free'}${busy ? `<span class="text-[10px] font-normal ${off ? 'text-red-600' : 'text-indigo-600'}">you teach now</span>` : ''}</button></td>`; }).join('')}</tr>`).join('')}</tbody>
+    </table></div>
+    <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+      <span class="text-sm text-slate-600">${v.off.length ? `${v.off.length} period${v.off.length === 1 ? '' : 's'} marked` : 'Available every period'}${changed ? ' · <span class="font-medium text-amber-700">not saved yet</span>' : ''}</span>
+      <span class="flex gap-2">${changed ? btn('Undo changes', 'state.avail = null; render()') : ''}
+        <button onclick="saveAvail()" ${!changed || v.saving ? 'disabled' : ''} class="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">${v.saving ? 'Saving…' : 'Save'}</button></span>
+    </div>
+    ${v.clashes.length ? `<p class="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">You have classes at ${v.clashes.map(([d, p]) => `${d} ${esc(S.periods[p - 1]?.label || 'P' + p)}`).join(', ')} in the published timetable.
+      They'll move when your coordinator generates and publishes a new timetable. Until then, the published one stays as it is.</p>` : ''}`)}
+  <p class="mt-3 text-xs text-slate-500">"You teach now" marks your classes in the published timetable. Your coordinator can also set how many periods you teach a day.</p>`;
+}
+function toggleAvail(day, period) {
+  const off = state.avail.off, i = off.findIndex(([d, p]) => d === day && p === period);
+  i >= 0 ? off.splice(i, 1) : off.push([day, period]);
+  render();
+}
+async function saveAvail() {
+  const v = state.avail;
+  v.saving = true; render();
+  try {
+    const r = await api('/api/teacher/unavailable', { method: 'PUT', body: { unavailable: v.off } });
+    state.teacherHome.me.unavailable = r.unavailable.map(x => [...x]);
+    state.avail = { off: r.unavailable.map(x => [...x]), saving: false, clashes: r.clashes_with_published };
+    render(); toast(r.clashes_with_published.length ? 'Saved. Some of your current classes are at those times: see the note below.' : 'Saved. The next timetable will keep these periods free.');
+  } catch (e) { v.saving = false; render(); toast(e.message); }
+}
+
+function accountPage() {
+  const me = state.me, c = col();
+  return `
+  <div class="mb-4"><h1 class="text-2xl font-semibold tracking-tight">My account</h1></div>
+  <div class="grid gap-4 lg:grid-cols-2">
+    ${card(`<div class="mb-3 font-medium">You</div>
+      <dl class="space-y-2 text-sm">
+        <div class="flex justify-between gap-3"><dt class="text-slate-500">Name</dt><dd class="font-medium">${esc(me.name)}</dd></div>
+        <div class="flex justify-between gap-3"><dt class="text-slate-500">Email</dt><dd>${esc(me.email)}</dd></div>
+        <div class="flex justify-between gap-3"><dt class="text-slate-500">Role</dt><dd>${esc(me.role_label)}</dd></div>
+        <div class="flex justify-between gap-3"><dt class="text-slate-500">College</dt><dd>${esc(c.name)}</dd></div>
+      </dl>
+      <p class="mt-3 text-xs text-slate-500">To change your name or email, ask your timetable coordinator.</p>`)}
+    ${passwordCard()}
+  </div>`;
 }
 
 function dashboard() {
@@ -1383,7 +1580,11 @@ function dashboard() {
   </div>
   ${gettingStarted(c, g)}
   <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
-    ${stat('Timetable', g ? 'Generated' : 'Not yet', g ? `at ${g.at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Click Generate to create one')}
+    ${state.live && g?.version
+      ? stat('Timetable', state.published?.version === g.version ? 'Published' : `v${g.version} ready`,
+          state.published ? (state.published.version === g.version ? `v${g.version} · teachers see this version` : `Teachers still see v${state.published.version}. Publish v${g.version} from the Timetable page.`) : "Not published yet: teachers can't see it",
+          state.published?.version === g.version ? 'text-emerald-600' : '')
+      : stat('Timetable', g ? 'Generated' : 'Not yet', g ? `at ${g.at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Click Generate to create one')}
     ${stat('Conflicts', v ? v.messages.length : '–', v ? (v.messages.length ? 'Open the assistant to fix' : 'Verified by the clash checker') : 'Shown after generating', v ? (v.messages.length ? 'text-red-600' : 'text-emerald-600') : '')}
     ${stat('Quality score', m ? m.score + '/100' : '–', m ? `${m.avg} gaps per day · ${m.parPct}% labs side by side` : 'Fewer gaps = higher score')}
     ${stat('Pre-check', errors ? `${errors} to fix` : 'Ready', `${warns} warning${warns === 1 ? '' : 's'}`, errors ? 'text-red-600' : 'text-emerald-600')}
@@ -1414,13 +1615,14 @@ function dashboard() {
 
 function timetable() {
   const c = col(), g = current(), ix = idx(c);
+  if (!g && isTeacher()) return `<h1 class="mb-4 text-2xl font-semibold tracking-tight">All timetables</h1>${notPublishedCard()}`;
   if (!g) return `
     <h1 class="mb-4 text-2xl font-semibold tracking-tight">Timetable</h1>
     ${card(`<div class="flex flex-col items-center py-12 text-center">
       <div class="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">${icon('calendar', 'w-6 h-6')}</div>
       <div class="text-lg font-medium">${state.staleVersion ? 'Your data changed: generate again' : 'Generate your first timetable'}</div>
       <p class="mt-1 max-w-md text-sm text-slate-500">${state.staleVersion
-        ? `Timetable v${state.staleVersion} was made before your latest changes, so it may not match your data any more. Generate again to get an up-to-date timetable. Older versions stay saved.`
+        ? `Timetable v${state.staleVersion} was made before your latest changes (yours, or a teacher's free times), so it may not match your data any more. Generate again to get an up-to-date timetable. Older versions stay saved.${state.published ? ` Teachers still see v${state.published.version} until you publish a new one.` : ''}`
         : `Samay places every class for ${esc(c.name)} while making sure no teacher, room or section is ever double-booked.`}</p>
       <div class="mt-4 flex justify-center gap-2">${btn('Generate timetable', 'runGenerate()', 'primary', 'bolt')}${state.live && state.staleVersion ? btn('Versions', 'openHistory()', 'secondary', 'history') : ''}</div></div>`)}`;
 
@@ -1445,7 +1647,8 @@ function timetable() {
     : ix.rooms[state.key].owner === 'Shared' ? 'Shared by all departments' : deptName(c, ix.rooms[state.key].owner);
 
   let badge;
-  if (state.preview) badge = `<span class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-sm font-medium text-amber-800">Preview: ${base.messages.length} → ${v.messages.length} conflicts</span>`;
+  if (isTeacher()) badge = `<span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-700">${icon('check', 'w-4 h-4')}Published · 0 conflicts</span>`;
+  else if (state.preview) badge = `<span class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-sm font-medium text-amber-800">Preview: ${base.messages.length} → ${v.messages.length} conflicts</span>`;
   else if (!base.messages.length) badge = `<span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-700">${icon('check', 'w-4 h-4')}0 conflicts · verified</span>`;
   else badge = `<button onclick="toggleDrawer(true)" class="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1 text-sm font-medium text-red-700 hover:bg-red-100">${base.messages.length} conflict${base.messages.length > 1 ? 's' : ''} · fix with assistant</button>`;
 
@@ -1456,12 +1659,15 @@ function timetable() {
   </div>
   <div class="no-print mb-4 flex flex-wrap items-center justify-between gap-3">
     <div><div class="flex items-center gap-3"><h1 class="text-2xl font-semibold tracking-tight">${esc(title)}</h1>${badge}</div>
-      <p class="mt-0.5 text-sm text-slate-500">${g.version ? `Timetable v${g.version} · ` : ''}${esc(subtitle)}</p></div>
+      <p class="mt-0.5 text-sm text-slate-500">${g.version ? `${isTeacher() ? 'Published timetable' : 'Timetable'} v${g.version} · ` : ''}${esc(subtitle)}</p></div>
     <div class="flex flex-wrap gap-2">
-      ${state.viewing ? '' : `${btn(nLocked ? `Generate again · keeps ${nLocked} locked` : 'Generate again', 'runGenerate()', 'secondary', 'bolt')}
+      ${state.live && !isTeacher() && !state.viewing && g.version ? (state.published?.version === g.version
+        ? `<button onclick="openHistory()" title="Teachers see this version" class="inline-flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100">${icon('check', 'w-4 h-4')}Published</button>`
+        : btn('Publish', `publishVersion(${g.version})`, 'primary', 'check')) : ''}
+      ${state.viewing || isTeacher() ? '' : `${btn(nLocked ? `Generate again · keeps ${nLocked} locked` : 'Generate again', 'runGenerate()', 'secondary', 'bolt')}
       ${btn('Simulate a clash', 'simulateClash()', 'secondary')}
       ${btn('Assistant', 'toggleDrawer(true)', 'secondary', 'bot')}`}
-      ${btn('Versions', 'openHistory()', 'secondary', 'history')}
+      ${isTeacher() ? '' : btn('Versions', 'openHistory()', 'secondary', 'history')}
       ${btn('Excel', 'exportExcel()', 'secondary', 'download')}
       ${btn('Print or save PDF', 'window.print()', 'secondary', 'printer')}
     </div>
@@ -1481,14 +1687,14 @@ function timetable() {
   </div>
   <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2">${grid(c, entries, v.bad)}</div>
   ${g.unplaced.length ? `<div class="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">${g.unplaced.length} class(es) could not be placed. Run the pre-check for details.</div>` : ''}
-  <div class="no-print mt-4 grid grid-cols-2 gap-3 md:grid-cols-5">
+  ${isTeacher() ? '' : `<div class="no-print mt-4 grid grid-cols-2 gap-3 md:grid-cols-5">
     ${stat('Quality score', m.score + '/100', 'Higher is better')}
     ${stat('Student gaps', m.avg, 'Free periods between classes, per day')}
     ${stat('Labs side by side', m.parPct + '%', 'Lab groups busy together')}
     ${stat('Teacher load', `${m.lmin}–${m.lmax}`, 'Periods a week, lowest–highest')}
     ${stat('Room use', m.roomUse + '%', `${m.classes} of ${m.required} periods placed`)}
-  </div>
-  <p class="no-print mt-3 text-xs text-slate-400">${state.live
+  </div>`}
+  <p class="no-print mt-3 text-xs text-slate-400">${isTeacher() ? `Published by your timetable coordinator on ${g.at.toLocaleDateString([], { dateStyle: 'medium' })}. Every class was checked: no teacher, room or section is double-booked.` : state.live
     ? 'Generated on the Samay server with Google OR-Tools (CP-SAT) and saved only after the clash checker found 0 problems.'
     : 'Demo mode: this page uses a simple in-browser generator. Open Samay from its server to generate with Google OR-Tools (CP-SAT) and save your work.'}</p>`;
 }
@@ -1496,6 +1702,7 @@ function timetable() {
 function editBar(c, g) {
   const bar = (tone, text, buttons) => `<div class="no-print mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm ${tone}">
     <span>${text}</span><span class="flex flex-wrap gap-2">${buttons}</span></div>`;
+  if (isTeacher()) return '';
   if (state.viewing) {
     const v = state.viewing;
     return bar('border-slate-300 bg-slate-100 text-slate-800',
@@ -1593,7 +1800,7 @@ function block(c, e, bad) {
   const tag = G.isSub && state.view === 'section' ? `<span class="mr-1 rounded bg-white/80 px-1 text-[10px] font-semibold">${G.label}</span>` : '';
   const note = e.preview ? '<span class="text-[10px] font-semibold text-amber-700">New</span>' : e.ghost ? '<span class="text-[10px] font-semibold text-slate-500">Moving</span>'
     : locked ? `<span class="text-slate-500" title="Locked in place">${icon('lock', 'w-3 h-3')}</span>` : '';
-  const clickable = g && !e.ghost && !e.preview && !state.preview && !state.viewing;
+  const clickable = g && !e.ghost && !e.preview && !state.preview && !state.viewing && !isTeacher();
   return `<div ${clickable ? `onclick="pickSession(${e.a}, '${e.day}')" role="button" tabindex="0"` : ''} class="tt-cell rounded-lg border px-2 py-1.5 ${KIND[s.kind].cls}${extra}${clickable ? ' cursor-pointer hover:brightness-95' : ''}" title="${esc(s.name)} · ${KIND[s.kind].label}${locked ? ' · locked' : ''}">
     <div class="flex items-center justify-between gap-1"><span class="truncate text-[13px] font-semibold ${e.ghost ? 'line-through' : ''}">${tag}${s.short}</span>${note}</div>
     <div class="truncate text-[11px] opacity-75">${line2}</div></div>`;

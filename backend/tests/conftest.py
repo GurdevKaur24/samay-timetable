@@ -6,7 +6,9 @@ from fastapi.testclient import TestClient
 
 from app.main import create_app
 
-DEMO = {u["college"]: u for u in json.loads((Path(__file__).resolve().parent.parent / "data" / "demo_users.json").read_text())["users"]}
+_USERS = json.loads((Path(__file__).resolve().parent.parent / "data" / "demo_users.json").read_text())["users"]
+DEMO = {u["college"]: u for u in _USERS if u["role"] == "coordinator"}
+TEACHERS = {u["college"]: u for u in _USERS if u["role"] == "teacher"}
 
 
 @pytest.fixture
@@ -29,6 +31,19 @@ def sign_in(client: TestClient, college_id: str, password: str | None = None):
 def eng(make_client):
     client = make_client()
     assert sign_in(client, "demo-eng").status_code == 200
+    return client
+
+
+def sign_in_teacher(client: TestClient, college_id: str):
+    user = TEACHERS[college_id]
+    return client.post("/api/auth/login", json={"email": user["email"], "password": user["password"]})
+
+
+@pytest.fixture
+def kumar(make_client):
+    """Dr. A. Kumar, a teacher at the demo engineering college."""
+    client = make_client()
+    assert sign_in_teacher(client, "demo-eng").status_code == 200
     return client
 
 

@@ -29,7 +29,7 @@ def seed(db: Database) -> list[str]:
         added.append(college_id)
     for u in json.loads(DEMO_USERS.read_text(encoding="utf-8"))["users"]:
         if db.find_user_by_email(u["email"]) is None and db.get_college_data(u["college"]) is not None:
-            db.add_user(u["email"], u["name"], u["role"], u["college"], u["password"])
+            db.add_user(u["email"], u["name"], u["role"], u["college"], u["password"], u.get("teacher"))
     return added
 
 

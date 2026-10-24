@@ -8,7 +8,7 @@ from . import config
 from .auth import LoginLimiter
 from .db import Database
 from .jobs import JobRunner
-from .routers import auth, college, timetables, users
+from .routers import auth, college, teacher, timetables, users
 from .seed import seed
 
 
@@ -44,6 +44,7 @@ def create_app(db_path: str | Path | None = None, seed_if_empty: bool = True, so
     app.include_router(college.router)
     app.include_router(timetables.router)
     app.include_router(users.router)
+    app.include_router(teacher.router)
 
     @app.get("/api/health")
     def health():

@@ -11,6 +11,8 @@ from .db import Database
 
 COOKIE_NAME = "samay_session"
 
+ROLES = {"coordinator": "Timetable coordinator", "teacher": "Teacher"}
+
 
 @dataclass(frozen=True)
 class CurrentUser:
@@ -20,6 +22,7 @@ class CurrentUser:
     role: str
     college_id: str
     college_name: str
+    teacher_id: str | None = None  # set for teacher accounts: their record in the college data
 
 
 def get_db(request: Request) -> Database:
@@ -33,7 +36,24 @@ def current_user(request: Request, db: Database = Depends(get_db)) -> CurrentUse
     row = db.user_for_token(token)
     if row is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Your session has ended. Please sign in again.")
-    return CurrentUser(row["id"], row["email"], row["name"], row["role"], row["college_id"], row["college_name"])
+    return user_from_row(row)
+
+
+def user_from_row(row) -> CurrentUser:
+    return CurrentUser(row["id"], row["email"], row["name"], row["role"], row["college_id"], row["college_name"], row["teacher_id"])
+
+
+def coordinator_only(user: CurrentUser = Depends(current_user)) -> CurrentUser:
+    """Managing data, generating, editing and publishing timetables, and accounts are for coordinators only."""
+    if user.role != "coordinator":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only timetable coordinators can do that.")
+    return user
+
+
+def teacher_only(user: CurrentUser = Depends(current_user)) -> CurrentUser:
+    if user.role != "teacher" or not user.teacher_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This page is for teachers.")
+    return user
 
 
 class LoginLimiter:
