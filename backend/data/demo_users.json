@@ -9,6 +9,14 @@
       "password": "demo-eng-Samay-2026"
     },
     {
+      "email": "hod.cse@demo-eng.example",
+      "name": "Dr. H. Sandhu",
+      "role": "hod",
+      "dept": "CSE",
+      "college": "demo-eng",
+      "password": "demo-eng-Hod-2026"
+    },
+    {
       "email": "a.kumar@demo-eng.example",
       "name": "Dr. A. Kumar",
       "role": "teacher",

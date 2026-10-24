@@ -6,10 +6,11 @@ from pydantic import BaseModel, Field
 from solver.metrics import metrics
 from solver.validator import validate
 
-from ..auth import CurrentUser, coordinator_only, get_db
+from ..auth import CurrentUser, coordinator_only, current_user, get_db
 from ..db import Database
 from ..services.fingerprint import schedule_fingerprint
 from ..services.precheck import precheck
+from ..services.published import published_timetable
 
 router = APIRouter(prefix="/api", tags=["timetables"])
 
@@ -167,6 +168,15 @@ def publish(version: int, user: CurrentUser = Depends(coordinator_only), db: Dat
     current_base(version, user, db)
     db.set_published(user.college_id, version)
     return {"published": db.published(user.college_id), "message": f"Timetable v{version} is published. Teachers now see this version."}
+
+
+@router.get("/published")
+def published_for_viewers(user: CurrentUser = Depends(current_user), db: Database = Depends(get_db)):
+    """The published timetable, for anyone signed in to this college (without anyone's free times)."""
+    published = published_timetable(user.college_id, db)
+    if published is None:
+        raise HTTPException(404, "No timetable has been published yet.")
+    return published
 
 
 @router.delete("/published")

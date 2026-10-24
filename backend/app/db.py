@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS users (
     role           TEXT NOT NULL,
     college_id     TEXT NOT NULL REFERENCES colleges(id) ON DELETE CASCADE,
     password_hash  TEXT NOT NULL,
-    teacher_id     TEXT
+    teacher_id     TEXT,
+    dept_id        TEXT
 );
 CREATE TABLE IF NOT EXISTS sessions (
     token_hash  TEXT PRIMARY KEY,
@@ -59,7 +60,7 @@ CREATE INDEX IF NOT EXISTS idx_timetables_college ON timetables(college_id);
 # Columns added after the first release; older databases get them on start.
 ADDED_COLUMNS = {
     "colleges": [("published_version", "INTEGER"), ("published_at", "REAL")],
-    "users": [("teacher_id", "TEXT")],
+    "users": [("teacher_id", "TEXT"), ("dept_id", "TEXT")],
 }
 
 SESSION_SECONDS = 12 * 60 * 60
@@ -216,11 +217,12 @@ class Database:
         return {"version": row["version"], "created_at": row["created_at"], **json.loads(row["result"])}
 
     # ---- users and sessions ---------------------------------------------------------------------------------
-    def add_user(self, email: str, name: str, role: str, college_id: str, password: str, teacher_id: str | None = None) -> int:
-        """`teacher_id` links a teacher's account to their record in the college data."""
+    def add_user(self, email: str, name: str, role: str, college_id: str, password: str, teacher_id: str | None = None,
+                 dept_id: str | None = None) -> int:
+        """`teacher_id` links a teacher's account to their record in the college data; `dept_id` a head of department's."""
         with self.connect() as conn:
-            cur = conn.execute("INSERT INTO users (email, name, role, college_id, password_hash, teacher_id) VALUES (?, ?, ?, ?, ?, ?)",
-                               (email.strip().lower(), name, role, college_id, hash_password(password), teacher_id))
+            cur = conn.execute("INSERT INTO users (email, name, role, college_id, password_hash, teacher_id, dept_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                               (email.strip().lower(), name, role, college_id, hash_password(password), teacher_id, dept_id))
             return cur.lastrowid
 
     def find_user_by_email(self, email: str) -> sqlite3.Row | None:
@@ -239,7 +241,7 @@ class Database:
         """The signed-in user for a session token, with their college; None if the session is unknown or expired."""
         with self.connect() as conn:
             return conn.execute(
-                """SELECT u.id, u.email, u.name, u.role, u.college_id, u.teacher_id, c.name AS college_name
+                """SELECT u.id, u.email, u.name, u.role, u.college_id, u.teacher_id, u.dept_id, c.name AS college_name
                    FROM sessions s JOIN users u ON u.id = s.user_id JOIN colleges c ON c.id = u.college_id
                    WHERE s.token_hash = ? AND s.expires_at > ?""",
                 (token_hash(token), time.time()),
@@ -251,7 +253,7 @@ class Database:
 
     def list_users(self, college_id: str) -> list[sqlite3.Row]:
         with self.connect() as conn:
-            return conn.execute("SELECT id, email, name, role, teacher_id FROM users WHERE college_id = ? ORDER BY name", (college_id,)).fetchall()
+            return conn.execute("SELECT id, email, name, role, teacher_id, dept_id FROM users WHERE college_id = ? ORDER BY name", (college_id,)).fetchall()
 
     def delete_user(self, college_id: str, user_id: int) -> bool:
         """Removes a user of this college only; their sessions end with them."""

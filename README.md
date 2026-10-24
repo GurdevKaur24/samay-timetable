@@ -28,7 +28,7 @@ python -m venv .venv
 .\.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
 ```
 On first start it creates a local database (`backend/data/samay.db`) with two demo colleges, each with a coordinator
-account and a teacher account. The sign-in page has one-click **demo account** buttons (their passwords are in `backend/data/demo_users.json`).
+account and a teacher account (plus a head of department for CSE at the engineering college). The sign-in page has one-click **demo account** buttons (their passwords are in `backend/data/demo_users.json`).
 Turn demo sign-in off for a real launch with `SAMAY_DEMO_LOGIN=0`. To start fresh: `.\.venv\Scripts\python -m app.seed --reset`.
 
 API so far (each signed-in user only ever sees their own college):
@@ -36,16 +36,17 @@ API so far (each signed-in user only ever sees their own college):
 | Area | Endpoints |
 |---|---|
 | Sign-in | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `POST /api/auth/signup` (new college), `POST /api/auth/password` |
-| Accounts | `GET /api/users`, `POST /api/users` (add a coordinator or a teacher), `DELETE /api/users/{id}` |
+| Accounts | `GET /api/users`, `POST /api/users` (add a coordinator, head of department or teacher), `DELETE /api/users/{id}` |
 | College | `GET /api/college` (summary), `GET /api/college/data` (all data), `PUT /api/college/data` (save; checked again on the server) |
 | Pre-check | `GET /api/precheck` |
 | Generate | `POST /api/timetables` starts a run (optionally keeping locked classes), `GET /api/jobs/{id}` shows its progress |
 | Editing and history | `POST /api/timetables/{v}/revise` (moved or swapped classes), `PUT /api/timetables/{v}/locks`, `POST /api/timetables/{v}/restore`, `DELETE /api/timetables/{v}` |
-| Publishing | `POST /api/timetables/{v}/publish` (the version teachers see), `DELETE /api/published` |
+| Publishing | `POST /api/timetables/{v}/publish` (the version teachers see), `DELETE /api/published`, `GET /api/published` (anyone signed in) |
 | Teachers | `GET /api/teacher` (their record and the published timetable), `PUT /api/teacher/unavailable` (periods they can't teach) |
 | Timetables | `GET /api/timetables` (versions), `GET /api/timetables/latest`, `GET /api/timetables/{version}`, `POST /api/timetables/{version}/check`, `POST /api/timetables/{version}/revise` (save an approved change as a new version) |
 
-Coordinators manage everything; teachers only see the published timetable and set when they can't teach.
+Coordinators manage everything. Heads of department manage only their own department's data (they can give its
+classes to any teacher) and see the published timetable. Teachers see the published timetable and set when they can't teach.
 Every saved timetable has passed the clash checker; each version keeps the data it was built from and is marked
 `out_of_date` when data that affects scheduling changes later (renaming a department or changing its status doesn't).
 New colleges can sign up from the sign-in page (turn off with `SAMAY_SIGNUP=0`).

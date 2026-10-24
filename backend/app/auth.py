@@ -11,7 +11,7 @@ from .db import Database
 
 COOKIE_NAME = "samay_session"
 
-ROLES = {"coordinator": "Timetable coordinator", "teacher": "Teacher"}
+ROLES = {"coordinator": "Timetable coordinator", "hod": "Head of department", "teacher": "Teacher"}
 
 
 @dataclass(frozen=True)
@@ -23,6 +23,7 @@ class CurrentUser:
     college_id: str
     college_name: str
     teacher_id: str | None = None  # set for teacher accounts: their record in the college data
+    dept_id: str | None = None     # set for heads of department: the department they manage
 
 
 def get_db(request: Request) -> Database:
@@ -40,7 +41,7 @@ def current_user(request: Request, db: Database = Depends(get_db)) -> CurrentUse
 
 
 def user_from_row(row) -> CurrentUser:
-    return CurrentUser(row["id"], row["email"], row["name"], row["role"], row["college_id"], row["college_name"], row["teacher_id"])
+    return CurrentUser(row["id"], row["email"], row["name"], row["role"], row["college_id"], row["college_name"], row["teacher_id"], row["dept_id"])
 
 
 def coordinator_only(user: CurrentUser = Depends(current_user)) -> CurrentUser:
@@ -48,6 +49,13 @@ def coordinator_only(user: CurrentUser = Depends(current_user)) -> CurrentUser:
     if user.role != "coordinator":
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only timetable coordinators can do that.")
     return user
+
+
+def coordinator_or_hod(user: CurrentUser = Depends(current_user)) -> CurrentUser:
+    """Reading and saving college data: heads of department may save only their own department's part (checked on save)."""
+    if user.role == "coordinator" or (user.role == "hod" and user.dept_id):
+        return user
+    raise HTTPException(status.HTTP_403_FORBIDDEN, "Only timetable coordinators can do that.")
 
 
 def teacher_only(user: CurrentUser = Depends(current_user)) -> CurrentUser:

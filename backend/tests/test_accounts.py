@@ -57,7 +57,7 @@ def test_add_a_coordinator_who_can_then_sign_in(eng, make_client):
     r = eng.post("/api/users", json={"name": "Mr. Gill", "email": "gill@demo-eng.example", "password": "temporary-pass"})
     assert r.status_code == 201
     people = eng.get("/api/users").json()["users"]
-    assert {p["email"] for p in people} == {"coordinator@demo-eng.example", "a.kumar@demo-eng.example", "gill@demo-eng.example"}
+    assert {p["email"] for p in people} == {"coordinator@demo-eng.example", "hod.cse@demo-eng.example", "a.kumar@demo-eng.example", "gill@demo-eng.example"}
     assert sum(p["you"] for p in people) == 1
     other = make_client()
     signed_in = other.post("/api/auth/login", json={"email": "gill@demo-eng.example", "password": "temporary-pass"})

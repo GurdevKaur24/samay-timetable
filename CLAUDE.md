@@ -12,7 +12,7 @@ Full product plan and roadmap: `docs/requirements.md`.
     sessions, college_data (one validated JSON document per college), timetables.
   - `app/auth.py`: `current_user` is the only source of a college id. Sign-in cookie `samay_session` (httpOnly,
     SameSite=Lax; set `SAMAY_COOKIE_SECURE=1` behind HTTPS). Passwords use scrypt; only token hashes are stored.
-  - Demo accounts (one coordinator and one teacher per seed college) are in `data/demo_users.json`. While `SAMAY_DEMO_LOGIN=1`
+  - Demo accounts (a coordinator and a teacher per seed college, plus the CSE head at demo-eng) are in `data/demo_users.json`. While `SAMAY_DEMO_LOGIN=1`
     (default) the sign-in page offers one-click demo sign-in (`/api/auth/demo-accounts`, `/api/auth/demo`), limited to
     those accounts. It must be off (`SAMAY_DEMO_LOGIN=0`) for any real deployment, since it lists the demo colleges.
   - `app/jobs.py`: generation runs in a background thread (one run per college at a time, time limit
@@ -24,10 +24,13 @@ Full product plan and roadmap: `docs/requirements.md`.
   - Locks: `{assignment, subject, group, day, start, room}`; the solver's `fixed=` keeps them in place; locks that no
     longer match the class (subject/group changed) are dropped with a message. Version numbers never repeat.
   - Sign-up (`SAMAY_SIGNUP`, default on) creates a college from `services/new_college.py` (Mon–Fri, 7 periods, lunch).
-  - Roles: `coordinator` (everything; `coordinator_only` guards the college, timetables and users routers) and `teacher`
+  - Roles: `coordinator` (everything; `coordinator_only` guards the timetables and users routers), `hod` (`users.dept_id`;
+    may read college data and save it, but `services/departments.hod_problems` refuses any change outside their
+    department's courses, sections, teachers, subjects, classes for its sections, and its head/status) and `teacher`
     (`users.teacher_id` links to a teacher record; `routers/teacher.py`: the published timetable without anyone's free
     times, and their own unavailable periods). Publishing (`colleges.published_version`) picks the version teachers see;
-    only an up-to-date version can be published and the published one can't be deleted. HOD role not built yet.
+    only an up-to-date version can be published and the published one can't be deleted. `GET /api/published` serves it
+    (without anyone's free times) to any signed-in user of the college.
     Students (planned, built last): a college code entered once, then any published section/teacher/room timetable.
 - **prototype/index.html**: the app page. Served by the backend at http://localhost:8000 it runs in **live mode**
   (real sign-in; data loaded from and saved to the server with `PUT /api/college/data`; Generate uses the server's

@@ -7,13 +7,9 @@ from pydantic import BaseModel, ValidationError
 from ..auth import CurrentUser, teacher_only, get_db
 from ..db import Database
 from ..schema import CollegeData
+from ..services.published import published_timetable
 
 router = APIRouter(prefix="/api/teacher", tags=["teacher"])
-
-
-def for_viewers(data: dict) -> dict:
-    """College data as people who only view timetables may see it: no teacher's free times or daily limits."""
-    return {**data, "teachers": [{"id": t["id"], "name": t["name"], "dept": t["dept"]} for t in data.get("teachers", [])]}
 
 
 def my_record(user: CurrentUser, data: dict) -> dict:
@@ -23,22 +19,13 @@ def my_record(user: CurrentUser, data: dict) -> dict:
     return me
 
 
-def published_timetable(user: CurrentUser, db: Database) -> dict | None:
-    info = db.published(user.college_id)
-    timetable = db.get_timetable(user.college_id, info["version"]) if info else None
-    if timetable is None:
-        return None
-    return {"version": timetable["version"], "published_at": info["published_at"], "data": for_viewers(timetable["data"]),
-            "entries": [{k: e[k] for k in ("assignment", "day", "period", "room")} for e in timetable["entries"]]}
-
-
 @router.get("")
 def home(user: CurrentUser = Depends(teacher_only), db: Database = Depends(get_db)):
     data = db.get_college_data(user.college_id) or {}
     me = my_record(user, data)
     dept = next((d["name"] for d in data.get("departments", []) if d["id"] == me["dept"]), me["dept"])
     return {"me": {"id": me["id"], "name": me["name"], "dept": me["dept"], "dept_name": dept, "unavailable": me.get("unavailable", [])},
-            "scheme": data["scheme"], "published": published_timetable(user, db)}
+            "scheme": data["scheme"], "published": published_timetable(user.college_id, db)}
 
 
 class Unavailable(BaseModel):
@@ -66,7 +53,7 @@ def set_unavailable(body: Unavailable, user: CurrentUser = Depends(teacher_only)
 
     # Classes in the published timetable that now fall on a time this teacher can't teach.
     clashes = []
-    published = published_timetable(user, db)
+    published = published_timetable(user.college_id, db)
     if published:
         mine = {a["id"] for a in published["data"]["assignments"] if a["teacher"] == user.teacher_id}
         clashes = sorted({(e["day"], e["period"]) for e in published["entries"] if e["assignment"] in mine} & set(wanted))

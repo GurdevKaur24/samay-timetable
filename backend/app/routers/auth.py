@@ -22,7 +22,7 @@ class LoginIn(BaseModel):
 
 def me_payload(user: CurrentUser) -> dict:
     return {"user": {"name": user.name, "email": user.email, "role": user.role, "role_label": ROLES.get(user.role, user.role),
-                     "teacher": user.teacher_id},
+                     "teacher": user.teacher_id, "dept": user.dept_id},
             "college": {"name": user.college_name}}
 
 
