@@ -6,7 +6,8 @@ independent clash checker before it is saved, so "0 conflicts" is proved, not pr
 
 Built for **Hackathon 1, Punjab Jobs AI Bootcamp (J-PAL South Asia)**, individual project, with Claude Code.
 
-**Live demo:** _link added after deployment_ · one-click demo accounts on the sign-in page, no password needed.
+**Live demo: https://samay-timetable.onrender.com** · one-click demo accounts on the sign-in page, no password needed.
+(Free hosting sleeps when unused: the first visit can take about a minute to wake up.)
 
 ![The timetable of one section: 0 conflicts, lab groups doing different labs side by side](docs/screenshots/timetable.jpg)
 
