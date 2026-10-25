@@ -25,19 +25,27 @@
       "password": "demo-eng-Teacher-2026"
     },
     {
-      "email": "coordinator@city-arts.example",
-      "name": "Timetable Coordinator",
+      "email": "coordinator@gndec-demo.example",
+      "name": "GNDEC Coordinator (demo)",
       "role": "coordinator",
-      "college": "city-arts",
-      "password": "city-arts-Samay-2026"
+      "college": "gndec",
+      "password": "gndec-Demo-2026"
     },
     {
-      "email": "arjun.mehta@city-arts.example",
-      "name": "Mr. Arjun Mehta",
+      "email": "hod.cse@gndec-demo.example",
+      "name": "Head of CSE (demo)",
+      "role": "hod",
+      "dept": "CSE",
+      "college": "gndec",
+      "password": "gndec-Hod-2026"
+    },
+    {
+      "email": "teacher@gndec-demo.example",
+      "name": "Demo Teacher",
       "role": "teacher",
-      "teacher": "C2",
-      "college": "city-arts",
-      "password": "city-arts-Teacher-2026"
+      "teacher": "G01",
+      "college": "gndec",
+      "password": "gndec-Teacher-2026"
     }
   ]
 }

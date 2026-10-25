@@ -1,6 +1,10 @@
 import pytest
 
 from solver.college import build, load_college, seed_college_ids, weekly_periods
+
+from .conftest import TEST_DATA
+
+COLLEGES = [(c, None) for c in seed_college_ids()] + [("city-arts", TEST_DATA)]
 from solver.metrics import metrics
 from solver.model import solve
 from solver.validator import validate
@@ -19,9 +23,9 @@ def test_weekly_periods_follow_college_rule_unless_overridden():
     assert weekly_periods({}, lab, {**RULES, "lab_sessions_per_week": 2}, lab_block=3) == 6
 
 
-@pytest.mark.parametrize("college_id", seed_college_ids())
-def test_every_college_solves_with_no_clashes(college_id):
-    data = load_college(college_id)
+@pytest.mark.parametrize("college_id,folder", COLLEGES)
+def test_every_college_solves_with_no_clashes(college_id, folder):
+    data = load_college(college_id, folder) if folder else load_college(college_id)
     result = solve(data, time_limit=30)
     assert result["status"] in ("optimal", "feasible")
     assert validate(data, result["entries"]) == []
@@ -31,7 +35,7 @@ def test_every_college_solves_with_no_clashes(college_id):
 
 
 def test_six_day_scheme_with_tea_break_is_respected():
-    data = load_college("city-arts")
+    data = load_college("city-arts", TEST_DATA)
     c = build(data)
     assert len(c.days) == 6 and c.breaks_after == {2, 4}
     result = solve(data, time_limit=30)

@@ -12,8 +12,14 @@ def test_seed_colleges_are_valid(college_id):
     CollegeData.model_validate(load_college(college_id))
 
 
-def test_both_demo_colleges_exist():
-    assert {"demo-eng", "city-arts"} <= set(seed_college_ids())
+def test_the_demo_colleges_exist():
+    assert set(seed_college_ids()) == {"demo-eng", "gndec"}  # a full example, and an almost empty one to try your own data
+
+
+def test_the_gndec_demo_starts_almost_empty():
+    d = load_college("gndec")
+    assert [x["id"] for x in d["departments"]] == ["CSE"] and [t["id"] for t in d["teachers"]] == ["G01"]
+    assert not d["sections"] and not d["subjects"] and not d["assignments"] and not d["rooms"]
 
 
 def broken(change):

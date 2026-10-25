@@ -94,7 +94,8 @@ Each college sees only its own data and never learns which other colleges use Sa
 ## Try it
 ### Online
 Open the live demo link above. On the sign-in page, pick a college, then **Coordinator**, **Head of department** or
-**Teacher**. Students: tap **I'm a student** and enter the code a coordinator turned on (Accounts → Student access).
+**Teacher**. **Demo Engineering College** is a full example; **Guru Nanak Dev Engineering College (demo)** is almost empty,
+so you can try entering a real college's data. Students: tap **I'm a student** and enter the code a coordinator turned on (Accounts → Student access).
 
 The free hosting plan restarts the demo database now and then, so changes you make online may not last.
 

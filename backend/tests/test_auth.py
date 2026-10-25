@@ -69,7 +69,8 @@ def test_too_many_wrong_passwords_are_slowed_down(make_client):
 def test_demo_accounts_sign_in_with_one_click(make_client):
     client = make_client()
     accounts = client.get("/api/auth/demo-accounts").json()["accounts"]
-    assert {a["college"] for a in accounts} == {"Demo Engineering College", "City Arts and Science College"}
+    assert {a["college"] for a in accounts} == {"Demo Engineering College", "Guru Nanak Dev Engineering College (demo)"}
+    assert {a["role"] for a in accounts if a["college"].startswith("Guru Nanak")} == {"coordinator", "hod", "teacher"}
     assert all("password" not in a for a in accounts)
     r = client.post("/api/auth/demo", json={"email": accounts[0]["email"]})
     assert r.status_code == 200 and COOKIE_NAME in client.cookies

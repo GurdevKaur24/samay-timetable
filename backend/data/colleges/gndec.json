@@ -1,0 +1,89 @@
+{
+  "id": "gndec",
+  "name": "Guru Nanak Dev Engineering College (demo)",
+  "place": "Ludhiana",
+  "term": "",
+  "kind": "Engineering (B.Tech)",
+  "scheme": {
+    "days": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri"
+    ],
+    "periods": [
+      {
+        "label": "P1",
+        "start": "09:00",
+        "end": "09:50"
+      },
+      {
+        "label": "P2",
+        "start": "09:50",
+        "end": "10:40"
+      },
+      {
+        "label": "P3",
+        "start": "10:40",
+        "end": "11:30"
+      },
+      {
+        "label": "P4",
+        "start": "11:30",
+        "end": "12:20"
+      },
+      {
+        "label": "P5",
+        "start": "13:00",
+        "end": "13:50"
+      },
+      {
+        "label": "P6",
+        "start": "13:50",
+        "end": "14:40"
+      },
+      {
+        "label": "P7",
+        "start": "14:40",
+        "end": "15:30"
+      }
+    ],
+    "breaks": [
+      {
+        "after": 4,
+        "label": "Lunch"
+      }
+    ],
+    "theory_room_type": "lecture",
+    "lab_block": 2,
+    "lab_prefix": "section",
+    "rules": {
+      "lectures_per_week": 3,
+      "lab_sessions_per_week": 1,
+      "max_same_subject_per_day": 1,
+      "teacher_max_per_day": 5
+    }
+  },
+  "departments": [
+    {
+      "id": "CSE",
+      "name": "Computer Science and Engineering",
+      "hod": "Head of CSE (demo)",
+      "status": "review"
+    }
+  ],
+  "courses": [],
+  "sections": [],
+  "teachers": [
+    {
+      "id": "G01",
+      "name": "Demo Teacher",
+      "dept": "CSE",
+      "unavailable": []
+    }
+  ],
+  "rooms": [],
+  "subjects": [],
+  "assignments": []
+}

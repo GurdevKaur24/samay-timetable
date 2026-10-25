@@ -7,12 +7,14 @@ Full product plan and roadmap: `docs/requirements.md`.
 - **backend/**: Python 3.12, FastAPI, Google OR-Tools (CP-SAT), pytest.
   - `app/schema.py`: the one data format for a college (Pydantic), with plain-English field and cross-reference checks.
   - `solver/`: generator, clash checker, scorecard. Pure Python; reads college dicts in the schema format.
-  - `data/colleges/*.json`: seed colleges (demo-eng, city-arts), exported from the prototype.
+  - `data/colleges/*.json`: demo colleges: `demo-eng` (a full example) and `gndec` (almost empty, to try real data:
+    one department and one teacher so its demo HOD and teacher accounts work). `tests/data/` holds a test-only second
+    college (`city-arts`, with `test_users.json`) that `tests/conftest.py` adds, so privacy tests always have two colleges.
   - `app/db.py`: SQLite (`data/samay.db`, git-ignored, created and seeded on first start). Tables: colleges, users,
     sessions, college_data (one validated JSON document per college), timetables.
   - `app/auth.py`: `current_user` is the only source of a college id. Sign-in cookie `samay_session` (httpOnly,
     SameSite=Lax; set `SAMAY_COOKIE_SECURE=1` behind HTTPS). Passwords use scrypt; only token hashes are stored.
-  - Demo accounts (a coordinator and a teacher per seed college, plus the CSE head at demo-eng) are in `data/demo_users.json`. While `SAMAY_DEMO_LOGIN=1`
+  - Demo accounts (a coordinator, a CSE head and a teacher for each demo college) are in `data/demo_users.json`. While `SAMAY_DEMO_LOGIN=1`
     (default) the sign-in page offers one-click demo sign-in (`/api/auth/demo-accounts`, `/api/auth/demo`), limited to
     those accounts. It must be off (`SAMAY_DEMO_LOGIN=0`) for any real deployment, since it lists the demo colleges.
   - `app/jobs.py`: generation runs in a background thread (one run per college at a time, time limit

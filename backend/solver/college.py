@@ -45,8 +45,8 @@ def seed_college_ids() -> list[str]:
     return sorted(p.stem for p in COLLEGES_DIR.glob("*.json"))
 
 
-def load_college(college_id: str = "demo-eng") -> dict:
-    with open(COLLEGES_DIR / f"{college_id}.json", encoding="utf-8") as f:
+def load_college(college_id: str = "demo-eng", folder: Path = COLLEGES_DIR) -> dict:
+    with open(folder / f"{college_id}.json", encoding="utf-8") as f:
         return json.load(f)
 
 

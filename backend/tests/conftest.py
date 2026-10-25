@@ -5,16 +5,30 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import create_app
+from app.schema import CollegeData
+from solver.college import load_college
 
-_USERS = json.loads((Path(__file__).resolve().parent.parent / "data" / "demo_users.json").read_text())["users"]
+# A second college used only by the tests (it isn't a demo college), so privacy tests always have two colleges.
+TEST_DATA = Path(__file__).resolve().parent / "data"
+_TEST_USERS = json.loads((TEST_DATA / "test_users.json").read_text())["users"]
+_USERS = json.loads((Path(__file__).resolve().parent.parent / "data" / "demo_users.json").read_text())["users"] + _TEST_USERS
 DEMO = {u["college"]: u for u in _USERS if u["role"] == "coordinator"}
 TEACHERS = {u["college"]: u for u in _USERS if u["role"] == "teacher"}
 HODS = {u["college"]: u for u in _USERS if u["role"] == "hod"}
 
 
+def add_test_college(app):
+    data = CollegeData.model_validate(load_college("city-arts", TEST_DATA)).model_dump(mode="json", exclude_none=True)
+    app.state.db.add_college("city-arts", data["name"], data)
+    for u in _TEST_USERS:
+        app.state.db.add_user(u["email"], u["name"], u["role"], u["college"], u["password"], u.get("teacher"), u.get("dept"))
+
+
 @pytest.fixture
 def app(tmp_path):
-    return create_app(db_path=tmp_path / "test.db", solve_seconds=20, assistant_chat=None, send_email=None)  # tests never call Claude or send email
+    app = create_app(db_path=tmp_path / "test.db", solve_seconds=20, assistant_chat=None, send_email=None)  # tests never call Claude or send email
+    add_test_college(app)
+    return app
 
 
 @pytest.fixture
