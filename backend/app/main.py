@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import config
-from .auth import LoginLimiter
+from .auth import DailyQuota, LoginLimiter
 from .db import Database
 from .jobs import JobRunner
 from .routers import assistant, auth, college, students, teacher, timetables, users
@@ -47,6 +47,7 @@ def create_app(db_path: str | Path | None = None, seed_if_empty: bool = True, so
     app.state.student_limiter = LoginLimiter(limit=10)  # wrong student codes, per address
     app.state.cookie_secure = config.COOKIE_SECURE
     app.state.assistant_chat = default_assistant() if assistant_chat is AUTO else assistant_chat
+    app.state.assistant_quota = DailyQuota(config.ASSISTANT_DAILY_LIMIT)
     if seed_if_empty and app.state.db.college_count() == 0:
         seed(app.state.db)
 

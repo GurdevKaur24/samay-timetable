@@ -15,3 +15,5 @@ SOLVER_WORKERS = int(os.environ.get("SAMAY_SOLVER_WORKERS", "8"))  # CPU threads
 ALLOWED_ORIGINS = [o for o in os.environ.get("SAMAY_ORIGINS", "http://localhost:5500").split(",") if o]
 # The AI assistant needs an Anthropic API key in the environment (never in the code). SAMAY_ASSISTANT=0 turns it off.
 ASSISTANT = os.environ.get("SAMAY_ASSISTANT", "1") != "0" and bool(os.environ.get("ANTHROPIC_API_KEY"))
+# Most AI assistant questions per day for the whole site (protects the API key on a public demo). 0 = no limit.
+ASSISTANT_DAILY_LIMIT = int(os.environ.get("SAMAY_ASSISTANT_DAILY_LIMIT", "60"))

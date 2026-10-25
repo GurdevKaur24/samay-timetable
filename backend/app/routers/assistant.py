@@ -33,6 +33,9 @@ def ask(body: ChatIn, request: Request, user: CurrentUser = Depends(coordinator_
     if data is None:
         raise HTTPException(404, "Your college's data couldn't be found.")
     tools = SchedulingTools(data, db.get_timetable(user.college_id))
+    if not request.app.state.assistant_quota.take():
+        raise HTTPException(429, "The AI assistant has answered all the questions it can today. It's back tomorrow; "
+                                 "the built-in clash fixes still work.")
     try:
         return chat(user.college_name, tools, [t.model_dump() for t in body.history], body.message.strip())
     except anthropic.AuthenticationError:

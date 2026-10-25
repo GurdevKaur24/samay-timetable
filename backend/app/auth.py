@@ -64,6 +64,22 @@ def teacher_only(user: CurrentUser = Depends(current_user)) -> CurrentUser:
     return user
 
 
+class DailyQuota:
+    """At most `limit` uses per calendar day (server time) for the whole site; 0 means no limit."""
+
+    def __init__(self, limit: int):
+        self.limit, self.day, self.used = limit, None, 0
+
+    def take(self) -> bool:
+        today = time.strftime("%Y-%m-%d")
+        if today != self.day:
+            self.day, self.used = today, 0
+        if self.limit and self.used >= self.limit:
+            return False
+        self.used += 1
+        return True
+
+
 class LoginLimiter:
     """Slows down password guessing: at most `limit` failed sign-ins per email in `window` seconds."""
 

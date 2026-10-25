@@ -192,6 +192,7 @@ Set as environment variables before starting the server.
 | `SAMAY_SOLVE_SECONDS` | `30` | Time limit for one generation run |
 | `SAMAY_SOLVER_WORKERS` | `8` | CPU threads per run (use 1–2 on small servers) |
 | `ANTHROPIC_API_KEY` | – | Turns on the AI assistant (`SAMAY_ASSISTANT=0` turns it off again) |
+| `SAMAY_ASSISTANT_DAILY_LIMIT` | `60` | Most AI assistant questions a day for the whole site (`0` = no limit) |
 | `SAMAY_DB` | `backend/data/samay.db` | Where the database file lives |
 
 ## Deploying

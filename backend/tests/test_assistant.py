@@ -166,3 +166,13 @@ def test_long_or_empty_messages_are_refused(app, eng):
     app.state.assistant_chat = stand_in([])
     assert eng.post("/api/assistant/chat", json={"message": ""}).status_code == 422
     assert eng.post("/api/assistant/chat", json={"message": "x" * 5000}).status_code == 422
+
+
+def test_the_assistant_stops_after_its_daily_limit(app, eng):
+    from app.auth import DailyQuota
+    app.state.assistant_chat = stand_in([])
+    app.state.assistant_quota = DailyQuota(2)
+    assert eng.post("/api/assistant/chat", json={"message": "one"}).status_code == 200
+    assert eng.post("/api/assistant/chat", json={"message": "two"}).status_code == 200
+    r = eng.post("/api/assistant/chat", json={"message": "three"})
+    assert r.status_code == 429 and "back tomorrow" in r.json()["detail"]
