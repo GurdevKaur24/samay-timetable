@@ -37,6 +37,7 @@ def solve(data: dict, time_limit: float = 20.0, workers: int = 8, fixed: list[di
         if not rooms:
             return _fail(started, f"No {c.room_type(aid).replace('_', ' ')} is big enough for {c.group_label(group.id)} ({group.strength} students).")
         unavailable = c.unavailable.get(a["teacher"], set())
+        sections = c.sections_of(aid)  # reserved times of these sections are never used
 
         for day in c.days:
             for i, start in enumerate(c.periods):
@@ -44,6 +45,8 @@ def solve(data: dict, time_limit: float = 20.0, workers: int = 8, fixed: list[di
                 if len(covered) < block or c.crosses_break(covered):
                     continue
                 if any((day, p) in unavailable for p in covered):
+                    continue
+                if any((s, day, p) in c.reserved for s in sections for p in covered):
                     continue
                 for r in rooms:
                     v = m.NewBoolVar(f"x_{aid}_{day}_{start}_{r['id']}")

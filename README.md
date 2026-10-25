@@ -10,6 +10,7 @@ Built for Hackathon 1, Punjab Jobs AI Bootcamp (J-PAL South Asia).
   room capacity and type, required weekly hours, consecutive lab blocks, A1/A2 labs in parallel)
 - Handles electives: students of several sections choose a subject; big electives split into batches of the college's
   class size; their sections are kept free while an elective runs, and options run together where possible
+- Keeps reserved times free (e.g. an open elective taught by another department at fixed times)
 - Shows the timetable by section, teacher or room in a readable, colour-coded grid
 - Prints the timetable or saves it as a PDF
 

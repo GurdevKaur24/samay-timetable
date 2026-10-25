@@ -163,6 +163,14 @@ class Elective(Model):
     periods: int | None = Field(None, ge=1, description="Periods a week; from the college rules if left out.")
 
 
+class Reserved(Model):
+    """Periods kept free for some sections, e.g. an open elective another department teaches at fixed times."""
+    id: str = Field(min_length=1, max_length=16, pattern=r"^[A-Za-z0-9-]+$")
+    name: str = Field(min_length=1)
+    sections: list[str] = Field(min_length=1)
+    slots: list[tuple[str, int]] = Field(min_length=1, description="(day, period number) pairs.")
+
+
 class CollegeData(Model):
     id: str = Field(min_length=1)
     name: str = Field(min_length=1)
@@ -178,6 +186,7 @@ class CollegeData(Model):
     subjects: list[Subject] = []
     assignments: list[Assignment] = []
     electives: list[Elective] = []
+    reserved: list[Reserved] = []
 
     @model_validator(mode="after")
     def check_references(self):
@@ -280,6 +289,16 @@ class CollegeData(Model):
                 problems.append(f"{e.name} lists a subject twice.")
             if e.periods is not None and "lab" in kinds and e.periods % self.scheme.lab_block:
                 problems.append(f"{e.name} has {e.periods} periods, which isn't a multiple of the lab length ({self.scheme.lab_block}).")
+
+        if dupes := sorted({r.id for r in self.reserved if [x.id for x in self.reserved].count(r.id) > 1}):
+            problems.append(f"Two reserved times have the same code: {', '.join(dupes)}.")
+        for r in self.reserved:
+            if bad := [x for x in r.sections if x not in sections]:
+                problems.append(f"{r.name} is for unknown section(s): {', '.join(bad)}.")
+            if bad := [f"{d} P{p}" for d, p in r.slots if d not in self.scheme.days or not 1 <= p <= n_periods]:
+                problems.append(f"{r.name} uses times that aren't in the college week: {', '.join(bad)}.")
+            if len(set(r.slots)) != len(r.slots):
+                problems.append(f"{r.name} lists a time twice.")
 
         if problems:
             raise ValueError(" ".join(problems))

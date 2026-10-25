@@ -27,6 +27,12 @@ def metrics(data: dict, entries: list[dict]) -> dict:
         if g.is_sub:
             sub_busy[(g.section, e["day"], e["period"])].add(g.id)
 
+    # Reserved times are class time for the students (another department teaches them), so they aren't gaps.
+    for (section, day, period) in c.reserved:
+        for t in c.subsections.get(section) or [section]:
+            if (t, day) in busy:
+                busy[(t, day)].add(period)
+
     for (section, _, _), subs in sub_busy.items():
         lab_slots += 1
         if len(subs) == len(c.subsections[section]):

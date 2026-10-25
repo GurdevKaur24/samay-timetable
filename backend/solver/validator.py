@@ -47,6 +47,9 @@ def validate(data: dict, entries: list[dict]) -> list[dict]:
             add("room_type", f"{c.describe(a['id'])} needs a {c.room_type(a['id']).replace('_', ' ')} but is in {room_id} ({room['type'].replace('_', ' ')}) on {slot}.")
         if room["capacity"] < group.strength:
             add("capacity", f"{room_id} holds {room['capacity']} but {c.group_label(group.id)} has {group.strength} students ({slot}).")
+        for s in c.sections_of(a["id"]):
+            if (s, day, period) in c.reserved:
+                add("reserved", f"{s} has {c.describe(a['id'])} on {slot}, but that time is kept free for {c.reserved[(s, day, period)]}.")
         if (day, period) in c.unavailable.get(teacher["id"], set()):
             add("unavailable", f"{teacher['name']} is unavailable on {slot} but teaches {c.describe(a['id'])}.")
 

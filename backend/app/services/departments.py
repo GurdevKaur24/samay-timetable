@@ -5,7 +5,7 @@ from collections import Counter
 
 COORDINATOR_ONLY = {"name": "The college name", "place": "The college's place", "term": "The term", "kind": "The kind of college",
                     "scheme": "The college week (days, periods and rules)", "rooms": "Rooms",
-                    "electives": "Electives (they can span departments)"}
+                    "electives": "Electives (they can span departments)", "reserved": "Reserved times"}
 OWNED = [("courses", "Course"), ("sections", "Section"), ("teachers", "Teacher"), ("subjects", "Subject")]
 DEPT_FIELDS_HOD_MAY_CHANGE = {"hod", "status"}
 

@@ -43,10 +43,13 @@ def precheck(data: dict) -> list[dict]:
         labs = max((sum(a["periods"] for a in c.assignments.values() if a["group"] == g) for g in subs), default=0)
         electives = sum(c.assignments[e["batches"][0]]["periods"] for e in c.electives.values() if section in e["sections"])
         need = whole + labs + electives
-        if need > slots:
-            out.append({"level": "error", "text": f"{section} needs {need} periods but the week has only {slots}.", "fix": "sections"})
+        kept = sum(1 for (s, _, _) in c.reserved if s == section)
+        free = slots - kept
+        if need > free:
+            out.append({"level": "error", "text": f"{section} needs {need} periods but the week has only {free}"
+                        + (f" ({kept} are kept free for other classes)." if kept else "."), "fix": "sections"})
         else:
-            out.append({"level": "ok", "text": f"{section}: {need} of {slots} weekly periods needed."})
+            out.append({"level": "ok", "text": f"{section}: {need} of {free} weekly periods needed" + (f" ({kept} kept free)." if kept else ".")})
 
     demand: dict[str, int] = defaultdict(int)
     for aid, a in c.assignments.items():

@@ -71,6 +71,8 @@ cd frontend; npm run dev            # http://localhost:5173
   than the college's `elective_class_size` (default 70) becomes batches (CV-1, CV-2), one teacher each (the same teacher
   may take several). Which students sit in which batch is up to the college. `solver.college.build` turns batches into
   assignments with ids `GROUP~SUBJECT~N`. Normal subjects never split (only labs, into lab groups).
+- **Reserved time** (`reserved`): periods kept free for some sections, e.g. an open elective another department teaches
+  at fixed times. No class of those sections (their lab groups or electives) is placed there; no teacher or room needed.
 
 ## Hard rules (never violated, checked by `solver/validator.py`)
 1. A teacher, room, section or sub-section is never in two places in the same slot.
@@ -80,6 +82,7 @@ cd frontend; npm run dev            # http://localhost:5173
 5. Labs are consecutive blocks (block_len) on one day, never crossing lunch or breaks.
 6. Teacher unavailability and teacher max periods per day are respected.
 7. While any class of an elective group runs, the group's sections have no other class (or other elective group).
+8. Nothing is placed in a section's reserved times.
 
 ## Soft rules (objective)
 Spread a subject across days (≤ 1 theory period of a subject per day where possible), few idle gaps, A1/A2 labs side by side,

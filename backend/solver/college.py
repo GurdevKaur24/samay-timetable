@@ -81,6 +81,13 @@ class College:
     unavailable: dict[str, set[tuple[str, int]]] = field(default_factory=dict)
     # Elective groups: id -> {"name", "sections" (kept free while it runs), "batches" (assignment ids, all at the same time)}
     electives: dict[str, dict] = field(default_factory=dict)
+    # Reserved times: (section, day, period) -> what the time is kept free for (e.g. another department's class)
+    reserved: dict[tuple[str, str, int], str] = field(default_factory=dict)
+
+    def sections_of(self, assignment_id: str) -> list[str]:
+        """The sections whose students attend a class: its own section, or every section of its elective group."""
+        g = self.groups[self.assignments[assignment_id]["group"]]
+        return self.electives[g.elective]["sections"] if g.elective else [g.section]
 
     def block(self, assignment_id: str) -> int:
         subject = self.subjects[self.assignments[assignment_id]["subject"]]
@@ -169,4 +176,5 @@ def build(data: dict) -> College:
         rules=rules,
         unavailable={tid: {(d, p) for d, p in t.get("unavailable", [])} for tid, t in teachers.items()},
         electives=electives,
+        reserved={(s, d, p): r["name"] for r in data.get("reserved", []) for s in r["sections"] for d, p in r["slots"]},
     )
