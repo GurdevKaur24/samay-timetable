@@ -16,8 +16,8 @@ services:
         value: "1"
       - key: SAMAY_DEMO_LOGIN      # one-click demo accounts for judges; set to 0 for a real college
         value: "1"
-      - key: SAMAY_SOLVE_SECONDS
-        value: "45"
+      - key: SAMAY_SOLVE_SECONDS   # the free plan's CPU is small: big colleges need longer
+        value: "180"
       - key: SAMAY_SOLVER_WORKERS  # the free plan has a small share of one CPU
         value: "2"
       - key: ANTHROPIC_API_KEY     # optional: turns on the AI assistant; leave empty to keep it off

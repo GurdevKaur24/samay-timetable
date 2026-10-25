@@ -196,7 +196,7 @@ Set as environment variables before starting the server.
 | `SAMAY_DEMO_LOGIN` | `1` | One-click demo accounts on the sign-in page. **Set `0` for a real college.** |
 | `SAMAY_SIGNUP` | `1` | Lets new colleges create an account |
 | `SAMAY_COOKIE_SECURE` | `0` | Set `1` when served over HTTPS |
-| `SAMAY_SOLVE_SECONDS` | `30` | Time limit for one generation run |
+| `SAMAY_SOLVE_SECONDS` | `120` | Time limit for one generation run (a college of about 25 sections and 50 teachers needs about a minute) |
 | `SAMAY_SOLVER_WORKERS` | `8` | CPU threads per run (use 1–2 on small servers) |
 | `ANTHROPIC_API_KEY` | – | Turns on the AI assistant (`SAMAY_ASSISTANT=0` turns it off again) |
 | `SAMAY_ASSISTANT_DAILY_LIMIT` | `60` | Most AI assistant questions a day for the whole site (`0` = no limit) |

@@ -10,7 +10,7 @@ COOKIE_SECURE = os.environ.get("SAMAY_COOKIE_SECURE", "0") == "1"
 SIGNUP = os.environ.get("SAMAY_SIGNUP", "1") == "1"
 # One-click sign-in for the seed demo accounts (no password). Turn off for a real launch: SAMAY_DEMO_LOGIN=0.
 DEMO_LOGIN = os.environ.get("SAMAY_DEMO_LOGIN", "1") == "1"
-SOLVE_SECONDS = float(os.environ.get("SAMAY_SOLVE_SECONDS", "30"))  # time limit for one generation run
+SOLVE_SECONDS = float(os.environ.get("SAMAY_SOLVE_SECONDS", "120"))  # time limit for one generation run (a real college of ~25 sections needs ~1 min)
 SOLVER_WORKERS = int(os.environ.get("SAMAY_SOLVER_WORKERS", "8"))  # CPU threads per run; lower on small servers
 ALLOWED_ORIGINS = [o for o in os.environ.get("SAMAY_ORIGINS", "http://localhost:5500").split(",") if o]
 # The AI assistant needs an Anthropic API key in the environment (never in the code). SAMAY_ASSISTANT=0 turns it off.

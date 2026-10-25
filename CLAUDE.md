@@ -18,7 +18,7 @@ Full product plan and roadmap: `docs/requirements.md`.
     (default) the sign-in page offers one-click demo sign-in (`/api/auth/demo-accounts`, `/api/auth/demo`), limited to
     those accounts. It must be off (`SAMAY_DEMO_LOGIN=0`) for any real deployment, since it lists the demo colleges.
   - `app/jobs.py`: generation runs in a background thread (one run per college at a time, time limit
-    `SAMAY_SOLVE_SECONDS`, default 30). A timetable is saved only if the clash checker finds 0 problems; versions are
+    `SAMAY_SOLVE_SECONDS`, default 120). A timetable is saved only if the clash checker finds 0 problems; versions are
     numbered per college and store the data they were built from.
   - `app/services/precheck.py`: plain-English pre-check (teacher load, section hours, room demand, room sizes).
   - `app/services/fingerprint.py`: a timetable is out of date only when scheduling data changed (not college or
