@@ -140,7 +140,9 @@ accounts (one-click on the sign-in page). On macOS/Linux use `.venv/bin/python` 
 5. **Adjust:** click a class to move or swap it, lock what must not move, or ask the **Assistant**. Generate again; locked classes stay.
 6. **Publish:** teachers and students now see this version.
 7. **Share:** invite HODs and teachers under **Accounts**. Each gets a one-time link (emailed if email is set up, or
-   copy it and send it yourself) to choose their own password. Turn on **Student access** to get the code, link and QR poster.
+   copy it and send it yourself) to choose their own password. Give teachers an email (in Data → Teachers, or an
+   **Email** column in the Teachers sheet) and **Invite all teachers** invites everyone without an account in one click,
+   with a "Copy all links" list for WhatsApp. After that, everyone just signs in with their email and password. Turn on **Student access** to get the code, link and QR poster.
    Forgot a password? Use **Forgot password?** on the sign-in page, or the coordinator's **Reset link** next to their name.
 8. Print, save as PDF or export to Excel from the Timetable page.
 
@@ -218,7 +220,7 @@ for a demo; a real college needs a paid plan with a disk (set `SAMAY_DB` to a pa
 cd backend
 .\.venv\Scripts\python -m pytest
 ```
-221 tests cover:
+236 tests cover:
 - the clash checker (a passing and a failing case for every rule);
 - the generator on both demo colleges, electives, reserved times and locks;
 - the pre-check and the data checks;

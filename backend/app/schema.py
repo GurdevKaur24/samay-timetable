@@ -118,6 +118,7 @@ class Teacher(Model):
     dept: str
     max_per_day: int | None = Field(None, ge=1)
     unavailable: list[tuple[str, int]] = []
+    email: str | None = Field(None, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", description="For inviting them to sign in.")
 
 
 class Room(Model):
@@ -223,6 +224,9 @@ class CollegeData(Model):
             labels = [g.label for g in s.lab_groups]
             if len(set(labels)) != len(labels):
                 problems.append(f"Section {s.id} has two lab groups with the same name.")
+        emails = [t.email.lower() for t in self.teachers if t.email]
+        if twice := sorted({e for e in emails if emails.count(e) > 1}):
+            problems.append(f"Two teachers have the same email: {', '.join(twice)}.")
         for t in self.teachers:
             if t.dept not in depts:
                 problems.append(f"{t.name} belongs to an unknown department {t.dept}.")

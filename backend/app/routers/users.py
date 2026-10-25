@@ -66,6 +66,41 @@ def add_user(body: NewUser, request: Request, user: CurrentUser = Depends(coordi
     return send(request, db, user, new_id, "invite", ROLES[body.role])
 
 
+class InviteTeachersIn(BaseModel):
+    teachers: list[str] | None = None  # teacher ids; all teachers when left out
+
+
+@router.post("/invite-teachers")
+def invite_teachers(request: Request, body: InviteTeachersIn | None = None, user: CurrentUser = Depends(coordinator_only),
+                    db: Database = Depends(get_db)):
+    """One click: an invite for every teacher (or the chosen ones) who has an email and no account yet."""
+    data = db.get_college_data(user.college_id) or {}
+    wanted = set(body.teachers) if body and body.teachers else None
+    linked = {u["teacher_id"] for u in db.list_users(user.college_id) if u["teacher_id"]}
+    invited, skipped = [], []
+    for t in data.get("teachers", []):
+        if wanted is not None and t["id"] not in wanted:
+            continue
+        if t["id"] in linked:
+            skipped.append({"teacher": t["id"], "name": t["name"], "reason": "already has an account"})
+            continue
+        email = (t.get("email") or "").strip().lower()
+        if not email:
+            skipped.append({"teacher": t["id"], "name": t["name"], "reason": "no email"})
+            continue
+        if db.find_user_by_email(email):
+            skipped.append({"teacher": t["id"], "name": t["name"], "reason": f"{email} is already used by another account"})
+            continue
+        new_id = db.add_user(email, t["name"], "teacher", user.college_id, None, t["id"])
+        sent = send(request, db, user, new_id, "invite", ROLES["teacher"])
+        invited.append({"teacher": t["id"], "name": t["name"], "email": email, "link": sent["link"], "emailed": sent["emailed"]})
+    emailed = sum(1 for i in invited if i["emailed"])
+    message = f"{len(invited)} teacher(s) invited" + (f", {emailed} by email" if emailed else "") + "."
+    if skipped:
+        message += f" {len(skipped)} skipped."
+    return {"invited": invited, "skipped": skipped, "message": message}
+
+
 @router.post("/{user_id}/invite")
 def invite_again(user_id: int, request: Request, user: CurrentUser = Depends(coordinator_only), db: Database = Depends(get_db)):
     """A fresh invite link for someone who hasn't joined yet (the old link stops working)."""

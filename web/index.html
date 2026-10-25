@@ -877,7 +877,7 @@ function fromServer(d) {
     departments: d.departments.map(x => ({ ...x })),
     courses: (d.courses || []).map(x => ({ ...x })),
     rooms: d.rooms.map(r => ({ id: r.id, type: r.type, cap: r.capacity, owner: r.owner })),
-    teachers: d.teachers.map(t => ({ id: t.id, name: t.name, dept: t.dept, ...(t.max_per_day ? { max: t.max_per_day } : {}),
+    teachers: d.teachers.map(t => ({ id: t.id, name: t.name, dept: t.dept, ...(t.max_per_day ? { max: t.max_per_day } : {}), ...(t.email ? { email: t.email } : {}),
                                      ...(t.unavailable?.length ? { off: t.unavailable.map(x => [...x]) } : {}) })),
     sections: d.sections.map(s => ({ id: s.id, dept: s.dept, course: s.course, sem: s.sem, strength: s.strength,
                                      subs: (s.lab_groups || []).map(g => ({ label: g.label, strength: g.strength })) })),
@@ -904,7 +904,7 @@ function toServer(c) {
     courses: (c.courses || []).map(x => clean({ id: x.id, name: x.name, dept: x.dept, years: x.years })),
     sections: c.sections.map(s => clean({ id: s.id, dept: s.dept, course: s.course, sem: s.sem, strength: s.strength,
                                           lab_groups: s.subs.map(u => ({ label: u.label, strength: u.strength })) })),
-    teachers: c.teachers.map(t => clean({ id: t.id, name: t.name, dept: t.dept, max_per_day: t.max, unavailable: t.off || [] })),
+    teachers: c.teachers.map(t => clean({ id: t.id, name: t.name, dept: t.dept, max_per_day: t.max, unavailable: t.off || [], email: t.email })),
     rooms: c.rooms.map(r => ({ id: r.id, type: r.type, capacity: r.cap, owner: r.owner })),
     subjects: Object.entries(c.subjects).map(([id, s]) => clean({ id, short: s.short, name: s.name, kind: s.kind, dept: s.dept, room_type: s.room, per_week: s.perWeek })),
     assignments: c.assignments.map((a, i) => clean({ id: assignmentId(i), subject: a[0], group: a[1], teacher: a[2], periods: a[3] })),
@@ -1485,6 +1485,7 @@ function accountsPage() {
           <button type="button" onclick="state.accounts.withPassword = !state.accounts.withPassword; render()" class="text-xs font-medium text-slate-500 hover:text-slate-700 hover:underline">${a.withPassword ? 'Send an invite link instead' : 'Set a temporary password instead'}</button>
         </div>
       </form>`)}
+    ${inviteTeachersCard()}
     ${studentAccessCard()}
     ${passwordCard()}
   </div></div>${studentPoster()}`;
@@ -1520,6 +1521,34 @@ async function addAccount(ev) {
   } catch (e) { toast(e.message); }
 }
 // A new invite link (someone who hasn't joined) or reset link (someone who forgot their password).
+// One click: an invite for every teacher who has an email and no account yet.
+function inviteTeachersCard() {
+  const c = col(), a = state.accounts, linked = new Set(a.users.map(u => u.teacher).filter(Boolean));
+  const open = c.teachers.filter(t => !linked.has(t.id)), withEmail = open.filter(t => t.email), r = state.bulkInvite;
+  const list = r?.invited.length ? `<div class="mt-3 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-900">
+      <div class="mb-1 flex items-center justify-between gap-2"><b>${esc(r.message)}</b>
+        <span class="flex gap-1.5">${btn('Copy all links', 'copyInviteList()')}${btn('Done', 'state.bulkInvite = null; render()')}</span></div>
+      <p class="mb-2 text-xs">${r.invited.some(i => !i.emailed) ? 'Send each person their own link (by email or WhatsApp). Each works once, for 7 days.' : 'Everyone was emailed their link.'}</p>
+      <ul class="max-h-40 space-y-1 overflow-y-auto text-xs">${r.invited.map(i => `<li class="truncate"><b>${esc(i.name)}</b> · ${esc(i.email)}${i.emailed ? ' · emailed' : ''}</li>`).join('')}</ul></div>` : '';
+  const noEmail = (r?.skipped || []).filter(x => x.reason === 'no email').length;
+  const other = (r?.skipped || []).filter(x => x.reason !== 'no email' && x.reason !== 'already has an account');
+  const skipped = noEmail || other.length ? `<p class="mt-2 text-xs text-slate-500">${noEmail ? `${noEmail} teacher${noEmail === 1 ? ' has' : 's have'} no email yet. ` : ''}${other.map(x => `${esc(x.name)}: ${esc(x.reason)}.`).join(' ')}</p>` : '';
+  return card(`<div class="mb-1 font-medium">Invite all teachers</div>
+    <p class="mb-3 text-sm text-slate-500">${open.length ? `${open.length} teacher${open.length === 1 ? '' : 's'} don't have an account yet; ${withEmail.length} of them ${withEmail.length === 1 ? 'has' : 'have'} an email.` : 'Every teacher has an account.'}
+      Add emails in Data → Teachers (or an Email column in your Teachers sheet).</p>
+    ${withEmail.length ? btn(`Invite ${withEmail.length} teacher${withEmail.length === 1 ? '' : 's'}`, 'inviteAllTeachers()', 'primary', 'users') : ''}
+    ${list}${skipped}`);
+}
+async function inviteAllTeachers() {
+  try {
+    state.bulkInvite = await api('/api/users/invite-teachers', { method: 'POST' });
+    state.accounts = null; render(); toast(state.bulkInvite.message);
+  } catch (e) { toast(e.message); }
+}
+async function copyInviteList() {
+  const text = state.bulkInvite.invited.map(i => `${i.name}: ${location.origin}${i.link}`).join('\n');
+  try { await navigator.clipboard.writeText(text); toast('All links copied: one line per teacher.'); } catch { toast('Copying was blocked by the browser.'); }
+}
 async function accountLink(id, what) {
   try {
     const r = await api(`/api/users/${id}/${what}`, { method: 'POST' });
@@ -2144,7 +2173,7 @@ const COLUMNS = {
   departments: [['Code', 'code'], ['Name', 'name'], ['Head of department', 'hod']],
   courses: [['Course code', 'code'], ['Course name', 'name'], ['Department', 'dept'], ['Duration (years)', 'years']],
   sections: [['Section', 'name'], ['Course', 'course'], ['Semester', 'sem'], ['Students', 'strength'], ['Lab groups', 'groups']],
-  teachers: [['Name', 'name'], ['Department', 'dept'], ['Max periods a day', 'max'], ['Unavailable', 'off']],
+  teachers: [['Name', 'name'], ['Department', 'dept'], ['Max periods a day', 'max'], ['Unavailable', 'off'], ['Email', 'email']],
   rooms: [['Room', 'name'], ['Type', 'type'], ['Capacity', 'cap'], ['Owner', 'owner']],
   subjects: [['Code', 'code'], ['Name', 'name'], ['Short name', 'short'], ['Type', 'kind'], ['Room needed', 'room'], ['Lectures per week', 'perWeek'], ['Offered by', 'dept']],
   assignments: [['Subject code', 'subject'], ['Taught to', 'group'], ['Teacher', 'teacher'], ['Periods per week', 'periods']],
@@ -2208,8 +2237,8 @@ function toValues(c, entity, ref) {
   }
   if (entity === 'teachers') {
     const t = ref != null ? c.teachers[ref] : null;
-    return t ? { name: t.name, dept: t.dept, max: String(tMax(c, t)), off: (t.off || []).map(x => [...x]) }
-             : { name: '', dept: filterDept || c.departments[0]?.id || '', max: String(c.scheme.rules.teacherMaxPerDay), off: [] };
+    return t ? { name: t.name, dept: t.dept, max: String(tMax(c, t)), off: (t.off || []).map(x => [...x]), email: t.email || '' }
+             : { name: '', dept: filterDept || c.departments[0]?.id || '', max: String(c.scheme.rules.teacherMaxPerDay), off: [], email: '' };
   }
   if (entity === 'rooms') {
     const r = ref != null ? c.rooms[ref] : null;
@@ -2293,10 +2322,13 @@ function validateValues(c, entity, v, ref, seen = new Set()) {
     if (!deptIds.includes(v.dept)) err.dept = v.dept ? `No department "${v.dept}". Use one of: ${deptIds.join(', ')}.` : 'Choose a department.';
     if (!isInt(max, 1, ix.P.length)) err.max = `Enter 1–${ix.P.length} periods.`;
     if (v.offError) err.off = v.offError;
+    const email = String(v.email || '').trim().toLowerCase();
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) err.email = 'Enter a valid email, or leave it empty.';
+    else if (email && (c.teachers.some((t, i) => i !== ref && (t.email || '').toLowerCase() === email) || seen.has(`email:${email}`))) err.email = `${email} is already another teacher's email.`;
     if (!Object.keys(err).length) {
       let id = ref != null ? c.teachers[ref].id : null;
       for (let n = c.teachers.length + 1; !id; n++) if (!ix.teachers[`T${n}`]) id = `T${n}`;
-      record = { id, name, dept: v.dept, max, off: v.off.length ? v.off : undefined };
+      record = { id, name, dept: v.dept, max, off: v.off.length ? v.off : undefined, email: email || undefined };
     }
   }
 
@@ -3022,7 +3054,7 @@ function checkImportRows(rows) {
   m.results = rows.map((raw, i) => {
     const values = normalizeRow(c, m.entity, raw);
     const { errors, record } = validateValues(c, m.entity, values, null, seen);
-    if (record) seen.add(uniqueKey(m.entity, record));
+    if (record) { seen.add(uniqueKey(m.entity, record)); if (record.email) seen.add(`email:${record.email}`); }
     return { row: i + 2, raw, record, errors: Object.values(errors) };
   });
   render();
@@ -3180,6 +3212,7 @@ function formBody(c, m) {
     const isOff = (d, p) => v.off.some(([od, op]) => od === d && op === p);
     return `${fInput(m, 'name', 'Full name', { placeholder: 'Dr. Jaspreet Kaur' })}
       <div class="grid grid-cols-2 gap-3">${fSelect(m, 'dept', 'Department', depts)}${fInput(m, 'max', 'Max periods a day', { type: 'number' })}</div>
+      ${fInput(m, 'email', 'Email (optional)', { type: 'email', placeholder: 'jaspreet.kaur@yourcollege.edu', hint: 'Used to invite them to sign in and see their own timetable.' })}
       <div><span class="mb-1 block text-sm font-medium text-slate-700">When can't they teach?</span>
         <p class="mb-2 text-xs text-slate-500">Tick the periods this teacher is not available. The generator will never place a class there.</p>
         <div class="overflow-x-auto rounded-lg border border-slate-200 p-2"><table class="text-xs"><thead><tr><th></th>
@@ -3360,7 +3393,7 @@ function dataPage() {
       ${td(s.subs.length ? s.subs.map(u => `<span class="mr-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs">${esc(u.label)} · ${u.strength}</span>`).join('') : '<span class="text-xs text-slate-400">None (no labs)</span>')}${actions(i)}</tr>`)],
     teachers: () => [['Name', 'Department', 'Teaches students of', 'Periods a week', 'Max a day', 'Unavailable'], list.teachers.map(([t, i]) => {
       const other = [...(teachesIn[t.id] || [])].filter(d => d !== t.dept);
-      return `<tr>${td(esc(t.name) + (f && t.dept !== f ? guestBadge(t.dept) : ''), 'font-medium')}${td(deptBadge(t.dept))}
+      return `<tr>${td(esc(t.name) + (f && t.dept !== f ? guestBadge(t.dept) : '') + (t.email ? `<div class="text-xs font-normal text-slate-500">${esc(t.email)}</div>` : ''), 'font-medium')}${td(deptBadge(t.dept))}
         ${td(teachesIn[t.id] ? deptChips(teachesIn[t.id]) + (other.length ? ' <span class="text-[11px] text-indigo-700">cross-department</span>' : '') : '<span class="text-xs text-slate-400">No classes yet</span>')}
         ${td(load[t.id] || 0)}${td(tMax(c, t))}${td(t.off ? fmtOff(t.off) : '<span class="text-slate-400">–</span>')}${actions(i)}</tr>`;
     })],

@@ -35,6 +35,8 @@ Full product plan and roadmap: `docs/requirements.md`.
     coordinator's reset link give `/?reset=` (1 hour). Links are stored hashed, work once, and setting a password ends
     every session. Emailed through SMTP when `SAMAY_SMTP_HOST`/`SAMAY_EMAIL_FROM` are set; otherwise shown to copy.
     `/api/auth/forgot` answers the same for unknown emails. Tests pass `send_email=None` or a capturing stand-in.
+  - Teachers may have an `email` (unique, ignored by the fingerprint). `POST /api/users/invite-teachers` invites every
+    teacher (or the chosen ids) with an email and no account; others are skipped with a reason.
   - Sign-up (`SAMAY_SIGNUP`, default on) creates a college from `services/new_college.py` (Mon–Fri, 7 periods, lunch).
   - Roles: `coordinator` (everything; `coordinator_only` guards the timetables and users routers), `hod` (`users.dept_id`;
     may read college data and save it, but `services/departments.hod_problems` refuses any change outside their

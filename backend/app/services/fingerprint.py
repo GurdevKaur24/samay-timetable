@@ -8,4 +8,5 @@ import json
 def schedule_fingerprint(data: dict) -> str:
     relevant = {k: v for k, v in data.items() if k not in ("name", "place", "term", "kind")}
     relevant["departments"] = sorted(d["id"] for d in data.get("departments", []))
+    relevant["teachers"] = [{k: v for k, v in t.items() if k != "email"} for t in data.get("teachers", [])]  # emails don't affect scheduling
     return hashlib.sha256(json.dumps(relevant, sort_keys=True).encode()).hexdigest()
