@@ -8,7 +8,7 @@ from . import config
 from .auth import LoginLimiter
 from .db import Database
 from .jobs import JobRunner
-from .routers import assistant, auth, college, teacher, timetables, users
+from .routers import assistant, auth, college, students, teacher, timetables, users
 from .seed import seed
 
 
@@ -44,6 +44,7 @@ def create_app(db_path: str | Path | None = None, seed_if_empty: bool = True, so
     app.state.db = Database(db_path or config.DB_PATH)
     app.state.jobs = JobRunner(app.state.db, time_limit=solve_seconds or config.SOLVE_SECONDS)
     app.state.login_limiter = LoginLimiter()
+    app.state.student_limiter = LoginLimiter(limit=10)  # wrong student codes, per address
     app.state.cookie_secure = config.COOKIE_SECURE
     app.state.assistant_chat = default_assistant() if assistant_chat is AUTO else assistant_chat
     if seed_if_empty and app.state.db.college_count() == 0:
@@ -62,6 +63,7 @@ def create_app(db_path: str | Path | None = None, seed_if_empty: bool = True, so
     app.include_router(users.router)
     app.include_router(teacher.router)
     app.include_router(assistant.router)
+    app.include_router(students.router)
 
     @app.get("/api/health")
     def health():

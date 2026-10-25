@@ -29,6 +29,18 @@ def verify_password(password: str, stored: str) -> bool:
 DUMMY_HASH = hash_password(secrets.token_hex(8))
 
 
+CODE_LETTERS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # no 0/O, 1/I/L: easy to read off a notice board
+
+
+def new_student_code() -> str:
+    """8 random characters, shown as XXXX-XXXX."""
+    return "".join(secrets.choice(CODE_LETTERS) for _ in range(8))
+
+
+def normalize_code(code: str) -> str:
+    return "".join(ch for ch in code.upper() if ch.isalnum())
+
+
 def new_token() -> str:
     return secrets.token_urlsafe(32)
 

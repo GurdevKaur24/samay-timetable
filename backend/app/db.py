@@ -49,6 +49,12 @@ CREATE TABLE IF NOT EXISTS timetables (
     result      TEXT NOT NULL,
     UNIQUE (college_id, version)
 );
+CREATE TABLE IF NOT EXISTS student_sessions (
+    token_hash  TEXT PRIMARY KEY,
+    college_id  TEXT NOT NULL REFERENCES colleges(id) ON DELETE CASCADE,
+    created_at  REAL NOT NULL,
+    expires_at  REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS timetable_numbers (
     college_id  TEXT PRIMARY KEY REFERENCES colleges(id) ON DELETE CASCADE,
     last        INTEGER NOT NULL
@@ -59,11 +65,12 @@ CREATE INDEX IF NOT EXISTS idx_timetables_college ON timetables(college_id);
 
 # Columns added after the first release; older databases get them on start.
 ADDED_COLUMNS = {
-    "colleges": [("published_version", "INTEGER"), ("published_at", "REAL")],
+    "colleges": [("published_version", "INTEGER"), ("published_at", "REAL"), ("student_code", "TEXT")],
     "users": [("teacher_id", "TEXT"), ("dept_id", "TEXT")],
 }
 
 SESSION_SECONDS = 12 * 60 * 60
+STUDENT_SESSION_SECONDS = 180 * 24 * 60 * 60  # a phone remembers the college for a semester
 
 
 class Database:
@@ -77,6 +84,7 @@ class Database:
                 for name, kind in columns:
                     if name not in have:
                         conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {kind}")
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_colleges_student_code ON colleges(student_code)")
 
     @contextmanager
     def connect(self):
@@ -215,6 +223,42 @@ class Database:
         if row is None:
             return None
         return {"version": row["version"], "created_at": row["created_at"], **json.loads(row["result"])}
+
+    # ---- student access: one shared code per college --------------------------------------------------------
+    def student_code(self, college_id: str) -> str | None:
+        with self.connect() as conn:
+            row = conn.execute("SELECT student_code FROM colleges WHERE id = ?", (college_id,)).fetchone()
+        return row["student_code"] if row else None
+
+    def set_student_code(self, college_id: str, code: str | None) -> None:
+        """A new code (or None to turn student access off). Phones that used the old code are signed out."""
+        with self.connect() as conn:
+            conn.execute("UPDATE colleges SET student_code = ? WHERE id = ?", (code, college_id))
+            conn.execute("DELETE FROM student_sessions WHERE college_id = ?", (college_id,))
+
+    def college_for_student_code(self, code: str) -> sqlite3.Row | None:
+        with self.connect() as conn:
+            return conn.execute("SELECT id, name FROM colleges WHERE student_code = ?", (code,)).fetchone()
+
+    def create_student_session(self, college_id: str) -> str:
+        token, now = new_token(), time.time()
+        with self.connect() as conn:
+            conn.execute("DELETE FROM student_sessions WHERE expires_at < ?", (now,))
+            conn.execute("INSERT INTO student_sessions (token_hash, college_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
+                         (token_hash(token), college_id, now, now + STUDENT_SESSION_SECONDS))
+        return token
+
+    def college_for_student_token(self, token: str) -> sqlite3.Row | None:
+        with self.connect() as conn:
+            return conn.execute(
+                """SELECT c.id, c.name FROM student_sessions s JOIN colleges c ON c.id = s.college_id
+                   WHERE s.token_hash = ? AND s.expires_at > ? AND c.student_code IS NOT NULL""",
+                (token_hash(token), time.time()),
+            ).fetchone()
+
+    def delete_student_session(self, token: str) -> None:
+        with self.connect() as conn:
+            conn.execute("DELETE FROM student_sessions WHERE token_hash = ?", (token_hash(token),))
 
     # ---- users and sessions ---------------------------------------------------------------------------------
     def add_user(self, email: str, name: str, role: str, college_id: str, password: str, teacher_id: str | None = None,

@@ -11,6 +11,8 @@ Built for Hackathon 1, Punjab Jobs AI Bootcamp (J-PAL South Asia).
 - Handles electives: students of several sections choose a subject; big electives split into batches of the college's
   class size; their sections are kept free while an elective runs, and options run together where possible
 - Keeps reserved times free (e.g. an open elective taught by another department at fixed times)
+- Students need no account: the college shares one code (link or QR poster); phones see the published timetable of
+  any section, teacher or room, with today's classes first
 - Shows the timetable by section, teacher or room in a readable, colour-coded grid
 - Prints the timetable or saves it as a PDF
 
@@ -46,6 +48,7 @@ API so far (each signed-in user only ever sees their own college):
 | Editing and history | `POST /api/timetables/{v}/revise` (moved or swapped classes), `PUT /api/timetables/{v}/locks`, `POST /api/timetables/{v}/restore`, `DELETE /api/timetables/{v}` |
 | Publishing | `POST /api/timetables/{v}/publish` (the version teachers see), `DELETE /api/published`, `GET /api/published` (anyone signed in) |
 | AI assistant | `POST /api/assistant/chat` (coordinators; needs `ANTHROPIC_API_KEY`). Suggests changes; you apply them |
+| Students | Coordinator: `GET/POST/DELETE /api/student-access` (the college's student code). Phones: `POST /api/student/open`, `GET /api/student/timetable`, `POST /api/student/leave` |
 | Teachers | `GET /api/teacher` (their record and the published timetable), `PUT /api/teacher/unavailable` (periods they can't teach) |
 | Timetables | `GET /api/timetables` (versions), `GET /api/timetables/latest`, `GET /api/timetables/{version}`, `POST /api/timetables/{version}/check`, `POST /api/timetables/{version}/revise` (save an approved change as a new version) |
 

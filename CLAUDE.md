@@ -35,7 +35,11 @@ Full product plan and roadmap: `docs/requirements.md`.
     times, and their own unavailable periods). Publishing (`colleges.published_version`) picks the version teachers see;
     only an up-to-date version can be published and the published one can't be deleted. `GET /api/published` serves it
     (without anyone's free times) to any signed-in user of the college.
-    Students (planned, built last): a college code entered once, then any published section/teacher/room timetable.
+  - Students (`routers/students.py`): no accounts. The coordinator turns on one student code per college
+    (`colleges.student_code`, shown XXXX-XXXX, with a `/?code=` link and QR poster on the Accounts page). A phone that
+    enters it gets a `samay_student` cookie (`student_sessions`, 180 days) that opens only that college's published
+    timetable (`GET /api/student/timetable`); it opens nothing else. Wrong codes answer "not found" and are rate-limited
+    per address; a new code or turning access off signs every phone out.
 - **prototype/index.html**: the app page. Served by the backend at http://localhost:8000 it runs in **live mode**
   (real sign-in; data loaded from and saved to the server with `PUT /api/college/data`; Generate uses the server's
   CP-SAT generator; assistant changes saved via `/revise`). Opened as a file, or from any other server, it falls back to
