@@ -2474,6 +2474,18 @@ function electiveValues(c, ref) {
            : { code: '', name: '', sections: [], periods: '', options: [{ subject: '', students: '', teachers: [] }] };
 }
 function eo(i, field, value, rerender) { state.modal.values.options[i][field] = value; if (rerender) render(); }
+const batchHint = (c, o) => { const n = batchCount(c, o), size = c.scheme.rules.electiveClassSize || 70;
+  return Number(o.students) > 0 ? (n > 1 ? `${o.students} students → <b>${n} batches</b> of up to ${size}. Choose a teacher for each (the same teacher can take more than one).` : 'Fits in one class.') : 'Type how many students chose it.'; };
+// Typing a student count redraws the form only when the number of batches (teacher boxes) changes, and keeps the
+// cursor in the box; otherwise just the hint updates, so the next click (e.g. on a teacher) isn't lost to a redraw.
+function setElectiveStudents(i, value) {
+  const c = col(), o = state.modal.values.options[i], before = batchCount(c, o);
+  o.students = value;
+  if (batchCount(c, o) === before) { const hint = document.querySelector(`[data-batch-hint="${i}"]`); if (hint) hint.innerHTML = batchHint(c, o); return; }
+  render();
+  const box = document.querySelector(`[data-students="${i}"]`);
+  if (box) { box.focus(); const v = box.value; box.value = ''; box.value = v; }
+}
 function eot(i, k, value) { state.modal.values.options[i].teachers[k] = value; }
 function toggleElectiveSection(id) {
   const s = state.modal.values.sections, i = s.indexOf(id);
@@ -2498,10 +2510,10 @@ function electiveForm(c, m) {
         <label class="block"><span class="mb-1 block text-xs font-medium text-slate-600">Subject</span>
           <select onchange="eo(${i}, 'subject', this.value)" class="${inputCls(false)}">${optionsHtml(subjectOpts, o.subject)}</select></label>
         <label class="block"><span class="mb-1 block text-xs font-medium text-slate-600">Students</span>
-          <input type="number" min="1" value="${esc(o.students)}" oninput="eo(${i}, 'students', this.value)" onchange="render()" class="${inputCls(false)}"/></label>
+          <input type="number" min="1" value="${esc(o.students)}" data-students="${i}" oninput="setElectiveStudents(${i}, this.value)" class="${inputCls(false)}"/></label>
         ${v.options.length > 1 ? `<button onclick="removeElectiveOption(${i})" class="rounded-md px-2 py-2 text-xs text-slate-500 hover:bg-red-50 hover:text-red-700">Remove</button>` : '<span></span>'}
       </div>
-      <p class="mt-2 text-xs text-slate-500">${Number(o.students) > 0 ? (n > 1 ? `${o.students} students → <b>${n} batches</b> of up to ${size}. Choose a teacher for each (the same teacher can take more than one).` : 'Fits in one class.') : 'Type how many students chose it.'}</p>
+      <p class="mt-2 text-xs text-slate-500" data-batch-hint="${i}">${batchHint(c, o)}</p>
       <div class="mt-2 grid gap-2 sm:grid-cols-2">${Array.from({ length: n }, (_, k) => `
         <label class="block"><span class="mb-1 block text-xs font-medium text-slate-600">${n > 1 ? `Teacher, batch ${k + 1}` : 'Teacher'}</span>
           <select onchange="eot(${i}, ${k}, this.value)" class="${inputCls(false)}">${optionsHtml(teacherOpts, o.teachers[k] || '')}</select></label>`).join('')}</div>
