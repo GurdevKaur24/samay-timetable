@@ -54,6 +54,8 @@ Full product plan and roadmap: `docs/requirements.md`.
   **demo mode** (built-in demo colleges, in-browser generator, nothing saved). `fromServer`/`toServer` convert between
   the server schema and the page's in-memory format. Rebuild `tailwind.css` after adding new classes (command in
   `web/tailwind.config.cjs`).
+- `services/demo.py`: with `SAMAY_DEMO_READY` (on by default when `RENDER` is set) the server generates and publishes
+  demo-eng's timetable in the background at start and turns on student code DEMO-2026, since the free plan starts empty.
 - **render.yaml**: deploys one free Render web service (API + page on one address, HTTPS cookies, 2 solver threads).
   The free plan has no disk, so the database is re-seeded with the demo colleges after restarts.
 
@@ -71,7 +73,8 @@ cd backend; .\.venv\Scripts\python -m pytest
   any department's sections, and the same subject can be taken by several departments. Never restrict a teacher to
   their own department; the clash rules alone keep them from being in two places at once.
 - **Section**: a class group, e.g. CSE-3A (strength = number of students).
-- **Sub-section**: lab split of a section, e.g. A → A1, A2. Theory is taught to the whole section; labs to one sub-section.
+- **Sub-section**: lab split of a section, e.g. A → A1, A2. Lectures are taught to the whole section; labs to one sub-section;
+  tutorials to either (many colleges take tutorials in lab groups), but not both for the same subject and section.
   A1 and A2 may do **different** lab subjects at the same time (A1 in the CN Lab, A2 in the DBMS Lab).
 - **L-T-P**: weekly Lecture / Tutorial / Practical hours of a subject.
 - **Assignment**: subject × (section or sub-section) × teacher, with required weekly periods.

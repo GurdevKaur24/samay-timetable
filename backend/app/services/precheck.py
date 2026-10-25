@@ -69,6 +69,17 @@ def precheck(data: dict) -> list[dict]:
             reported.add(key)
             out.append({"level": "error", "text": f"No {type_name(room_type).lower()} is big enough for {c.group_label(g.id)} ({g.strength} students).", "fix": "rooms"})
 
+    # A tutorial given to some lab groups of a section but not to the others.
+    by_section: dict[tuple[str, str], set[str]] = defaultdict(set)
+    for a in c.assignments.values():
+        g = c.groups[a["group"]]
+        if g.is_sub and c.subjects[a["subject"]]["kind"] == "tutorial":
+            by_section[(a["subject"], g.section)].add(g.id)
+    for (sub, section), got in sorted(by_section.items()):
+        if missing := [c.group_label(x) for x in c.subsections[section] if x not in got]:
+            out.append({"level": "warn", "text": f"{c.subjects[sub]['short']} tutorial is given to {', '.join(sorted(c.group_label(x) for x in got))} "
+                        f"but not to {', '.join(missing)}.", "fix": "assignments"})
+
     # An elective group's classes are best run together, each needing its own big-enough room at that time.
     for e in c.electives.values():
         by_type: dict[str, list[int]] = defaultdict(list)

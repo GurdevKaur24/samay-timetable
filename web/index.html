@@ -2339,7 +2339,9 @@ function validateValues(c, entity, v, ref, seen = new Set()) {
     if (!v.group) err.group = 'Choose who it is taught to.';
     else if (!G) err.group = `No section or lab group called "${v.group}".`;
     else if (s && s.kind === 'lab' && !G.isSub) err.group = `${s.short} is a lab, so choose a lab group (like ${ix.subsOf[G.section][0] ? gLabel(c, ix.subsOf[G.section][0]) : 'A1'}).`;
-    else if (s && s.kind !== 'lab' && G.isSub) err.group = 'Lectures and tutorials are taught to the whole section.';
+    else if (s && s.kind === 'theory' && G.isSub) err.group = 'Lectures are taught to the whole section. (Tutorials can go to a lab group.)';
+    else if (s && G && c.assignments.some((a, i) => i !== ref && a[0] === v.subject && (G.isSub ? a[1] === G.section : a[1].startsWith(`${v.group}/`))))
+      err.group = `${s.short} is already given to ${G.isSub ? `the whole section ${G.section}` : 'a lab group of this section'}. Use one or the other, not both.`;
     if (!v.teacher) err.teacher = 'Choose a teacher.';
     else if (!ix.teachers[v.teacher]) err.teacher = `No teacher called "${v.teacher}".`;
     if (s && G && c.assignments.some((a, i) => i !== ref && a[0] === v.subject && a[1] === v.group)) err.subject = `${s.short} is already assigned to ${gLabel(c, v.group)}.`;
@@ -3178,7 +3180,9 @@ function formBody(c, m) {
   }
   const s = c.subjects[v.subject];
   const mineOnly = sec => !isHod() || sec.dept === state.me.dept;
-  const groups = !s ? [] : s.kind === 'lab' ? labGroupOptions(c, mineOnly) : sectionOptions(c, mineOnly);
+  // Lectures: whole sections. Labs: lab groups. Tutorials: either (some colleges take tutorials in lab groups).
+  const groups = !s ? [] : s.kind === 'lab' ? labGroupOptions(c, mineOnly) : s.kind === 'tutorial'
+    ? [...sectionOptions(c, mineOnly), ...labGroupOptions(c, mineOnly).map(g => ({ ...g, group: `${g.group}: lab groups` }))] : sectionOptions(c, mineOnly);
   const def = s ? weekly(c, v.subject) : null;
   const studentsDept = v.group ? groupDept(c, v.group) : null, T = ix.teachers[v.teacher];
   const subjectOpts = c.departments.map(d => ({ group: `Offered by ${d.name}`, items: Object.entries(c.subjects).filter(([, x]) => x.dept === d.id) }))
@@ -3360,7 +3364,7 @@ function dataPage() {
     courses: 'Courses (programmes) belong to a department, like B.Tech CSE or MCA. Sections belong to a course and semester.',
     reserved: 'Times kept free for some sections, for example an open elective that another department teaches at fixed times. No class of these sections is placed then.',
     electives: `Subjects students choose between, like Departmental Elective-I or an open elective. Type how many students chose each one: a subject with more than ${c.scheme.rules.electiveClassSize || 70} students is split into batches. While an elective runs, its sections have no other class.`,
-    assignments: `Who teaches what to whom. Lectures go to a whole section; labs go to one lab group. A teacher from another department is marked "Guest". Default: ${c.scheme.rules.lecturesPerWeek} lectures a week per subject.`,
+    assignments: `Who teaches what to whom. Lectures go to a whole section; labs go to one lab group; tutorials go to either. A teacher from another department is marked "Guest". Default: ${c.scheme.rules.lecturesPerWeek} lectures a week per subject.`,
   }[tab];
   return `
   <div class="mb-4 flex flex-wrap items-center justify-between gap-3">

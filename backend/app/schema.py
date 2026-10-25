@@ -249,13 +249,19 @@ class CollegeData(Model):
                 problems.append(f"Teaching assignment {a.id} is for an unknown section or lab group {a.group}.")
             elif s is not None and s.kind == "lab" and a.group not in lab_groups:
                 problems.append(f"{s.short} is a lab, so it must go to a lab group, not the whole section {a.group}.")
-            elif s is not None and s.kind != "lab" and a.group in lab_groups:
-                problems.append(f"{s.short} is taught to the whole section, not to lab group {a.group}.")
+            elif s is not None and s.kind == "theory" and a.group in lab_groups:
+                problems.append(f"{s.short} is a lecture, so it's taught to the whole section, not to lab group {a.group}. "
+                                "(Tutorials can go to a lab group.)")
             if s is not None and s.kind == "lab" and a.periods is not None and a.periods % self.scheme.lab_block:
                 problems.append(f"{s.short} for {a.group} has {a.periods} periods, which isn't a multiple of the lab length ({self.scheme.lab_block}).")
             if (a.subject, a.group) in seen:
                 problems.append(f"{a.subject} is assigned to {a.group} twice.")
             seen.add((a.subject, a.group))
+
+        # A tutorial goes to the whole section or to its lab groups, not both (the students would get it twice).
+        for sub, group in seen:
+            if "/" in group and (sub, group.split("/")[0]) in seen:
+                problems.append(f"{sub} is given to the whole section {group.split('/')[0]} and also to its lab group {group}. Choose one.")
 
         size = self.scheme.rules.elective_class_size
         if dupes := sorted({e.id for e in self.electives if [x.id for x in self.electives].count(e.id) > 1}):
