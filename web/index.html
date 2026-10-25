@@ -3088,6 +3088,11 @@ function tryExample() { state.modal.file = 'Example rows'; checkImportRows(examp
 
 function commitImport() {
   const c = col(), m = state.modal, good = m.results.filter(r => r.record);
+  // Teachers get their codes (T1, T2 …) now, one by one: while checking the rows, each row was given the same next code.
+  if (m.entity === 'teachers') {
+    const used = new Set(c.teachers.map(t => t.id));
+    good.forEach(r => { let n = c.teachers.length + 1; while (used.has(`T${n}`)) n++; r.record = { ...r.record, id: `T${n}` }; used.add(`T${n}`); });
+  }
   good.forEach(r => saveRecord(c, m.entity, r.record, null));
   const skipped = m.results.length - good.length;
   dataChanged(c, `Imported ${good.length} ${good.length === 1 ? ENT[m.entity].one : ENT[m.entity].label.toLowerCase()}${skipped ? `, skipped ${skipped} row(s) with problems` : ''}.`);
