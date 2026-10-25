@@ -64,6 +64,7 @@ Each college sees only its own data and never learns which other colleges use Sa
 - Each college sets its own days, periods, breaks, lunch, lab length, lectures per subject a week, lab group naming and
   elective class size. Nothing is hard-coded.
 - Structure: Department → Course → Section (semester) → lab groups (A1, A2 …), which can run **different labs at the same time**.
+  Tutorials can be taken by the whole section or in lab groups.
 - Cross-department teaching: any teacher can teach any department's section, and subjects can be shared.
 - **Electives:** students of several sections (even from several departments) choose a subject. Type how many chose each one; big electives split into batches (CV-1, CV-2) of the college's class size. Options run at the same time in different rooms where possible.
 - **Reserved times:** keep periods free for some sections, e.g. an open elective another department teaches.
@@ -95,8 +96,9 @@ Each college sees only its own data and never learns which other colleges use Sa
 ## Try it
 ### Online
 Open the live demo link above. On the sign-in page, pick a college, then **Coordinator**, **Head of department** or
-**Teacher**. **Demo Engineering College** is a full example; **Guru Nanak Dev Engineering College (demo)** is almost empty,
-so you can try entering a real college's data. Students: tap **I'm a student** and enter the code a coordinator turned on (Accounts → Student access).
+**Teacher**. **Demo Engineering College** is a full example: its timetable is already generated and published, so every
+role shows it straight away. **Guru Nanak Dev Engineering College (demo)** is almost empty, so you can try entering a real
+college's data. **Students:** tap **I'm a student** and enter the code **DEMO-2026** (Demo Engineering College). 
 
 The free hosting plan restarts the demo database now and then, so changes you make online may not last.
 
@@ -201,6 +203,7 @@ Set as environment variables before starting the server.
 | `ANTHROPIC_API_KEY` | – | Turns on the AI assistant (`SAMAY_ASSISTANT=0` turns it off again) |
 | `SAMAY_ASSISTANT_DAILY_LIMIT` | `60` | Most AI assistant questions a day for the whole site (`0` = no limit) |
 | `SAMAY_DB` | `backend/data/samay.db` | Where the database file lives |
+| `SAMAY_DEMO_READY` | `1` on Render, else `0` | At start, generate and publish the demo college's timetable and turn on its student code (DEMO-2026) |
 | `SAMAY_SMTP_HOST`, `SAMAY_SMTP_PORT`, `SAMAY_SMTP_USER`, `SAMAY_SMTP_PASSWORD`, `SAMAY_EMAIL_FROM` | – | Email for invites and password resets, through any SMTP server (e.g. Gmail with an app password, or Brevo). Without it, Samay shows the links for the coordinator to share |
 | `SAMAY_PUBLIC_URL` | – | The site's address, used in emailed links |
 

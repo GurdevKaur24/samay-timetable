@@ -10,6 +10,9 @@ COOKIE_SECURE = os.environ.get("SAMAY_COOKIE_SECURE", "0") == "1"
 SIGNUP = os.environ.get("SAMAY_SIGNUP", "1") == "1"
 # One-click sign-in for the seed demo accounts (no password). Turn off for a real launch: SAMAY_DEMO_LOGIN=0.
 DEMO_LOGIN = os.environ.get("SAMAY_DEMO_LOGIN", "1") == "1"
+# On a public demo server: generate and publish the demo college's timetable and turn on its student code at start.
+# On by default on Render (it sets RENDER=true), where the free plan starts with an empty database after every restart.
+DEMO_READY = os.environ.get("SAMAY_DEMO_READY", "1" if os.environ.get("RENDER") else "0") == "1"
 SOLVE_SECONDS = float(os.environ.get("SAMAY_SOLVE_SECONDS", "120"))  # time limit for one generation run (a real college of ~25 sections needs ~1 min)
 SOLVER_WORKERS = int(os.environ.get("SAMAY_SOLVER_WORKERS", "8"))  # CPU threads per run; lower on small servers
 ALLOWED_ORIGINS = [o for o in os.environ.get("SAMAY_ORIGINS", "http://localhost:5500").split(",") if o]

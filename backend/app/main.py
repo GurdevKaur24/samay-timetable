@@ -10,6 +10,7 @@ from .db import Database
 from .jobs import JobRunner
 from .routers import assistant, auth, college, students, teacher, timetables, users
 from .seed import seed
+from .services import demo
 from .services.email import smtp_sender
 
 
@@ -38,7 +39,8 @@ class FreshStaticFiles(StaticFiles):
 
 
 def create_app(db_path: str | Path | None = None, seed_if_empty: bool = True, solve_seconds: float | None = None,
-               demo_login: bool | None = None, signup: bool | None = None, assistant_chat=AUTO, send_email=AUTO) -> FastAPI:
+               demo_login: bool | None = None, signup: bool | None = None, assistant_chat=AUTO, send_email=AUTO,
+               demo_ready: bool | None = None) -> FastAPI:
     app = FastAPI(title="Samay Timetable API")
     app.state.demo_login = config.DEMO_LOGIN if demo_login is None else demo_login
     app.state.signup = config.SIGNUP if signup is None else signup
@@ -53,6 +55,8 @@ def create_app(db_path: str | Path | None = None, seed_if_empty: bool = True, so
     app.state.forgot_limiter = LoginLimiter(limit=5)  # password reset requests, per email
     if seed_if_empty and app.state.db.college_count() == 0:
         seed(app.state.db)
+    if config.DEMO_READY if demo_ready is None else demo_ready:
+        demo.start(app)  # in the background: the site answers at once
 
     app.add_middleware(
         CORSMiddleware,
