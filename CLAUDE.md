@@ -28,6 +28,11 @@ Full product plan and roadmap: `docs/requirements.md`.
     validator and returns a proposal; the page previews it and saves through `/revise`. On only when `ANTHROPIC_API_KEY`
     is set (never in the code); `SAMAY_ASSISTANT=0` turns it off; `SAMAY_ASSISTANT_DAILY_LIMIT` (default 60) caps
     questions per day for the whole site. Tests replace Claude with a stand-in.
+  - Invites and resets (`services/links.py`, `services/email.py`, table `password_tokens`): coordinators add people without
+    a password (stored as `"!"`, which never matches) and get a one-time `/?invite=` link (7 days); forgot password and the
+    coordinator's reset link give `/?reset=` (1 hour). Links are stored hashed, work once, and setting a password ends
+    every session. Emailed through SMTP when `SAMAY_SMTP_HOST`/`SAMAY_EMAIL_FROM` are set; otherwise shown to copy.
+    `/api/auth/forgot` answers the same for unknown emails. Tests pass `send_email=None` or a capturing stand-in.
   - Sign-up (`SAMAY_SIGNUP`, default on) creates a college from `services/new_college.py` (Mon–Fri, 7 periods, lunch).
   - Roles: `coordinator` (everything; `coordinator_only` guards the timetables and users routers), `hod` (`users.dept_id`;
     may read college data and save it, but `services/departments.hod_problems` refuses any change outside their

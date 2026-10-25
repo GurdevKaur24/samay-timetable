@@ -24,3 +24,7 @@ services:
         sync: false
       - key: SAMAY_ASSISTANT_DAILY_LIMIT  # most AI questions a day for the whole site, so a public link can't drain the key
         value: "60"
+      - key: SAMAY_PUBLIC_URL      # used in emailed invite and reset links
+        value: https://samay-timetable.onrender.com
+      # Optional email for invites and password resets (without it, Samay shows the links to copy):
+      # SAMAY_SMTP_HOST, SAMAY_SMTP_PORT (587), SAMAY_SMTP_USER, SAMAY_SMTP_PASSWORD, SAMAY_EMAIL_FROM

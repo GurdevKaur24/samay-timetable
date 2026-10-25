@@ -55,6 +55,12 @@ CREATE TABLE IF NOT EXISTS student_sessions (
     created_at  REAL NOT NULL,
     expires_at  REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS password_tokens (
+    token_hash  TEXT PRIMARY KEY,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kind        TEXT NOT NULL,
+    expires_at  REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS timetable_numbers (
     college_id  TEXT PRIMARY KEY REFERENCES colleges(id) ON DELETE CASCADE,
     last        INTEGER NOT NULL
@@ -70,6 +76,8 @@ ADDED_COLUMNS = {
 }
 
 SESSION_SECONDS = 12 * 60 * 60
+NO_PASSWORD = "!"  # an invited person who hasn't set a password yet: no password matches it
+LINK_SECONDS = {"invite": 7 * 24 * 60 * 60, "reset": 60 * 60}
 STUDENT_SESSION_SECONDS = 180 * 24 * 60 * 60  # a phone remembers the college for a semester
 
 
@@ -261,12 +269,13 @@ class Database:
             conn.execute("DELETE FROM student_sessions WHERE token_hash = ?", (token_hash(token),))
 
     # ---- users and sessions ---------------------------------------------------------------------------------
-    def add_user(self, email: str, name: str, role: str, college_id: str, password: str, teacher_id: str | None = None,
+    def add_user(self, email: str, name: str, role: str, college_id: str, password: str | None, teacher_id: str | None = None,
                  dept_id: str | None = None) -> int:
-        """`teacher_id` links a teacher's account to their record in the college data; `dept_id` a head of department's."""
+        """`teacher_id` links a teacher's account to their record in the college data; `dept_id` a head of department's.
+        Without a password the person is invited: they choose one through an invite link."""
         with self.connect() as conn:
             cur = conn.execute("INSERT INTO users (email, name, role, college_id, password_hash, teacher_id, dept_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                               (email.strip().lower(), name, role, college_id, hash_password(password), teacher_id, dept_id))
+                               (email.strip().lower(), name, role, college_id, hash_password(password) if password else NO_PASSWORD, teacher_id, dept_id))
             return cur.lastrowid
 
     def find_user_by_email(self, email: str) -> sqlite3.Row | None:
@@ -297,7 +306,50 @@ class Database:
 
     def list_users(self, college_id: str) -> list[sqlite3.Row]:
         with self.connect() as conn:
-            return conn.execute("SELECT id, email, name, role, teacher_id, dept_id FROM users WHERE college_id = ? ORDER BY name", (college_id,)).fetchall()
+            return conn.execute("SELECT id, email, name, role, teacher_id, dept_id, password_hash = ? AS invited FROM users WHERE college_id = ? ORDER BY name",
+                                (NO_PASSWORD, college_id)).fetchall()
+
+    def user_for_token_college(self, college_id: str) -> str:
+        """A college's name (for emails)."""
+        with self.connect() as conn:
+            row = conn.execute("SELECT name FROM colleges WHERE id = ?", (college_id,)).fetchone()
+        return row["name"] if row else ""
+
+    def user_in_college(self, college_id: str, user_id: int) -> sqlite3.Row | None:
+        with self.connect() as conn:
+            return conn.execute("SELECT id, email, name, password_hash = ? AS invited FROM users WHERE id = ? AND college_id = ?",
+                                (NO_PASSWORD, user_id, college_id)).fetchone()
+
+    # ---- one-time links: invites (7 days) and password resets (1 hour) ---------------------------------------
+    def create_password_token(self, user_id: int, kind: str) -> str:
+        """A new link for this person; any earlier link of either kind stops working."""
+        token, now = new_token(), time.time()
+        with self.connect() as conn:
+            conn.execute("DELETE FROM password_tokens WHERE user_id = ? OR expires_at < ?", (user_id, now))
+            conn.execute("INSERT INTO password_tokens (token_hash, user_id, kind, expires_at) VALUES (?, ?, ?, ?)",
+                         (token_hash(token), user_id, kind, now + LINK_SECONDS[kind]))
+        return token
+
+    def password_token(self, token: str) -> sqlite3.Row | None:
+        with self.connect() as conn:
+            return conn.execute(
+                """SELECT t.kind, u.id AS user_id, u.name, u.email, c.name AS college_name
+                   FROM password_tokens t JOIN users u ON u.id = t.user_id JOIN colleges c ON c.id = u.college_id
+                   WHERE t.token_hash = ? AND t.expires_at > ?""",
+                (token_hash(token), time.time()),
+            ).fetchone()
+
+    def use_password_token(self, token: str, password: str) -> int | None:
+        """Set the person's password from a valid link (used once); every session they had ends."""
+        with self.connect() as conn:
+            row = conn.execute("SELECT user_id FROM password_tokens WHERE token_hash = ? AND expires_at > ?",
+                               (token_hash(token), time.time())).fetchone()
+            if row is None:
+                return None
+            conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (hash_password(password), row["user_id"]))
+            conn.execute("DELETE FROM password_tokens WHERE user_id = ?", (row["user_id"],))
+            conn.execute("DELETE FROM sessions WHERE user_id = ?", (row["user_id"],))
+            return row["user_id"]
 
     def delete_user(self, college_id: str, user_id: int) -> bool:
         """Removes a user of this college only; their sessions end with them."""

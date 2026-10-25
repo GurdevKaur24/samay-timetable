@@ -550,6 +550,7 @@ const state = {
   role: 'coordinator', me: null, teacherHome: null, published: null, avail: null, hodPublished: null,
   assistantOn: false, chat: { messages: [], draft: '', sending: false },
   studentMode: false, studentError: null, studentSection: null,  // students: no account, a college code
+  emailOn: false, linkPage: null, forgotMode: false, forgotSent: null, lastLink: null,  // invites and password resets
 };
 const isTeacher = () => state.live && state.role === 'teacher';
 const isHod = () => state.live && state.role === 'hod';
@@ -1152,14 +1153,17 @@ async function boot() {
       state.live = h.app === 'samay';
       state.signupEnabled = !!h.signup;
       state.assistantOn = !!h.assistant;  // the server has an AI assistant (Claude) switched on
+      state.emailOn = !!h.email;  // the server can email invite and reset links
       if (state.live && h.demo_login) state.demoAccounts = (await api('/api/auth/demo-accounts')).accounts;
     } catch { state.live = state.live || false; }
   }
   if (state.live) {
     try { await loadSignedIn(await api('/api/auth/me')); } catch { /* not signed in yet */ }
     // A student link (?code=...) opens that college's timetable; otherwise a phone that entered a code before goes straight there.
-    const code = new URLSearchParams(location.search).get('code');
-    if (code) history.replaceState(null, '', location.pathname);
+    const params = new URLSearchParams(location.search), code = params.get('code');
+    const linkKind = params.has('invite') ? 'invite' : params.has('reset') ? 'reset' : null;
+    if (code || linkKind) history.replaceState(null, '', location.pathname);
+    if (linkKind) { await openLink(linkKind, params.get(linkKind)); state.booting = false; render(); return; }
     if (!col() && code) { state.booting = false; await openStudent(null, code); return; }
     if (!col()) {
       try { await loadStudent(); }
@@ -1260,6 +1264,8 @@ function demoColleges() {
 }
 
 function signInPage() {
+  if (state.live && state.linkPage) return linkPage();
+  if (state.live && state.forgotMode) return forgotPage();
   if (state.live && state.studentMode) return studentCodePage();
   if (state.live && state.signupMode) return signUpPage();
   if (state.live) return `
@@ -1274,7 +1280,8 @@ function signInPage() {
         <p class="mt-1 text-sm text-slate-500">You'll only see your own college's teachers, rooms and timetables.</p>
         <label class="mt-4 block"><span class="mb-1 block text-sm font-medium text-slate-700">Email</span>
           <input id="si-email" type="email" autocomplete="username" value="${esc(state.signinEmail)}" placeholder="coordinator@yourcollege.edu" class="${inputCls(false)}"/></label>
-        <label class="mt-3 block"><span class="mb-1 block text-sm font-medium text-slate-700">Password</span>
+        <label class="mt-3 block"><span class="mb-1 flex items-center justify-between text-sm font-medium text-slate-700">Password
+            <button type="button" onclick="state.forgotMode = true; state.forgotSent = null; render()" class="text-xs font-medium text-indigo-600 hover:underline">Forgot password?</button></span>
           <input id="si-password" type="password" autocomplete="current-password" class="${inputCls(false)}"/></label>
         ${state.signinError ? `<p class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">${esc(state.signinError)}</p>` : ''}
         <button type="submit" ${state.signingIn ? 'disabled' : ''} class="mt-4 w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60">
@@ -1512,15 +1519,18 @@ function accountsPage() {
   <div class="grid gap-4 lg:grid-cols-2">
     ${card(`<div class="mb-3 font-medium">People</div>
       <ul class="divide-y divide-slate-100">${a.users.map(u => `
-        <li class="flex items-center justify-between gap-2 py-2.5">
-          <div class="min-w-0"><div class="truncate text-sm font-medium">${esc(u.name)}${u.you ? ' <span class="rounded bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-700">You</span>' : ''}</div>
+        <li class="flex flex-wrap items-center justify-between gap-2 py-2.5">
+          <div class="min-w-[12rem] flex-1"><div class="truncate text-sm font-medium">${esc(u.name)}${u.you ? ' <span class="rounded bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-700">You</span>' : ''}</div>
           <div class="truncate text-xs text-slate-500">${esc(u.email)} · ${esc(u.role_label)}${u.teacher ? ` (${esc(teacherName(u.teacher) || 'teacher record removed')})` : ''}${u.dept ? ` · ${esc(deptName(c, u.dept))}` : ''}</div></div>
           ${u.you ? '' : a.confirmRemove === u.id
             ? `<span class="flex gap-1.5">${btn('Remove', `removeAccount(${u.id})`, 'danger')}${btn('Keep', 'state.accounts.confirmRemove = null; render()')}</span>`
-            : btn('Remove', `state.accounts.confirmRemove = ${u.id}; render()`)}
-        </li>`).join('')}</ul>`)}
+            : `<span class="flex shrink-0 flex-wrap justify-end gap-1.5">${u.invited
+                ? `<span class="self-center rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-800" title="They haven't opened their invite yet">Invited</span>${btn('New invite link', `accountLink(${u.id}, 'invite')`)}`
+                : btn('Reset link', `accountLink(${u.id}, 'reset-link')`)}${btn('Remove', `state.accounts.confirmRemove = ${u.id}; render()`)}</span>`}
+        </li>`).join('')}</ul>
+      ${state.lastLink ? linkCard(state.lastLink) : ''}`)}
     ${card(`<div class="mb-1 font-medium">Add a person</div>
-      <p class="mb-3 text-sm text-slate-500">Give them this temporary password; they can change it after signing in.</p>
+      <p class="mb-3 text-sm text-slate-500">${state.emailOn ? 'Samay emails them an invite link to choose their own password.' : "You'll get an invite link to send them (by email or message). They open it and choose their own password."}</p>
       <form onsubmit="addAccount(event)" class="space-y-3">
         <label class="block"><span class="mb-1 block text-sm font-medium text-slate-700">They are a</span>
           <select onchange="state.accounts.role = this.value; state.accounts.teacher = ''; state.accounts.dept = ''; render()" class="${inputCls(false)}">
@@ -1532,9 +1542,12 @@ function accountsPage() {
           <select onchange="state.accounts.teacher = this.value; render()" class="${inputCls(false)}">
             <option value="">Choose a teacher…</option>${free.map(t => `<option value="${esc(t.id)}" ${t.id === a.teacher ? 'selected' : ''}>${esc(t.name)} · ${esc(deptName(c, t.dept))}</option>`).join('')}</select>
           <span class="mt-1 block text-xs text-slate-500">${free.length ? "Teachers who already have an account aren't listed." : 'Every teacher already has an account. Add teachers on the Data page first.'}</span></label>` : ''}
-        ${field('acc-name', 'Name', 'text', 'Mr. Gill', picked?.name || (a.role === 'hod' ? c.departments.find(d => d.id === a.dept)?.hod || '' : ''))}${field('acc-email', 'Email', 'email', asTeacher ? 'teacher@yourcollege.edu' : 'gill@yourcollege.edu')}${field('acc-password', 'Temporary password', 'password')}
-        <p class="text-xs text-slate-500">At least 8 characters.</p>
-        <button type="submit" class="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">${asTeacher ? 'Add teacher' : a.role === 'hod' ? 'Add head of department' : 'Add coordinator'}</button>
+        ${field('acc-name', 'Name', 'text', 'Mr. Gill', picked?.name || (a.role === 'hod' ? c.departments.find(d => d.id === a.dept)?.hod || '' : ''))}${field('acc-email', 'Email', 'email', asTeacher ? 'teacher@yourcollege.edu' : 'gill@yourcollege.edu')}
+        ${a.withPassword ? `${field('acc-password', 'Temporary password', 'password')}<p class="text-xs text-slate-500">At least 8 characters. Tell them the password; they can change it after signing in.</p>` : ''}
+        <div class="flex flex-wrap items-center gap-3">
+          <button type="submit" class="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">${a.withPassword ? 'Add' : 'Invite'} ${asTeacher ? 'teacher' : a.role === 'hod' ? 'head of department' : 'coordinator'}</button>
+          <button type="button" onclick="state.accounts.withPassword = !state.accounts.withPassword; render()" class="text-xs font-medium text-slate-500 hover:text-slate-700 hover:underline">${a.withPassword ? 'Send an invite link instead' : 'Set a temporary password instead'}</button>
+        </div>
       </form>`)}
     ${studentAccessCard()}
     ${passwordCard()}
@@ -1558,12 +1571,37 @@ async function loadAccounts() {
 async function addAccount(ev) {
   ev.preventDefault();
   const v = id => document.getElementById(id).value.trim(), a = state.accounts;
-  const body = { name: v('acc-name'), email: v('acc-email'), password: document.getElementById('acc-password').value, role: a.role || 'coordinator',
+  const password = a.withPassword ? document.getElementById('acc-password').value : null;
+  const body = { name: v('acc-name'), email: v('acc-email'), ...(password !== null ? { password } : {}), role: a.role || 'coordinator',
                  ...(a.role === 'teacher' ? { teacher: a.teacher } : {}), ...(a.role === 'hod' ? { dept: a.dept } : {}) };
   const problem = a.role === 'teacher' && !a.teacher ? 'Choose which teacher this account is for.' : a.role === 'hod' && !a.dept ? 'Choose which department they head.' : !body.name ? 'Enter their name.'
-    : !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(body.email) ? 'Enter a valid email.' : body.password.length < 8 ? 'The temporary password needs at least 8 characters.' : null;
+    : !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(body.email) ? 'Enter a valid email.' : password !== null && password.length < 8 ? 'The temporary password needs at least 8 characters.' : null;
   if (problem) { toast(problem); return; }
-  try { const r = await api('/api/users', { method: 'POST', body }); state.accounts = null; toast(r.message); render(); } catch (e) { toast(e.message); }
+  try {
+    const r = await api('/api/users', { method: 'POST', body });
+    state.accounts = null; state.lastLink = r.link ? { ...r, name: body.name } : null;
+    toast(r.message); render();
+  } catch (e) { toast(e.message); }
+}
+// A new invite link (someone who hasn't joined) or reset link (someone who forgot their password).
+async function accountLink(id, what) {
+  try {
+    const r = await api(`/api/users/${id}/${what}`, { method: 'POST' });
+    state.lastLink = { ...r, name: state.accounts.users.find(u => u.id === id)?.name };
+    render(); toast(r.emailed ? r.message : 'Link ready: copy it and send it to them.');
+  } catch (e) { toast(e.message); }
+}
+function linkCard(l) {
+  const url = `${location.origin}${l.link}`;
+  return `<div class="mt-3 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-900">
+    <div class="mb-1 font-medium">${l.link.includes('invite=') ? 'Invite link' : 'Link to choose a new password'} for ${esc(l.name || 'them')}</div>
+    <p class="mb-2 text-xs">${esc(l.message)}</p>
+    <div class="flex items-center gap-2"><input readonly value="${esc(url)}" onclick="this.select()" class="min-w-0 flex-1 rounded-md border border-indigo-200 bg-white px-2 py-1.5 font-mono text-xs"/>
+      ${btn('Copy', `copyText(${esc(JSON.stringify(url))}, 'Link copied.')`)}${btn('Done', 'state.lastLink = null; render()')}</div>
+  </div>`;
+}
+async function copyText(text, done) {
+  try { await navigator.clipboard.writeText(text); toast(done); } catch { toast('Select the link and copy it.'); }
 }
 async function removeAccount(id) {
   try { await api(`/api/users/${id}`, { method: 'DELETE' }); state.accounts = null; toast('Account removed.'); render(); } catch (e) { toast(e.message); }
@@ -2659,6 +2697,79 @@ async function leaveStudent() {
   render();
 }
 function setStudentSection(id) { state.studentSection = id; storage.set('samay.section', id); render(); }
+
+/* ---- forgot password, and opening an invite or reset link ---- */
+const authShell = (key, inner) => `
+  <div class="flex min-h-screen items-center justify-center p-4">
+    <div class="w-full max-w-md ${anim(key)}">
+      <div class="mb-6 flex items-center gap-3">
+        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-base font-bold text-white">S</div>
+        <div class="leading-tight"><div class="text-lg font-semibold">Samay</div><div class="text-xs text-slate-500">Clash-free college timetables</div></div>
+      </div>${inner}</div></div>`;
+const backToSignIn = `<p class="mt-4 border-t border-slate-100 pt-4 text-center text-sm text-slate-600">
+  <button type="button" onclick="Object.assign(state, { forgotMode: false, linkPage: null, forgotSent: null }); render()" class="font-medium text-indigo-600 hover:underline">Back to sign in</button></p>`;
+function forgotPage() {
+  const sent = state.forgotSent;
+  return authShell('forgot', `<form onsubmit="sendForgot(event)" class="rounded-xl border border-slate-200 bg-white p-6">
+    <h1 class="text-lg font-semibold">Forgot your password?</h1>
+    ${sent ? (sent.email ? `<p class="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">${esc(sent.message)}</p>`
+        : `<p class="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">This site can't send email yet. Ask your timetable coordinator for a reset link:
+          they'll find <b>Reset link</b> next to your name under Accounts.</p>`)
+      : `<p class="mt-1 text-sm text-slate-500">Enter your email and we'll send you a link to choose a new password.</p>
+        <label class="mt-4 block"><span class="mb-1 block text-sm font-medium text-slate-700">Email</span>
+          <input id="fp-email" type="email" autocomplete="username" value="${esc(state.signinEmail)}" class="${inputCls(false)}"/></label>
+        ${state.signinError ? `<p class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">${esc(state.signinError)}</p>` : ''}
+        <button type="submit" ${state.signingIn ? 'disabled' : ''} class="mt-4 w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60">Send reset link</button>
+        ${state.emailOn ? '' : '<p class="mt-3 text-xs text-slate-500">If no email arrives, your timetable coordinator can give you a reset link.</p>'}`}
+    ${backToSignIn}</form>`);
+}
+async function sendForgot(ev) {
+  ev.preventDefault();
+  const email = document.getElementById('fp-email').value.trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { state.signinError = 'Enter the email you sign in with.'; render(); return; }
+  Object.assign(state, { signingIn: true, signinError: null, signinEmail: email }); render();
+  try { state.forgotSent = await api('/api/auth/forgot', { method: 'POST', body: { email } }); }
+  catch (e) { state.signinError = e.message; }
+  state.signingIn = false; render();
+}
+async function openLink(kind, token) {
+  try { state.linkPage = { kind, token, info: await api('/api/auth/link', { method: 'POST', body: { token } }) }; }
+  catch (e) { state.linkPage = { kind, token, error: e.status === 404 ? e.message : "This link isn't complete. Check that you copied all of it." }; }
+}
+function linkPage() {
+  const L = state.linkPage, invite = L.kind === 'invite';
+  if (L.error) return authShell('link', `<div class="rounded-xl border border-slate-200 bg-white p-6">
+    <h1 class="text-lg font-semibold">This link doesn't work any more</h1>
+    <p class="mt-2 text-sm text-slate-600">${esc(L.error)} ${invite ? 'Ask your timetable coordinator to send a new invite.' : 'Use "Forgot password?" again, or ask your timetable coordinator.'}</p>${backToSignIn}</div>`);
+  return authShell('link', `<form onsubmit="setPasswordFromLink(event)" class="rounded-xl border border-slate-200 bg-white p-6">
+    <h1 class="text-lg font-semibold">${invite ? `Welcome to Samay, ${esc(L.info.name)}` : 'Choose a new password'}</h1>
+    <p class="mt-1 text-sm text-slate-500">${invite ? `You've been invited to ${esc(L.info.college.name)}'s timetable. Choose a password to sign in.` : `For ${esc(L.info.name)} at ${esc(L.info.college.name)}. You'll be signed out on other devices.`}</p>
+    <div class="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-sm"><span class="text-slate-500">Email</span> <span class="font-medium">${esc(L.info.email)}</span></div>
+    <label class="mt-3 block"><span class="mb-1 block text-sm font-medium text-slate-700">New password</span>
+      <input id="lp-password" type="password" autocomplete="new-password" class="${inputCls(false)}"/></label>
+    <label class="mt-3 block"><span class="mb-1 block text-sm font-medium text-slate-700">Type it again</span>
+      <input id="lp-again" type="password" autocomplete="new-password" class="${inputCls(false)}"/></label>
+    <p class="mt-1 text-xs text-slate-500">At least 8 characters.</p>
+    ${state.signinError ? `<p class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">${esc(state.signinError)}</p>` : ''}
+    <button type="submit" ${state.signingIn ? 'disabled' : ''} class="mt-4 w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60">${invite ? 'Set password and sign in' : 'Save new password'}</button>
+  </form>`);
+}
+async function setPasswordFromLink(ev) {
+  ev.preventDefault();
+  const password = document.getElementById('lp-password').value, again = document.getElementById('lp-again').value;
+  const problem = password.length < 8 ? 'Choose a password of at least 8 characters.' : password !== again ? "The two passwords don't match." : null;
+  if (problem) { state.signinError = problem; render(); return; }
+  Object.assign(state, { signingIn: true, signinError: null }); render();
+  try {
+    const me = await api('/api/auth/set-password', { method: 'POST', body: { token: state.linkPage.token, password } });
+    const invite = state.linkPage.kind === 'invite';
+    await loadSignedIn(me);
+    Object.assign(state, { linkPage: null, signingIn: false });
+    render(); toast(invite ? `Welcome! You're signed in to ${col().name}.` : 'Password changed. You are signed in.');
+  } catch (e) {
+    Object.assign(state, { signingIn: false, signinError: e.message }); render();
+  }
+}
 
 function studentCodePage() {
   return `

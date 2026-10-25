@@ -15,5 +15,13 @@ SOLVER_WORKERS = int(os.environ.get("SAMAY_SOLVER_WORKERS", "8"))  # CPU threads
 ALLOWED_ORIGINS = [o for o in os.environ.get("SAMAY_ORIGINS", "http://localhost:5500").split(",") if o]
 # The AI assistant needs an Anthropic API key in the environment (never in the code). SAMAY_ASSISTANT=0 turns it off.
 ASSISTANT = os.environ.get("SAMAY_ASSISTANT", "1") != "0" and bool(os.environ.get("ANTHROPIC_API_KEY"))
+# Email for invites and password resets (any SMTP server). Without it, the app shows links to copy instead.
+SMTP_HOST = os.environ.get("SAMAY_SMTP_HOST", "")
+SMTP_PORT = int(os.environ.get("SAMAY_SMTP_PORT", "587"))
+SMTP_USER = os.environ.get("SAMAY_SMTP_USER", "")
+SMTP_PASSWORD = os.environ.get("SAMAY_SMTP_PASSWORD", "")
+EMAIL_FROM = os.environ.get("SAMAY_EMAIL_FROM", "")  # e.g. "Samay <timetable@yourcollege.edu>"
+# The site's public address, used in emailed links (e.g. https://samay-timetable.onrender.com).
+PUBLIC_URL = os.environ.get("SAMAY_PUBLIC_URL", "").rstrip("/")
 # Most AI assistant questions per day for the whole site (protects the API key on a public demo). 0 = no limit.
 ASSISTANT_DAILY_LIMIT = int(os.environ.get("SAMAY_ASSISTANT_DAILY_LIMIT", "60"))

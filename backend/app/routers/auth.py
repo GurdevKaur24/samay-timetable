@@ -8,6 +8,7 @@ from ..db import SESSION_SECONDS, Database
 from ..schema import CollegeData
 from ..security import DUMMY_HASH, verify_password
 from ..seed import DEMO_USERS
+from ..services.links import email_link
 from ..services.new_college import college_id_for, empty_college
 
 router = APIRouter(prefix="/api/auth", tags=["sign-in"])
@@ -120,6 +121,57 @@ def change_password(body: PasswordIn, request: Request, user: CurrentUser = Depe
         raise HTTPException(400, "Choose a new password that's different from the current one.")
     db.set_password(user.id, body.new, keep_token=request.cookies.get(COOKIE_NAME))
     return {"changed": True, "message": "Password changed. You've been signed out everywhere else."}
+
+
+# ---- forgot password, and invite / reset links ---------------------------------------------------------------
+SENT = "If that email has a Samay account, we've sent it a link to choose a new password. The link works for 1 hour."
+LINK_GONE = "This link has expired or was already used. Ask for a new one."
+
+
+class ForgotIn(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+
+
+@router.post("/forgot")
+def forgot_password(body: ForgotIn, request: Request, db: Database = Depends(get_db)):
+    """Email a reset link. The answer is the same whether or not the email has an account."""
+    email = body.email.strip().lower()
+    limiter = request.app.state.forgot_limiter
+    if limiter.blocked(email):
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Too many requests for this email. Wait 15 minutes, then try again.")
+    limiter.failed(email)  # every request counts
+    row = db.find_user_by_email(email)
+    if row is not None and request.app.state.send_email is not None:
+        token = db.create_password_token(row["id"], "reset")
+        college = db.user_for_token_college(row["college_id"])
+        email_link(request, "reset", token, email, row["name"], college)
+    return {"message": SENT, "email": request.app.state.send_email is not None}
+
+
+class LinkIn(BaseModel):
+    token: str = Field(min_length=10, max_length=200)
+
+
+@router.post("/link")
+def link_info(body: LinkIn, db: Database = Depends(get_db)):
+    """What an invite or reset link is for, so the page can greet the person."""
+    row = db.password_token(body.token)
+    if row is None:
+        raise HTTPException(404, LINK_GONE)
+    return {"kind": row["kind"], "name": row["name"], "email": row["email"], "college": {"name": row["college_name"]}}
+
+
+class SetPasswordIn(LinkIn):
+    password: str = Field(min_length=8, max_length=200)
+
+
+@router.post("/set-password")
+def set_password_from_link(body: SetPasswordIn, request: Request, response: Response, db: Database = Depends(get_db)):
+    """Choose a password from an invite or reset link (it works once), then sign in."""
+    row = db.password_token(body.token)
+    if row is None or db.use_password_token(body.token, body.password) is None:
+        raise HTTPException(404, LINK_GONE)
+    return start_session(db.find_user_by_email(row["email"]), request, response, db)
 
 
 @router.post("/logout")

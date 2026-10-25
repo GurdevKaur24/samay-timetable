@@ -88,6 +88,8 @@ Each college sees only its own data and never learns which other colleges use Sa
 **Privacy and safety**
 - Every request is tied to the signed-in user's college. The college never comes from the address or the request. Tests prove college A can't read college B.
 - Passwords are hashed with scrypt, sessions use httpOnly cookies, sign-in attempts are rate-limited, and wrong student codes are blocked after repeated tries.
+- People choose their own passwords through one-time invite links (7 days). Forgot password sends a one-time reset link
+  (1 hour) without revealing whether an email has an account, and signs the person out everywhere else.
 
 ## Try it
 ### Online
@@ -133,7 +135,9 @@ accounts (one-click on the sign-in page). On macOS/Linux use `.venv/bin/python` 
 4. **Generate:** a clash-free week in seconds. Look at it by section, teacher or room.
 5. **Adjust:** click a class to move or swap it, lock what must not move, or ask the **Assistant**. Generate again; locked classes stay.
 6. **Publish:** teachers and students now see this version.
-7. **Share:** add HOD and teacher accounts under **Accounts**, and turn on **Student access** to get the code, link and QR poster.
+7. **Share:** invite HODs and teachers under **Accounts**. Each gets a one-time link (emailed if email is set up, or
+   copy it and send it yourself) to choose their own password. Turn on **Student access** to get the code, link and QR poster.
+   Forgot a password? Use **Forgot password?** on the sign-in page, or the coordinator's **Reset link** next to their name.
 8. Print, save as PDF or export to Excel from the Timetable page.
 
 **Head of department:** keep your department's data complete under **Department data** (other departments' records are
@@ -195,6 +199,8 @@ Set as environment variables before starting the server.
 | `ANTHROPIC_API_KEY` | – | Turns on the AI assistant (`SAMAY_ASSISTANT=0` turns it off again) |
 | `SAMAY_ASSISTANT_DAILY_LIMIT` | `60` | Most AI assistant questions a day for the whole site (`0` = no limit) |
 | `SAMAY_DB` | `backend/data/samay.db` | Where the database file lives |
+| `SAMAY_SMTP_HOST`, `SAMAY_SMTP_PORT`, `SAMAY_SMTP_USER`, `SAMAY_SMTP_PASSWORD`, `SAMAY_EMAIL_FROM` | – | Email for invites and password resets, through any SMTP server (e.g. Gmail with an app password, or Brevo). Without it, Samay shows the links for the coordinator to share |
+| `SAMAY_PUBLIC_URL` | – | The site's address, used in emailed links |
 
 ## Deploying
 [`render.yaml`](render.yaml) deploys Samay as one free web service on [Render](https://render.com). In Render, choose

@@ -10,6 +10,7 @@ from .db import Database
 from .jobs import JobRunner
 from .routers import assistant, auth, college, students, teacher, timetables, users
 from .seed import seed
+from .services.email import smtp_sender
 
 
 AUTO = object()
@@ -37,7 +38,7 @@ class FreshStaticFiles(StaticFiles):
 
 
 def create_app(db_path: str | Path | None = None, seed_if_empty: bool = True, solve_seconds: float | None = None,
-               demo_login: bool | None = None, signup: bool | None = None, assistant_chat=AUTO) -> FastAPI:
+               demo_login: bool | None = None, signup: bool | None = None, assistant_chat=AUTO, send_email=AUTO) -> FastAPI:
     app = FastAPI(title="Samay Timetable API")
     app.state.demo_login = config.DEMO_LOGIN if demo_login is None else demo_login
     app.state.signup = config.SIGNUP if signup is None else signup
@@ -48,6 +49,8 @@ def create_app(db_path: str | Path | None = None, seed_if_empty: bool = True, so
     app.state.cookie_secure = config.COOKIE_SECURE
     app.state.assistant_chat = default_assistant() if assistant_chat is AUTO else assistant_chat
     app.state.assistant_quota = DailyQuota(config.ASSISTANT_DAILY_LIMIT)
+    app.state.send_email = smtp_sender() if send_email is AUTO else send_email  # None: links are shown instead
+    app.state.forgot_limiter = LoginLimiter(limit=5)  # password reset requests, per email
     if seed_if_empty and app.state.db.college_count() == 0:
         seed(app.state.db)
 
@@ -69,7 +72,7 @@ def create_app(db_path: str | Path | None = None, seed_if_empty: bool = True, so
     @app.get("/api/health")
     def health():
         return {"status": "ok", "app": "samay", "demo_login": app.state.demo_login, "signup": app.state.signup,
-                "assistant": app.state.assistant_chat is not None}
+                "assistant": app.state.assistant_chat is not None, "email": app.state.send_email is not None}
 
     # The web page: same origin as the API, so the sign-in cookie just works. Mounted last so /api routes win.
     if config.WEB_DIR.is_dir():
