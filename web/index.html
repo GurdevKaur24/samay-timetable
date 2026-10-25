@@ -3008,8 +3008,17 @@ function normalizeRow(c, entity, raw) {
   return v;
 }
 
+// Which list a sheet's column headings fit best: stops e.g. a Subjects sheet being imported as Departments.
+function listForColumns(rows) {
+  const heads = new Set(Object.keys(rows[0] || {}).map(h => h.trim().toLowerCase()));
+  const score = e => COLUMNS[e].filter(([h]) => heads.has(h.toLowerCase())).length / COLUMNS[e].length;
+  return Object.keys(COLUMNS).reduce((best, e) => (score(e) > score(best) ? e : best));
+}
 function checkImportRows(rows) {
   const c = col(), m = state.modal, seen = new Set();
+  const fits = rows.length ? listForColumns(rows) : m.entity;
+  m.mismatch = fits !== m.entity ? fits : null;
+  if (m.mismatch) { m.results = null; render(); return; }
   m.results = rows.map((raw, i) => {
     const values = normalizeRow(c, m.entity, raw);
     const { errors, record } = validateValues(c, m.entity, values, null, seen);
@@ -3261,6 +3270,10 @@ function modal() {
         ${m.sheet ? '' : `<span class="mt-1 block text-xs text-amber-700">No sheet is called "${esc(ENT[m.entity].label)}". Choose the right one.</span>`}</label>` : ''}
     <div class="text-center text-xs text-slate-500">No file handy? <button onclick="tryExample()" class="font-medium text-indigo-600 hover:underline">Try with example rows</button> (includes some mistakes on purpose).</div>
     ${m.fileError ? `<div class="rounded-lg bg-red-50 p-3 text-sm text-red-800">${esc(m.fileError)}</div>` : ''}
+    ${m.mismatch ? `<div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+      ${m.sheet ? `The sheet <b>${esc(m.sheet)}</b>` : 'This file'} has the columns of <b>${esc(ENT[m.mismatch].label)}</b>, not ${esc(ENT[m.entity].label)}, so nothing was imported.
+      <div class="mt-2 flex flex-wrap gap-2">${btn(`Import it as ${ENT[m.mismatch].label}`, `setImportEntity('${m.mismatch}')`, 'primary')}
+        ${importBook && importBook.wb.SheetNames.length > 1 ? '<span class="self-center text-xs">or choose another sheet above.</span>' : ''}</div></div>` : ''}
     ${res ? `
       <div class="flex flex-wrap gap-2 text-sm">
         <span class="rounded-md bg-emerald-50 px-2 py-1 font-medium text-emerald-700">${good} ready to import</span>
