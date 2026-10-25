@@ -2875,8 +2875,28 @@ function confirmDelete() {
 function closeModal() { state.modal = null; render(); }
 
 /* ---- import: Excel (.xlsx) or CSV ---- */
-function openImport(entity) { state.modal = { kind: 'import', entity, results: null, file: null }; render(); }
-function setImportEntity(entity) { state.modal = { kind: 'import', entity, results: null, file: null }; render(); }
+function openImport(entity) { state.modal = { kind: 'import', entity, results: null, file: null }; useBook(entity); render(); }
+function setImportEntity(entity) { state.modal = { kind: 'import', entity, results: null, file: null }; useBook(entity); render(); }
+// One workbook can hold every list (a sheet each). It's remembered while the page is open, and each Data tab picks its
+// own sheet by name ("Teachers", "Teaching assignments", ...), so the coordinator imports tab by tab from the same file.
+let importBook = null;  // { name, wb }
+const sheetKey = x => String(x).toLowerCase().replace(/[^a-z]/g, '');
+function bestSheet(entity) {
+  const names = importBook.wb.SheetNames, want = [entity, ENT[entity].label, ENT[entity].one].map(sheetKey);
+  return names.find(n => want.includes(sheetKey(n)))
+    || names.find(n => sheetKey(n).length > 3 && want.some(w => sheetKey(n).includes(w) || w.includes(sheetKey(n))))
+    || (names.length === 1 ? names[0] : null);
+}
+function useBook(entity) {
+  if (!importBook || !COLUMNS[entity]) return;
+  const sheet = bestSheet(entity);
+  if (sheet) loadSheet(sheet); else Object.assign(state.modal, { file: importBook.name, sheet: null, results: null });
+}
+function loadSheet(sheet) {
+  const rows = XLSX.utils.sheet_to_json(importBook.wb.Sheets[sheet], { defval: '', raw: false });
+  Object.assign(state.modal, { file: importBook.name, sheet, fileError: null });
+  checkImportRows(rows);
+}
 
 function downloadTemplate(entity) {
   const c = col(), cols = COLUMNS[entity];
@@ -2909,14 +2929,19 @@ async function readImport(file) {
   if (!file) return;
   let rows;
   try {
-    if (window.XLSX) {
-      const wb = XLSX.read(await file.arrayBuffer());
-      rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '', raw: false });
-    } else rows = parseCsv(await file.text());
+    if (window.XLSX && !/\.csv$/i.test(file.name)) {
+      importBook = { name: file.name, wb: XLSX.read(await file.arrayBuffer()) };
+      useBook(state.modal.entity);
+      render();
+      return;
+    }
+    rows = window.XLSX ? XLSX.utils.sheet_to_json((wb => wb.Sheets[wb.SheetNames[0]])(XLSX.read(await file.arrayBuffer())), { defval: '', raw: false })
+      : parseCsv(await file.text());
   } catch (e) {
     state.modal.results = null; state.modal.fileError = 'This file couldn\'t be read. Save it as .xlsx or .csv and try again.'; render(); return;
   }
-  state.modal.file = file.name; state.modal.fileError = null;
+  importBook = null;
+  state.modal.file = file.name; state.modal.fileError = null; state.modal.sheet = null;
   checkImportRows(rows);
 }
 
@@ -3210,9 +3235,14 @@ function modal() {
     <label class="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 px-4 py-6 text-center hover:border-indigo-400 hover:bg-indigo-50/30">
       ${icon('table', 'w-6 h-6 text-slate-400')}
       <span class="mt-2 text-sm font-medium text-slate-700">${m.file ? `Loaded: ${esc(m.file)}. Choose another file` : 'Choose an Excel or CSV file'}</span>
-      <span class="text-xs text-slate-500">.xlsx or .csv, first sheet, one row per ${ENT[m.entity].one}</span>
+      <span class="text-xs text-slate-500">.xlsx or .csv, one row per ${ENT[m.entity].one}. One workbook with a sheet for each list works too.</span>
       <input type="file" accept=".xlsx,.xls,.csv" class="hidden" onchange="readImport(this.files[0])"/>
     </label>
+    ${importBook && importBook.wb.SheetNames.length > 1 && m.file === importBook.name ? `
+      <label class="block"><span class="mb-1 block text-sm font-medium text-slate-700">Sheet with the ${ENT[m.entity].label.toLowerCase()}</span>
+        <select onchange="loadSheet(this.value); render()" class="${inputCls(!m.sheet)}">
+          ${m.sheet ? '' : '<option value="">Choose a sheet...</option>'}${importBook.wb.SheetNames.map(n => `<option value="${esc(n)}" ${n === m.sheet ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>
+        ${m.sheet ? '' : `<span class="mt-1 block text-xs text-amber-700">No sheet is called "${esc(ENT[m.entity].label)}". Choose the right one.</span>`}</label>` : ''}
     <div class="text-center text-xs text-slate-500">No file handy? <button onclick="tryExample()" class="font-medium text-indigo-600 hover:underline">Try with example rows</button> (includes some mistakes on purpose).</div>
     ${m.fileError ? `<div class="rounded-lg bg-red-50 p-3 text-sm text-red-800">${esc(m.fileError)}</div>` : ''}
     ${res ? `

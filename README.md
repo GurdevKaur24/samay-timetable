@@ -70,7 +70,8 @@ Each college sees only its own data and never learns which other colleges use Sa
 - New colleges sign up and start with a sensible week.
 
 **Easy to use**
-- A "Getting started" checklist, forms with plain-English error messages, and Excel/CSV import with downloadable templates.
+- A "Getting started" checklist, forms with plain-English error messages, and Excel/CSV import with downloadable
+  templates: one file per list, or one workbook with a sheet per list (each Data tab picks its sheet by name).
 - Timetable by **section, teacher or room**: colour-coded, lab blocks merged, lab groups side by side, reserved times greyed out.
 - **Print / save as PDF** (A4) and **Excel export**: one sheet per section and per teacher, plus every class in one list.
 - Works on phones.
