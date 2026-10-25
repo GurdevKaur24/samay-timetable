@@ -214,7 +214,7 @@ for a demo; a real college needs a paid plan with a disk (set `SAMAY_DB` to a pa
 cd backend
 .\.venv\Scripts\python -m pytest
 ```
-205 tests cover:
+221 tests cover:
 - the clash checker (a passing and a failing case for every rule);
 - the generator on both demo colleges, electives, reserved times and locks;
 - the pre-check and the data checks;
