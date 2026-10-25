@@ -3532,7 +3532,11 @@ function schemeForm(c, m) {
     <input type="number" value="${esc(v[f])}" oninput="sv('${f}', this.value)" class="${inputCls(e[f])}"/>
     ${hint ? `<p class="mt-1 text-xs text-slate-500">${hint}</p>` : ''}${err(f)}</label>`;
   const section = (title, sub, body) => `<div><div class="text-sm font-semibold text-slate-900">${title}</div><p class="mb-2 text-xs text-slate-500">${sub}</p>${body}</div>`;
-  const theoryTypes = [...new Set([c.scheme.theoryRoomType, ...c.rooms.map(r => r.type)])].filter(t => !labRoomTypes(c).includes(t) || t === c.scheme.theoryRoomType);
+  // Rooms for lectures: the usual kinds are always offered (even before any rooms are added), plus the college's own
+  // room types, except types its lab subjects need.
+  const labNeeds = new Set(Object.values(c.subjects).map(s => s.room).filter(Boolean));
+  const theoryTypes = [...new Set([c.scheme.theoryRoomType, 'classroom', 'lecture', 'seminar_hall', ...c.rooms.map(r => r.type)])]
+    .filter(t => !labNeeds.has(t) || t === c.scheme.theoryRoomType);
 
   return `
     <div class="rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Changing the scheme clears the current timetable. Generate again after saving.</div>
