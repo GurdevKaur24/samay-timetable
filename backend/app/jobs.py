@@ -14,6 +14,7 @@ from solver.metrics import metrics
 from solver.model import solve
 from solver.validator import validate
 
+from . import config
 from .db import Database
 
 
@@ -77,7 +78,7 @@ class JobRunner:
                 raise RuntimeError("Your college's data couldn't be found.")
             data, data_version = loaded
             locked, dropped = matching_locks(data, job.locked)
-            result = solve(data, time_limit=self.time_limit, fixed=locked)
+            result = solve(data, time_limit=self.time_limit, fixed=locked, workers=config.SOLVER_WORKERS)
             if result["status"] not in ("optimal", "feasible"):
                 job.status, job.message = "failed", f"{result['message']} Run the pre-check to see what to change."
                 return

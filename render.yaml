@@ -1,0 +1,24 @@
+# Render blueprint: one free web service runs the API and serves the app page (same address, so sign-in cookies work).
+# The free plan has no permanent disk: the database is recreated with the demo colleges whenever the service restarts.
+services:
+  - type: web
+    name: samay-timetable
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.10
+      - key: SAMAY_COOKIE_SECURE   # Render serves HTTPS, so the sign-in cookie is never sent over plain HTTP
+        value: "1"
+      - key: SAMAY_DEMO_LOGIN      # one-click demo accounts for judges; set to 0 for a real college
+        value: "1"
+      - key: SAMAY_SOLVE_SECONDS
+        value: "45"
+      - key: SAMAY_SOLVER_WORKERS  # the free plan has a small share of one CPU
+        value: "2"
+      - key: ANTHROPIC_API_KEY     # optional: turns on the AI assistant; leave empty to keep it off
+        sync: false

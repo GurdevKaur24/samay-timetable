@@ -46,14 +46,14 @@ Full product plan and roadmap: `docs/requirements.md`.
   **demo mode** (built-in demo colleges, in-browser generator, nothing saved). `fromServer`/`toServer` convert between
   the server schema and the page's in-memory format. Rebuild `tailwind.css` after adding new classes (command in
   `prototype/tailwind.config.cjs`).
-- **frontend/**: React + Vite + TypeScript + Tailwind v4. Calls the API through the Vite proxy at `/api`.
+- **render.yaml**: deploys one free Render web service (API + page on one address, HTTPS cookies, 2 solver threads).
+  The free plan has no disk, so the database is re-seeded with the demo colleges after restarts.
 
 ## Run
 ```
-cd backend; .\.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
+cd backend; .\.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000   # app + API at http://localhost:8000
 cd backend; .\.venv\Scripts\python -m app.seed --reset   # rebuild the local database from the seed files
 cd backend; .\.venv\Scripts\python -m pytest
-cd frontend; npm run dev            # http://localhost:5173
 ```
 
 ## Domain glossary
