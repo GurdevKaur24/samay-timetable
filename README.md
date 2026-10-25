@@ -123,7 +123,7 @@ accounts (one-click on the sign-in page). On macOS/Linux use `.venv/bin/python` 
 - **Turn on the AI assistant (optional):** set your Anthropic API key in the terminal before starting the server, e.g.
   `$env:ANTHROPIC_API_KEY = "sk-ant-..."` in PowerShell (or `setx ANTHROPIC_API_KEY "sk-ant-..."` once). Never put the key in
   a file in this project. Each question uses your API credit.
-- **Offline demo:** opening `prototype/index.html` directly works with built-in demo colleges and a simple in-browser
+- **Offline demo:** opening `web/index.html` directly works with built-in demo colleges and a simple in-browser
   generator. Nothing is saved.
 
 ## How to use it
@@ -163,7 +163,7 @@ today's classes, or open **All timetables** for any section, teacher or room.
 
 ## How it works
 ```
-Browser (prototype/index.html)  ──JSON over HTTPS──►  FastAPI (backend/app)
+Browser (web/index.html)        ──JSON over HTTPS──►  FastAPI (backend/app)
   one page, live mode when served by Samay            ├─ sign-in, roles, college from the session only
   falls back to offline demo mode                     ├─ SQLite: one checked JSON document per college, timetable versions
                                                       ├─ background generation job (one per college)
@@ -233,7 +233,7 @@ backend/
   solver/       college.py, model.py (CP-SAT), validator.py (clash checker), metrics.py
   data/         colleges/*.json (demo colleges), demo_users.json (demo accounts)
   tests/        pytest suite
-prototype/      the app page (index.html) and its prebuilt Tailwind CSS
+web/            the app's front end (index.html) and its prebuilt Tailwind CSS
 docs/           requirements.md (product plan), screenshots/
 render.yaml     deployment
 CLAUDE.md       project notes for Claude Code

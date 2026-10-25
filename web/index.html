@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Samay · Timetable Optimizer (Prototype)</title>
+<title>Samay · College Timetables</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <!-- Styles are pre-built from this file's classes; see tailwind.config.cjs to rebuild after changing classes. -->
@@ -233,7 +233,7 @@ function fmtOff(off) {
 
 /* ----------------------------------------------------------------------
    In-browser demo generator (greedy). The real app runs Google OR-Tools
-   CP-SAT on the server; this keeps the prototype a single file.
+   CP-SAT on the server; this lets the page work offline as a demo.
 ----------------------------------------------------------------------- */
 // `fixed`: locked sessions [{ a, day, start, room }] placed first, exactly where they are.
 function generate(c, fixed = []) {

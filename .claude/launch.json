@@ -16,14 +16,14 @@
       "port": 8000
     },
     {
-      "name": "prototype",
+      "name": "offline-demo",
       "runtimeExecutable": "python",
       "runtimeArgs": [
         "-m",
         "http.server",
         "5500",
         "--directory",
-        "prototype"
+        "web"
       ],
       "port": 5500
     }

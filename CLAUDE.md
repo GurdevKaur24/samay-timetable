@@ -48,12 +48,12 @@ Full product plan and roadmap: `docs/requirements.md`.
     enters it gets a `samay_student` cookie (`student_sessions`, 180 days) that opens only that college's published
     timetable (`GET /api/student/timetable`); it opens nothing else. Wrong codes answer "not found" and are rate-limited
     per address; a new code or turning access off signs every phone out.
-- **prototype/index.html**: the app page. Served by the backend at http://localhost:8000 it runs in **live mode**
+- **web/index.html**: the app's front end (one page). Served by the backend at http://localhost:8000 it runs in **live mode**
   (real sign-in; data loaded from and saved to the server with `PUT /api/college/data`; Generate uses the server's
   CP-SAT generator; assistant changes saved via `/revise`). Opened as a file, or from any other server, it falls back to
   **demo mode** (built-in demo colleges, in-browser generator, nothing saved). `fromServer`/`toServer` convert between
   the server schema and the page's in-memory format. Rebuild `tailwind.css` after adding new classes (command in
-  `prototype/tailwind.config.cjs`).
+  `web/tailwind.config.cjs`).
 - **render.yaml**: deploys one free Render web service (API + page on one address, HTTPS cookies, 2 solver threads).
   The free plan has no disk, so the database is re-seeded with the demo colleges after restarts.
 

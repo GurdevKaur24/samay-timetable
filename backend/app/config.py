@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
-WEB_DIR = Path(os.environ.get("SAMAY_WEB_DIR", BACKEND_DIR.parent / "prototype"))  # the page served at "/"
+WEB_DIR = Path(os.environ.get("SAMAY_WEB_DIR", BACKEND_DIR.parent / "web"))  # the page served at "/"
 DB_PATH = Path(os.environ.get("SAMAY_DB", BACKEND_DIR / "data" / "samay.db"))
 # Set SAMAY_COOKIE_SECURE=1 when serving over HTTPS so the sign-in cookie is never sent over plain HTTP.
 COOKIE_SECURE = os.environ.get("SAMAY_COOKIE_SECURE", "0") == "1"
