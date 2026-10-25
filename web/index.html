@@ -3433,7 +3433,11 @@ function openScheme() {
     kind: 'scheme', errors: {},
     values: {
       days: [...S.days],
-      periods: S.periods.map(([, start, end], i) => ({ start, end, brk: S.breaks.find(b => b.after === i + 1)?.label || '' })),
+      // The day from first to last: class periods and breaks, each with its own times (kind '' = a class period).
+      slots: S.periods.flatMap(([, start, end], i) => {
+        const b = S.breaks.find(x => x.after === i + 1);
+        return b && S.periods[i + 1] ? [{ start, end, kind: '' }, { start: end, end: S.periods[i + 1][1], kind: b.label }] : [{ start, end, kind: '' }];
+      }),
       lecturesPerWeek: String(S.rules.lecturesPerWeek), labSessionsPerWeek: String(S.rules.labSessionsPerWeek),
       labBlock: String(S.labBlock), maxSame: String(S.rules.maxSameSubjectPerDay), teacherMax: String(S.rules.teacherMaxPerDay),
       electiveSize: String(S.rules.electiveClassSize || 70),
@@ -3443,36 +3447,46 @@ function openScheme() {
   render();
 }
 function sv(field, value, rerender) { state.modal.values[field] = value; if (rerender) render(); }
-function pv(i, field, value, rerender) { state.modal.values.periods[i][field] = value; if (rerender) render(); }
+function pv(i, field, value, rerender) {
+  const sl = state.modal.values.slots, old = sl[i][field];
+  sl[i][field] = value;
+  // Keep the day continuous: moving a slot's end moves the next slot's start (if they were touching).
+  if (field === 'end' && sl[i + 1] && sl[i + 1].start === old) { sl[i + 1].start = value; rerender = true; }
+  if (rerender) render();
+}
 function toggleDay(d) {
   const days = state.modal.values.days, i = days.indexOf(d);
   i >= 0 ? days.splice(i, 1) : days.push(d);
 }
 function addPeriod() {
-  const ps = state.modal.values.periods, last = ps.at(-1);
-  const len = last ? (toMin(last.end) ?? 0) - (toMin(last.start) ?? 0) || 50 : 50, start = last ? toMin(last.end) ?? 540 : 540;
-  ps.push({ start: toTime(start), end: toTime(start + len), brk: '' });
+  const sl = state.modal.values.slots, last = sl.filter(x => !x.kind).at(-1), end = sl.at(-1);
+  const len = last ? (toMin(last.end) ?? 0) - (toMin(last.start) ?? 0) || 50 : 50, start = end ? toMin(end.end) ?? 540 : 540;
+  sl.push({ start: toTime(start), end: toTime(start + len), kind: '' });
   render();
 }
-function removePeriod(i) { state.modal.values.periods.splice(i, 1); if (state.modal.values.periods.length) state.modal.values.periods.at(-1).brk = ''; render(); }
+function removePeriod(i) { state.modal.values.slots.splice(i, 1); render(); }
+// Class periods are numbered P1, P2 … in order; breaks don't get a number.
+const periodNumbers = sl => { let n = 0; return sl.map(x => x.kind ? null : ++n); };
 
 function checkScheme(c, v) {
-  const err = {}, ps = v.periods, days = ALL_DAYS.filter(d => v.days.includes(d));
-  const n = k => intOrNull(v[k]);
+  const err = {}, sl = v.slots, ps = sl.filter(x => !x.kind), days = ALL_DAYS.filter(d => v.days.includes(d));
+  const n = k => intOrNull(v[k]), nums = periodNumbers(sl);
+  const name = i => sl[i].kind ? `${sl[i].kind} (${sl[i].start}–${sl[i].end})` : `P${nums[i]}`;
   if (!days.length) err.days = 'Choose at least one working day.';
-  if (!ps.length) err.periods = 'Add at least one period.';
-  ps.forEach((p, i) => {
-    const s = toMin(p.start), e = toMin(p.end), label = `P${i + 1}`;
-    if (s === null || e === null) err.periods ||= `${label}: enter start and end times.`;
-    else if (e <= s) err.periods ||= `${label} must end after it starts.`;
+  if (!ps.length) err.periods = 'Add at least one class period.';
+  sl.forEach((x, i) => {
+    const s = toMin(x.start), e = toMin(x.end);
+    if (s === null || e === null) err.periods ||= `${name(i)}: enter start and end times.`;
+    else if (e <= s) err.periods ||= `${name(i)} must end after it starts.`;
     if (i > 0 && s !== null) {
-      const prevEnd = toMin(ps[i - 1].end), brk = ps[i - 1].brk;
-      if (prevEnd !== null && s < prevEnd) err.periods ||= `${label} starts before P${i} ends.`;
-      else if (prevEnd !== null && s > prevEnd && !brk) err.periods ||= `There's a gap between P${i} and ${label} (${ps[i - 1].end}–${p.start}). Mark it as a break, or close the gap.`;
-      else if (prevEnd !== null && s === prevEnd && brk) err.periods ||= `${brk} after P${i} has no time. Leave a gap between P${i} and ${label}.`;
+      const prevEnd = toMin(sl[i - 1].end);
+      if (prevEnd !== null && s < prevEnd) err.periods ||= `${name(i)} starts before ${name(i - 1)} ends.`;
+      else if (prevEnd !== null && s > prevEnd) err.periods ||= `There's a gap between ${name(i - 1)} and ${name(i)} (${sl[i - 1].end}–${x.start}). Add a row for it (for example Lunch), or close the gap.`;
+      if (x.kind && sl[i - 1].kind) err.periods ||= `${sl[i - 1].kind} and ${x.kind} are next to each other. Make them one break.`;
     }
   });
-  if (ps.length && ps.at(-1).brk) err.periods ||= 'A break can\'t come after the last period.';
+  if (sl.length && sl[0].kind) err.periods ||= 'The day starts with a class period, not a break. Remove the first break or move its time.';
+  if (sl.length && sl.at(-1).kind) err.periods ||= 'The day ends with a class period, not a break.';
 
   const maxSame = n('maxSame'), lectures = n('lecturesPerWeek'), labSessions = n('labSessionsPerWeek'), block = n('labBlock'), tmax = n('teacherMax');
   if (!isInt(maxSame, 1, 4)) err.maxSame = 'Enter 1–4.';
@@ -3499,20 +3513,25 @@ function checkScheme(c, v) {
 function saveScheme() {
   const c = col(), v = state.modal.values, { err, days } = checkScheme(c, v);
   if (Object.keys(err).length) { state.modal.errors = err; render(); return; }
-  const ps = v.periods;
-  // Teacher unavailability on days or periods that no longer exist is dropped.
+  const ps = v.slots.filter(x => !x.kind);
+  // Period numbers can change (e.g. an hour becomes lunch), so times that teachers can't teach and reserved times are
+  // matched by the clock: old P5 at 13:30 becomes whichever new period starts at 13:30. Times that no longer exist go.
+  const newNumber = Object.fromEntries(ps.map((x, i) => [x.start, i + 1]));
+  const move = ([d, p]) => { const at = c.scheme.periods[p - 1]?.[1], q = newNumber[at]; return days.includes(d) && q ? [d, q] : null; };
   let dropped = 0;
   c.teachers.forEach(t => {
     if (!t.off) return;
-    const keep = t.off.filter(([d, p]) => days.includes(d) && p <= ps.length);
+    const keep = t.off.map(move).filter(Boolean);
     dropped += t.off.length - keep.length;
     t.off = keep.length ? keep : undefined;
   });
+  (c.reserved || []).forEach(r => { const keep = r.slots.map(move).filter(Boolean); dropped += r.slots.length - keep.length; r.slots = keep; });
+  c.reserved = (c.reserved || []).filter(r => r.slots.length);
   c.scheme = {
     ...c.scheme,
     days,
-    periods: ps.map((p, i) => [`P${i + 1}`, p.start, p.end]),
-    breaks: ps.map((p, i) => p.brk ? { after: i + 1, label: p.brk, time: `${p.end}–${ps[i + 1].start}` } : null).filter(Boolean),
+    periods: ps.map((x, i) => [`P${i + 1}`, x.start, x.end]),
+    breaks: v.slots.map((x, i) => x.kind ? { after: v.slots.slice(0, i).filter(y => !y.kind).length, label: x.kind, time: `${x.start}–${x.end}` } : null).filter(Boolean),
     theoryRoomType: v.theoryRoomType,
     labBlock: intOrNull(v.labBlock),
     labPrefix: v.labNaming === 'section' ? 'section' : String(v.labPrefix).trim().toUpperCase(),
@@ -3522,7 +3541,7 @@ function saveScheme() {
       maxSameSubjectPerDay: intOrNull(v.maxSame), teacherMaxPerDay: intOrNull(v.teacherMax), electiveClassSize: intOrNull(v.electiveSize),
     },
   };
-  dataChanged(c, `Scheme saved.${dropped ? ` ${dropped} unavailable slot(s) on removed days or periods were cleared.` : ''}`);
+  dataChanged(c, `Scheme saved.${dropped ? ` ${dropped} unavailable or reserved time(s) on removed days or times were cleared.` : ''}`);
 }
 
 function schemeForm(c, m) {
@@ -3543,22 +3562,22 @@ function schemeForm(c, m) {
     ${section('Working days', 'Days when classes run.', `<div class="flex flex-wrap gap-2">${ALL_DAYS.map(d => `
       <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-sm hover:bg-slate-50">
         <input type="checkbox" ${v.days.includes(d) ? 'checked' : ''} onchange="toggleDay('${d}')" class="h-4 w-4 accent-indigo-600"/>${d}</label>`).join('')}</div>${err('days')}`)}
-    ${section('Periods and breaks', 'Times are the same every working day. Mark a break after any period; labs never run across a break.', `
+    ${section('Your day', 'One row for each class period or break, from the first to the last. Times are the same every working day; labs never run across a break.', `
       <div class="overflow-x-auto rounded-lg border border-slate-200"><table class="w-full text-sm">
-        <thead class="bg-slate-50 text-xs text-slate-500"><tr><th class="px-3 py-2 text-left font-medium">Period</th><th class="px-3 py-2 text-left font-medium">Starts</th>
-          <th class="px-3 py-2 text-left font-medium">Ends</th><th class="px-3 py-2 text-left font-medium">Break after it</th><th></th></tr></thead>
-        <tbody class="divide-y divide-slate-100">${v.periods.map((p, i) => `<tr>
-          <td class="px-3 py-2 font-medium">P${i + 1}</td>
-          <td class="px-3 py-1.5"><input type="time" value="${esc(p.start)}" oninput="pv(${i}, 'start', this.value)" class="rounded-md border border-slate-200 px-2 py-1"/></td>
-          <td class="px-3 py-1.5"><input type="time" value="${esc(p.end)}" oninput="pv(${i}, 'end', this.value)" class="rounded-md border border-slate-200 px-2 py-1"/></td>
-          <td class="px-3 py-1.5">${i === v.periods.length - 1 ? '<span class="text-xs text-slate-400">End of day</span>' : `
-            <select onchange="pv(${i}, 'brk', this.value)" class="rounded-md border border-slate-200 bg-white px-2 py-1">
-              <option value="" ${!p.brk ? 'selected' : ''}>No break</option>
-              ${[...new Set([...BREAK_NAMES, p.brk].filter(Boolean))].map(b => `<option ${b === p.brk ? 'selected' : ''}>${esc(b)}</option>`).join('')}
-            </select>`}</td>
-          <td class="px-3 py-1.5 text-right">${v.periods.length > 1 ? `<button onclick="removePeriod(${i})" class="rounded-md px-2 py-1 text-xs text-slate-500 hover:bg-red-50 hover:text-red-700">Remove</button>` : ''}</td>
-        </tr>`).join('')}</tbody></table></div>
-      <button onclick="addPeriod()" class="mt-2 text-sm font-medium text-indigo-600 hover:underline">+ Add period</button>${err('periods')}`)}
+        <thead class="bg-slate-50 text-xs text-slate-500"><tr><th class="px-3 py-2 text-left font-medium">Starts</th><th class="px-3 py-2 text-left font-medium">Ends</th>
+          <th class="px-3 py-2 text-left font-medium">What happens</th><th class="px-3 py-2 text-left font-medium">Period</th><th></th></tr></thead>
+        <tbody class="divide-y divide-slate-100">${(nums => v.slots.map((x, i) => `<tr class="${x.kind ? 'bg-slate-50' : ''}">
+          <td class="px-3 py-1.5"><input type="time" value="${esc(x.start)}" oninput="pv(${i}, 'start', this.value)" class="rounded-md border border-slate-200 px-2 py-1"/></td>
+          <td class="px-3 py-1.5"><input type="time" value="${esc(x.end)}" onchange="pv(${i}, 'end', this.value)" class="rounded-md border border-slate-200 px-2 py-1"/></td>
+          <td class="px-3 py-1.5"><select onchange="pv(${i}, 'kind', this.value, true)" class="rounded-md border border-slate-200 bg-white px-2 py-1">
+              <option value="" ${!x.kind ? 'selected' : ''}>Class period</option>
+              ${[...new Set([...BREAK_NAMES, x.kind].filter(Boolean))].map(b => `<option ${b === x.kind ? 'selected' : ''}>${esc(b)}</option>`).join('')}
+            </select></td>
+          <td class="px-3 py-2 font-medium">${x.kind ? '<span class="text-xs font-normal text-slate-400">break</span>' : `P${nums[i]}`}</td>
+          <td class="px-3 py-1.5 text-right">${v.slots.length > 1 ? `<button onclick="removePeriod(${i})" class="rounded-md px-2 py-1 text-xs text-slate-500 hover:bg-red-50 hover:text-red-700">Remove</button>` : ''}</td>
+        </tr>`).join(''))(periodNumbers(v.slots))}</tbody></table></div>
+      <button onclick="addPeriod()" class="mt-2 text-sm font-medium text-indigo-600 hover:underline">+ Add a time slot</button>
+      <p class="mt-1 text-xs text-slate-500">To make an hour a break, change "Class period" to Lunch (or Tea, Short break…). Changing a row's end time moves the next row's start.</p>${err('periods')}`)}
     ${section('Teaching rules', 'Defaults for every subject and teacher. A subject or teacher can still have its own number.', `
       <div class="grid gap-3 sm:grid-cols-3">
         ${num('lecturesPerWeek', 'Lectures per subject a week', 'For example 3.')}
