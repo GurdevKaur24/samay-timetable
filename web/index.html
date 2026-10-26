@@ -5,13 +5,30 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Samay · College Timetables</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
 <!-- Styles are pre-built from this file's classes; see tailwind.config.cjs to rebuild after changing classes. -->
 <link rel="stylesheet" href="tailwind.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
+  html { scroll-behavior: smooth; }
   .vtext { writing-mode: vertical-rl; transform: rotate(180deg); }
+  /* "?" help tips: point at or tap the circle to read */
+  .tip { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin-left: 4px;
+         border-radius: 9999px; background: #e0e7ff; color: #4338ca; font-size: 10px; font-weight: 700; line-height: 1; cursor: help; vertical-align: middle; }
+  .tip:hover::after, .tip:focus::after { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%);
+         width: max-content; max-width: 260px; padding: 8px 10px; border-radius: 8px; background: #0f172a; color: #fff; font-size: 12px; font-weight: 400;
+         line-height: 1.45; text-align: left; text-transform: none; letter-spacing: normal; white-space: normal; box-shadow: 0 8px 24px rgba(15,23,42,.25); z-index: 60; }
+  /* first-visit guided tour */
+  .tour-block { position: fixed; inset: 0; z-index: 69; }
+  .tour-spot { position: fixed; z-index: 70; border-radius: 14px; box-shadow: 0 0 0 9999px rgba(15,23,42,.58); pointer-events: none; transition: all .3s ease; }
+  .tour-ring { position: fixed; z-index: 71; border-radius: 14px; border: 2px solid #c7d2fe; pointer-events: none; transition: all .3s ease; animation: tour-pulse 1.6s ease-out infinite; }
+  @keyframes tour-pulse { 0% { box-shadow: 0 0 0 0 rgba(199,210,254,.8); } 100% { box-shadow: 0 0 0 16px rgba(199,210,254,0); } }
+  .tour-arrow { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 72; pointer-events: none; overflow: visible; }
+  .tour-path { fill: none; stroke: #fff; stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 7 7; animation: tour-flow .9s linear infinite; filter: drop-shadow(0 1px 2px rgba(0,0,0,.4)); }
+  @keyframes tour-flow { from { stroke-dashoffset: 28; } to { stroke-dashoffset: 0; } }
+  .tour-card { position: fixed; z-index: 73; width: min(340px, calc(100vw - 24px)); padding: 20px; border-radius: 16px; background: #fff; box-shadow: 0 20px 50px rgba(15,23,42,.35); }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .tour-ring, .tour-path { animation: none; } .tour-spot, .tour-ring { transition: none; } }
   .print-only { display: none; }
   .fade-in { animation: fadein .25s ease-out; }
   @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
@@ -22,11 +39,13 @@
     body { background: #fff; }
     main { padding: 0 !important; margin: 0 !important; }
     .tt-cell { break-inside: avoid; }
+    #tour { display: none; }
   }
 </style>
 </head>
-<body class="bg-slate-50 text-slate-900 font-sans antialiased">
+<body class="bg-[#f6f7fb] text-slate-900 font-sans antialiased">
 <div id="app"></div>
+<div id="tour"></div>
 
 <script>
 /* ------------------------------------------------------------------
@@ -553,14 +572,16 @@ function anim(key) {
   return 'fade-in';
 }
 function render() {
-  _frame = new Set();
+  _frame = new Set(); _steps = null;
   document.getElementById('app').innerHTML = layout();
   [..._shown].forEach(k => { if (!_frame.has(k)) _shown.delete(k); });
   drawQrs();
+  maybeTour();
 }
 function go(page) {
-  state.page = page; state.viewing = null; state.sel = null;
+  state.page = page; state.viewing = null; state.sel = null; state.more = false; state.menu = false;
   if (page === 'accounts') state.accounts = null;  // always show the latest list
+  if (page === 'scheme' && col() && !isViewer()) storage.set(`samay.week.${col().id}`, '1');  // step 1 is done once the week has been looked at
   render(); window.scrollTo(0, 0);
 }
 // A user belongs to exactly one college and only ever sees that college's data.
@@ -598,7 +619,7 @@ function runGenerate() {
       state.page = 'timetable';
       const v = validate(col(), current().entries);
       render();
-      toast(v.messages.length ? `Generated with ${v.messages.length} issue(s) to review.` : 'Timetable generated and verified: 0 conflicts.');
+      toast(v.messages.length ? `Generated with ${v.messages.length} issue(s) to review.` : 'Timetable made and checked: 0 clashes.');
     } else render();
   }, 450);
   window._steps = steps;
@@ -762,7 +783,7 @@ async function toggleLock() {
       await api(`/api/timetables/${g.version}/locks`, { method: 'PUT', body: { locked: lockList(c, g).map(({ a, ...rest }) => rest) } });
     } catch (e) { toast(e.message); return; }
   }
-  toast(now ? 'Locked: this class stays here when you generate again.' : 'Unlocked.');
+  toast(now ? 'Locked: this class stays here when you make the timetable again.' : 'Unlocked.');
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -809,10 +830,10 @@ async function deleteVersion(v) {
 function historyBody() {
   const m = state.modal;
   if (!m.list) return `<p class="text-sm text-slate-600">Timetable versions are saved when Samay runs from its server. In this demo, only the current timetable is kept.</p>`;
-  if (!m.list.length) return `<p class="text-sm text-slate-600">No timetables yet. Generate one first.</p>`;
+  if (!m.list.length) return `<p class="text-sm text-slate-600">No timetables yet. Make one first.</p>`;
   const latest = m.list[0].version, pub = state.published?.version;
   const how = t => t.how === 'edited' ? `Edited from v${t.edited_from}` : t.how === 'restored' ? `Restored from v${t.restored_from}` : 'Generated';
-  return `<p class="text-sm text-slate-500">Every timetable you generate or change is kept. Open any version to look at it, make an older one the latest again, or delete versions you don't need.</p>
+  return `<p class="text-sm text-slate-500">Every timetable you make or change is kept. Open any version to look at it, make an older one the latest again, or delete versions you don't need.</p>
     <div class="divide-y divide-slate-100 rounded-lg border border-slate-200">${m.list.map(t => `
       <div class="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5">
         <div class="min-w-0">
@@ -1135,12 +1156,424 @@ const ICONS = {
 };
 const icon = (n, cls = 'w-5 h-5') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="${ICONS[n]}"/></svg>`;
 
+/* ------------------------------ brand ------------------------------ */
+const logo = (size = 'h-9 w-9', inner = 'h-5 w-5') => `<span class="flex ${size} shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-sm shadow-indigo-500/30">
+  <svg class="${inner}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></span>`;
+const brand = (sub = 'Clash-free college timetables') => `<button type="button" onclick="goHome()" class="flex items-center gap-3 text-left" aria-label="Samay home">
+  ${logo('h-10 w-10', 'h-6 w-6')}<span class="leading-tight"><span class="block font-display text-lg font-bold tracking-tight text-slate-900">Samay</span><span class="block text-xs text-slate-500">${sub}</span></span></button>`;
+// A small "?" that explains a word when you point at it or tap it.
+const tip = text => `<span class="tip" tabindex="0" role="note" aria-label="${esc(text)}" data-tip="${esc(text)}">?</span>`;
+function goHome() {
+  Object.assign(state, { authView: null, signupMode: false, forgotMode: false, studentMode: false, linkPage: null, signinError: null, forgotSent: null });
+  render(); window.scrollTo(0, 0);
+}
+function toDemo() {
+  if (state.authView || state.signupMode) goHome();
+  setTimeout(() => document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth' }), 30);
+}
+
+/* ------------------------------ home page (signed out) ------------------------------ */
+// A little sample week for the home page: [day 1-5, first row, rows, kind, subject, where].
+const HERO_CLASSES = [
+  [1, 1, 1, 'lec', 'DBMS', 'LH-101'], [1, 2, 1, 'lec', 'Operating Systems', 'LH-101'], [1, 4, 2, 'split', 'A1: CN Lab', 'A2: DBMS Lab'],
+  [2, 1, 1, 'tut', 'Maths tutorial', 'TR-2'], [2, 2, 1, 'lec', 'Networks', 'LH-104'], [2, 4, 1, 'lec', 'DBMS', 'LH-101'],
+  [3, 1, 1, 'lec', 'Operating Systems', 'LH-102'], [3, 4, 2, 'lab', 'Python Lab', 'Lab 3'],
+  [4, 2, 1, 'moved', 'DBMS', 'LH-103'], [4, 4, 1, 'lec', 'Maths', 'LH-101'], [4, 5, 1, 'tut', 'OS tutorial', 'TR-1'],
+  [5, 1, 1, 'lec', 'Networks', 'LH-104'], [5, 2, 1, 'lec', 'Maths', 'LH-101'], [5, 5, 1, 'lec', 'Elective', 'LH-201'],
+];
+function heroWeek() {
+  const tone = { lec: 'border-sky-200 bg-sky-50 text-sky-900', tut: 'border-amber-200 bg-amber-50 text-amber-900', lab: 'border-emerald-200 bg-emerald-50 text-emerald-900',
+                 moved: 'border-indigo-300 bg-indigo-50 text-indigo-900 ring-2 ring-indigo-400/60' };
+  const rows = { 1: 2, 2: 3, 4: 5, 5: 6 };  // period -> grid row (row 4 is lunch)
+  const cell = ([d, p, len, kind, a, b]) => kind === 'split'
+    ? `<div class="grid grid-cols-2 gap-0.5" style="grid-column:${d + 1};grid-row:${rows[p]} / span ${len}">${[a, b].map(x => `<div class="flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-1 text-[9px] font-semibold leading-tight text-emerald-900">${x}</div>`).join('')}</div>`
+    : `<div class="flex flex-col justify-center overflow-hidden rounded-md border px-1.5 ${tone[kind]}" style="grid-column:${d + 1};grid-row:${rows[p]} / span ${len}">
+        <span class="truncate text-[10px] font-semibold leading-tight">${a}</span><span class="truncate text-[9px] opacity-70">${b}</span></div>`;
+  return `<div class="relative">
+    <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-xl shadow-slate-900/10">
+      <div class="mb-3 flex items-center justify-between"><div><div class="text-xs text-slate-500">Timetable · Section</div><div class="font-display text-sm font-bold">CSE-3A</div></div>
+        <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">${icon('check', 'w-3.5 h-3.5')}0 clashes · verified</span></div>
+      <div class="grid gap-1" style="grid-template-columns:34px repeat(5,minmax(0,1fr));grid-template-rows:18px 40px 40px 18px 40px 40px">
+        ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map((d, i) => `<div class="text-center text-[10px] font-semibold text-slate-500" style="grid-column:${i + 2};grid-row:1">${d}</div>`).join('')}
+        ${[['P1', 2], ['P2', 3], ['P3', 5], ['P4', 6]].map(([p, r]) => `<div class="flex items-center text-[10px] font-medium text-slate-400" style="grid-column:1;grid-row:${r}">${p}</div>`).join('')}
+        <div class="flex items-center justify-center rounded-md bg-slate-100 text-[9px] font-semibold uppercase tracking-widest text-slate-400" style="grid-column:1 / span 6;grid-row:4">Lunch</div>
+        ${HERO_CLASSES.map(cell).join('')}
+      </div>
+    </div>
+    <div class="absolute -bottom-16 left-6 hidden max-w-[16rem] rounded-xl border border-slate-200 bg-white p-3 shadow-lg sm:block">
+      <div class="flex items-start gap-2"><span class="mt-0.5 text-indigo-600">${icon('bot', 'w-4 h-4')}</span>
+        <p class="text-xs leading-snug text-slate-600"><b class="text-slate-900">Assistant:</b> Moved DBMS to Thursday P2. Still 0 clashes.</p></div></div>
+  </div>`;
+}
+function homeDemo() {
+  const err = state.signinError ? `<p class="mx-auto mt-4 max-w-xl rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">${esc(state.signinError)}</p>` : '';
+  if (!state.live) return `<div class="mx-auto grid max-w-3xl gap-3 sm:grid-cols-2">${COLLEGES.map((x, i) => `
+    <button onclick="signIn(${i})" class="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm hover:border-indigo-300 hover:shadow-md">
+      <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">${icon('building')}</span>
+      <span class="min-w-0"><span class="block truncate font-medium">${esc(x.name)}</span><span class="block text-xs text-slate-500">Open as the timetable coordinator · ${esc(x.place)}</span></span>
+      <span class="ml-auto text-indigo-600">→</span></button>`).join('')}</div>
+    <p class="mt-4 text-center text-xs text-slate-500">This copy runs only in your browser: nothing is saved.</p>${err}`;
+  const colleges = demoColleges();
+  if (!colleges.length) return `<p class="text-center text-sm text-slate-500">Demo accounts are switched off on this server. ${state.signupEnabled ? 'Create your college to try Samay.' : ''}</p>`;
+  return `<div class="mx-auto grid max-w-4xl gap-4 md:grid-cols-2">${colleges.map(([college, place, accounts]) => `
+    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div class="flex items-center gap-3"><span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">${icon('building')}</span>
+        <div class="min-w-0"><div class="truncate font-medium">${esc(college)}</div>${place ? `<div class="text-xs text-slate-500">${esc(place)}</div>` : ''}</div></div>
+      <div class="mt-4 text-xs font-medium text-slate-500">Look around as:</div>
+      <div class="mt-2 flex flex-wrap gap-2">${accounts.map(a => `
+        <button type="button" onclick="signInDemo('${esc(a.email)}')" ${state.signingIn ? 'disabled' : ''}
+          class="rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-sm font-medium text-slate-700 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 disabled:opacity-60">${esc(DEMO_ROLE[a.role] || a.role_label)}</button>`).join('')}</div>
+    </div>`).join('')}</div>
+    <p class="mt-4 text-center text-xs text-slate-500">No password needed. Demo colleges are shared with other visitors and reset now and then.</p>${err}`;
+}
+function homePage() {
+  const signup = state.live && state.signupEnabled;
+  const link = (href, label) => `<a href="${href}" class="text-sm font-medium text-slate-600 hover:text-slate-900">${label}</a>`;
+  const stepCard = (n, ic, title, text) => `<div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div class="flex items-center gap-3"><span class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">${icon(ic)}</span>
+      <span class="text-xs font-semibold uppercase tracking-wider text-indigo-600">Step ${n}</span></div>
+    <div class="mt-3 font-display font-bold">${title}</div><p class="mt-1 text-sm leading-relaxed text-slate-600">${text}</p></div>`;
+  const role = (ic, title, items) => `<div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div class="flex items-center gap-3"><span class="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-600">${icon(ic)}</span><div class="font-display font-bold">${title}</div></div>
+    <ul class="mt-3 space-y-1.5 text-sm text-slate-600">${items.map(x => `<li class="flex gap-2"><span class="mt-0.5 text-emerald-600">${icon('check', 'w-4 h-4')}</span>${x}</li>`).join('')}</ul></div>`;
+  const feature = (ic, title, text) => `<div class="flex gap-4"><span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200">${icon(ic)}</span>
+    <div><div class="font-display font-bold">${title}</div><p class="mt-1 text-sm leading-relaxed text-slate-600">${text}</p></div></div>`;
+  return `<div class="${anim('home')}">
+  <header class="sticky top-0 z-30 border-b border-slate-200/70 bg-white/85 backdrop-blur">
+    <div class="mx-auto flex h-16 max-w-6xl items-center gap-6 px-4">
+      ${brand()}
+      <nav class="ml-6 hidden items-center gap-6 lg:flex">${link('#how', 'How it works')}${link('#who', "Who it's for")}${link('#features', 'Features')}</nav>
+      <div class="ml-auto flex items-center gap-2">
+        ${state.live ? `<button onclick="state.studentMode = true; state.studentError = null; render()" class="hidden rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 sm:inline">I'm a student</button>
+        <button onclick="state.authView = 'signin'; state.signinError = null; render()" class="rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">Sign in</button>` : ''}
+        <button onclick="toDemo()" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-indigo-600/20 hover:bg-indigo-700">Try the demo</button>
+      </div>
+    </div>
+  </header>
+
+  <section class="relative overflow-hidden">
+    <div class="pointer-events-none absolute inset-0 bg-gradient-to-b from-indigo-50/80 via-white to-transparent"></div>
+    <div class="relative mx-auto grid max-w-6xl items-center gap-12 px-4 pb-20 pt-14 lg:grid-cols-2 lg:pt-20">
+      <div>
+        <span class="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-700">${icon('shield', 'w-3.5 h-3.5')}Every timetable checked: no clashes</span>
+        <h1 class="mt-5 font-display text-4xl font-extrabold leading-tight tracking-tight text-slate-900 sm:text-5xl">Your college timetable <span class="block bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">made in minutes</span></h1>
+        <p class="mt-5 max-w-xl text-lg leading-relaxed text-slate-600">Samay plans the whole week for every section, teacher and room, and makes sure nobody is ever in two places at once. Then teachers and students see it on their phones.</p>
+        <div class="mt-8 flex flex-wrap gap-3">
+          <button onclick="toDemo()" class="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-600/25 hover:bg-indigo-700">Try the demo, free</button>
+          ${signup ? `<button onclick="state.signupMode = true; state.signinError = null; render()" class="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50">Create your college</button>` : ''}
+        </div>
+        <ul class="mt-8 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
+          ${['Works with your Excel sheets', 'Any days, periods and breaks', 'Lab groups and electives', 'Private to your college'].map(x => `<li class="flex items-center gap-2"><span class="text-emerald-600">${icon('check', 'w-4 h-4')}</span>${x}</li>`).join('')}
+        </ul>
+      </div>
+      <div class="pb-10 lg:pl-6">${heroWeek()}</div>
+    </div>
+  </section>
+
+  <section id="how" class="scroll-mt-16 bg-white py-20">
+    <div class="mx-auto max-w-6xl px-4">
+      <div class="mx-auto max-w-2xl text-center"><div class="text-sm font-semibold text-indigo-600">How it works</div>
+        <h2 class="mt-2 font-display text-3xl font-bold tracking-tight">From spreadsheets to a finished timetable in four steps</h2></div>
+      <div class="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        ${stepCard(1, 'sliders', 'Set your week', 'Working days, period times, lunch and breaks. A common week is filled in for you.')}
+        ${stepCard(2, 'table', 'Add your data', 'Departments, sections, teachers, rooms and subjects. Type them, or import your Excel sheets.')}
+        ${stepCard(3, 'bolt', 'Make the timetable', 'One click. Samay places every class and checks there are no clashes.')}
+        ${stepCard(4, 'users', 'Publish and share', 'Teachers sign in to see their classes. Students scan a QR code: no account needed.')}
+      </div>
+    </div>
+  </section>
+
+  <section id="who" class="scroll-mt-16 py-20">
+    <div class="mx-auto max-w-6xl px-4">
+      <div class="mx-auto max-w-2xl text-center"><div class="text-sm font-semibold text-indigo-600">Who it's for</div>
+        <h2 class="mt-2 font-display text-3xl font-bold tracking-tight">Everyone at college gets the view they need</h2></div>
+      <div class="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        ${role('sliders', 'Timetable coordinator', ['Makes the whole timetable', 'Fixes changes with a click', 'Publishes and shares it'])}
+        ${role('building', 'Head of department', ["Keeps their department's data", 'Marks it ready', 'Sees the published timetable'])}
+        ${role('user', 'Teacher', ["Sees today's classes", 'Sees their whole week', "Marks times they can't teach"])}
+        ${role('calendar', 'Student', ['Enters a code once', 'Sees their section on the phone', 'Any teacher or room too'])}
+      </div>
+    </div>
+  </section>
+
+  <section id="features" class="scroll-mt-16 bg-white py-20">
+    <div class="mx-auto grid max-w-6xl gap-x-10 gap-y-10 px-4 md:grid-cols-2 lg:grid-cols-3">
+      ${feature('shield', 'Never a clash', 'A separate checker tests every rule before a timetable is saved: no teacher, room or class in two places.')}
+      ${feature('sliders', 'Fits your college', 'Five or six days, any periods, any breaks, any number of lectures. Every college sets its own.')}
+      ${feature('users', 'Labs done right', 'Lab groups A1 and A2 can do different labs at the same time. Electives and tutorials too.')}
+      ${feature('lock', 'Change with a click', 'Move or swap any class. Samay only offers times that are free. Lock what must not move.')}
+      ${feature('bot', 'Ask in plain English', '"Dr. Kumar is away on Monday." The assistant suggests a fix and shows it before anything changes.')}
+      ${feature('printer', 'Print, Excel or phone', 'Print for the notice board, download Excel, or open it on any phone.')}
+    </div>
+  </section>
+
+  <section id="demo" class="scroll-mt-16 py-20">
+    <div class="mx-auto max-w-6xl px-4">
+      <div class="mx-auto mb-10 max-w-2xl text-center"><div class="text-sm font-semibold text-indigo-600">Try it now</div>
+        <h2 class="mt-2 font-display text-3xl font-bold tracking-tight">Open a demo college</h2>
+        <p class="mt-3 text-slate-600">Pick a college and see Samay as its coordinator, a head of department or a teacher.</p></div>
+      ${homeDemo()}
+      ${state.live ? `<div class="mx-auto mt-6 flex max-w-4xl flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div><div class="font-medium">Are you a student?</div><p class="text-sm text-slate-500">Enter the code your college shared to see your timetable. No account needed.</p></div>
+        <button onclick="state.studentMode = true; state.studentError = null; render()" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50">Enter college code</button></div>` : ''}
+    </div>
+  </section>
+
+  <footer class="border-t border-slate-200 bg-white">
+    <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-8 text-sm text-slate-500">
+      <div class="flex items-center gap-2">${logo('h-7 w-7', 'h-4 w-4')}<span class="font-display font-bold text-slate-800">Samay</span><span>· Clash-free college timetables</span></div>
+      <p>Each college's data is private. Colleges can't see each other.</p>
+    </div>
+  </footer></div>`;
+}
+
+/* ------------------------------ the coordinator's five steps ------------------------------ */
+const DATA_LISTS = ['departments', 'sections', 'teachers', 'rooms', 'subjects', 'assignments'];
+let _steps = null;  // worked out once per render
+function steps(c) {
+  if (_steps) return _steps;
+  const g = current();
+  const dataOk = DATA_LISTS.every(k => (k === 'subjects' ? Object.keys(c.subjects).length : c[k].length) > 0);
+  const errors = dataOk ? precheck(c).filter(x => x.level === 'error').length : null;
+  const list = [
+    { n: 1, page: 'scheme', title: 'Your week', icon: 'sliders', done: storage.get(`samay.week.${c.id}`) === '1' || c.departments.length > 0 },
+    { n: 2, page: 'data', title: 'College data', icon: 'table', done: dataOk },
+    { n: 3, page: 'precheck', title: 'Check for problems', icon: 'shield', done: dataOk && errors === 0, errors },
+    { n: 4, page: 'timetable', title: 'Make the timetable', icon: 'calendar', done: !!g },
+  ];
+  if (state.live) list.push({ n: 5, page: 'accounts', title: 'Publish & share', icon: 'users', done: !!state.published });
+  return (_steps = list);
+}
+const firstEmptyList = c => DATA_LISTS.find(k => !(k === 'subjects' ? Object.keys(c.subjects).length : c[k].length)) || 'departments';
+function goData() { state.dataTab = firstEmptyList(col()); go('data'); }
+function stepBadge(s, current) {
+  return s.done ? `<span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white">${icon('check', 'w-3.5 h-3.5')}</span>`
+    : `<span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${current ? 'bg-indigo-600 text-white ring-4 ring-indigo-100' : 'bg-slate-100 text-slate-500'}">${s.n}</span>`;
+}
+// "Done here? Next: ..." at the bottom of each step's page.
+function nextBar(pageId) {
+  const s = steps(col()), i = s.findIndex(x => x.page === pageId), next = s[i + 1];
+  if (i < 0) return '';
+  const hint = {
+    scheme: 'Does the week look right? Then add your college data.',
+    data: s[1].done ? 'All the lists have something in them. Next, check for problems.' : `Still to add: ${DATA_LISTS.filter(k => !(k === 'subjects' ? Object.keys(col().subjects).length : col()[k].length)).map(k => ENT[k].label.toLowerCase()).join(', ')}.`,
+    precheck: s[2].done ? 'Nothing must be fixed. You can make the timetable.' : 'Fix the red problems first, then make the timetable.',
+    timetable: s[3].done ? (state.live ? 'Happy with it? Publish it, then share it with your staff and students.' : 'Happy with it? Print it or download it as Excel.') : 'Click Make the timetable above.',
+    accounts: 'Everyone you invite signs in with their email. Students only need the code.',
+  }[pageId];
+  return `<div class="no-print mt-8 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/70 px-5 py-4" data-tour="next-bar">
+    <div><div class="text-xs font-semibold uppercase tracking-wider text-indigo-600">Step ${s[i].n} of ${s.length} · ${s[i].title}</div><div class="mt-0.5 text-sm text-slate-700">${hint}</div></div>
+    ${next ? btn(`Next: ${next.title} →`, `go('${next.page}')`, 'primary') : btn('Back to home', "go('dashboard')")}</div>`;
+}
+function nextStepCard(c, s, g) {
+  const cur = s.find(x => !x.done);
+  const box = (label, title, text, buttons) => `<div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 p-6 text-white shadow-lg shadow-indigo-600/20" data-tour="next-step">
+    <div class="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10"></div>
+    <div class="relative"><div class="text-xs font-semibold uppercase tracking-wider text-indigo-100">${label}</div>
+      <div class="mt-1 font-display text-2xl font-bold">${title}</div><p class="mt-2 max-w-2xl text-sm leading-relaxed text-indigo-50">${text}</p>
+      <div class="mt-5 flex flex-wrap gap-2">${buttons}</div></div></div>`;
+  const white = (label, onclick) => `<button onclick="${onclick}" class="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-indigo-700 shadow-sm hover:bg-indigo-50">${label}</button>`;
+  const ghost = (label, onclick) => `<button onclick="${onclick}" class="rounded-xl border border-white/40 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/10">${label}</button>`;
+  if (!cur) return box('All done', state.live ? `Version ${state.published.version} is published` : 'Your timetable is ready',
+    state.live ? 'Teachers and students can see it now. If something changes, edit the timetable and publish again.' : 'Print it for the notice board or download it as Excel.',
+    white('View the timetable', "go('timetable')") + (state.live ? ghost('Share with people', "go('accounts')") : ''));
+  const label = `Your next step · ${cur.n} of ${s.length}`;
+  if (cur.page === 'scheme') return box(label, 'Check your college week', 'Set your working days, period times and lunch break. A common week is already filled in, so only change what is different at your college.', white('Check your week →', "go('scheme')"));
+  if (cur.page === 'data') return box(label, 'Add your college data', 'Add departments, sections, teachers, rooms and subjects, then say who teaches what. Already have them in Excel? Import each list in one go.', white('Add data →', 'goData()'));
+  if (cur.page === 'precheck') return box(label, `Fix ${cur.errors} problem${cur.errors === 1 ? '' : 's'}`, 'Samay found data that would make a timetable impossible, like a teacher with more classes than the week has room for. Each problem says how to fix it.', white('See the problems →', "go('precheck')"));
+  if (cur.page === 'timetable') return box(label, 'Make your timetable', 'Everything is ready. Samay will place every class so that no teacher, room or section is ever double-booked. It takes about a minute.', white('Make the timetable →', 'runGenerate()'));
+  return box(label, 'Publish and share', 'Your timetable is ready. Publish it so teachers and students can see it, then invite your staff and turn on the student code.', white('Go to publish →', "go('timetable')") + ghost('Share with people', "go('accounts')"));
+}
+function stepProgress(s) {
+  const cur = s.find(x => !x.done);
+  return `<div class="mt-4 grid gap-2 ${s.length === 5 ? 'sm:grid-cols-3 xl:grid-cols-5' : 'sm:grid-cols-2 xl:grid-cols-4'}" data-tour="progress">${s.map(x => `
+    <button onclick="go('${x.page}')" class="flex items-center gap-3 rounded-xl border bg-white p-3 text-left shadow-sm hover:border-indigo-300 ${x === cur ? 'border-indigo-300 ring-1 ring-indigo-200' : 'border-slate-200'}">
+      ${stepBadge(x, x === cur)}<span class="min-w-0"><span class="block truncate text-sm font-medium">${x.title}</span>
+      <span class="block text-xs ${x.done ? 'text-emerald-600' : x === cur ? 'text-indigo-600' : 'text-slate-400'}">${x.done ? 'Done' : x === cur ? 'Next' : 'To do'}</span></span></button>`).join('')}</div>`;
+}
+
+/* ------------------------------ first-visit guided tours ------------------------------ */
+// Each page explains itself the first time someone opens it: the page dims, an arrow points at a button, and a card says
+// what it does. "?" in the top bar shows it again. Steps whose button isn't on the screen are skipped.
+const TT_TOUR = [['tt-views', 'Choose what to look at', 'See the week of one section, one teacher or one room.'],
+  ['tt-pick', 'Pick which one', 'Choose the section, teacher or room here.'],
+  ['tt-grid', 'The week at a glance', 'Blue is a lecture, amber a tutorial, green a lab. Lab groups like A1 and A2 can have different labs side by side.']];
+const TOURS = {
+  'coordinator:dashboard': [
+    ['next-step', 'Start here', 'This card always shows the one thing to do next. Click its button and Samay takes you there.'],
+    ['progress', 'Five steps to a timetable', 'Your week, your college data, a check for problems, making the timetable, then publishing it. A green tick means a step is done.'],
+    ['nav-scheme', 'The same steps, always here', 'Jump to any step from this menu. You can go back and change things at any time.'],
+    ['assistant', 'Ask the assistant', 'Need a change? Ask in plain English, like "Dr. Kumar is away on Monday". It shows a preview before anything changes.'],
+    ['help', 'See this guide again', 'Click ? on any page to see what its buttons do.'],
+  ],
+  'coordinator:scheme': [
+    ['scheme-periods', 'Your college day', 'Your working days, the periods with their times, and breaks like lunch. No class is ever placed in a break.'],
+    ['scheme-rules', 'Your rules', 'How many lectures a week a subject gets, how long labs are, and the most periods a teacher takes in a day.'],
+    ['scheme-edit', 'Change anything', 'Click here to change days, times, breaks or rules.'],
+    ['next-bar', 'Then move on', 'When the week looks right, go to the next step: your college data.'],
+  ],
+  'coordinator:data': [
+    ['data-tabs', "Your college's lists", 'Fill them from left to right: departments, courses, sections, teachers, rooms, subjects, and finally who teaches what.'],
+    ['data-add', 'Add one at a time', 'Opens a short form. Samay tells you in plain words if something is missing.'],
+    ['data-import', 'Or import from Excel', 'Download a ready-made template, fill it in, and upload it. Every row is checked before anything is saved.'],
+    ['data-table', 'Change anything later', 'Click Edit on any row. Your changes are saved straight away.'],
+  ],
+  'coordinator:precheck': [
+    ['check-summary', 'Is your data ready?', 'Samay looks for anything that would make a timetable impossible. Red must be fixed; yellow is worth a look.'],
+    ['check-fix', 'Fix it in one click', 'Each problem has a button that opens the right place to fix it.'],
+    ['check-generate', 'Then make the timetable', "When nothing red is left, make your timetable from here."],
+  ],
+  'coordinator:timetable-empty': [
+    ['tt-generate', 'Make your timetable', 'Click here. Samay places every class with no clashes, in about a minute. Nobody else sees it until you publish it.'],
+  ],
+  'coordinator:timetable': [
+    ...TT_TOUR.slice(0, 2),
+    ['tt-grid', 'Click a class to change it', 'Click any class to move it, swap it or lock it in place. Samay only offers times that cause no clashes.'],
+    ['tt-publish', 'Publish when you are happy', 'Teachers and students only see a version after you publish it. You can publish a newer one any time.'],
+    ['tt-assistant', 'Ask the assistant', 'Describe a change in plain English. It shows a preview; nothing changes until you click Apply.'],
+    ['tt-more', 'More', 'Older versions, the Excel download and printing are here.'],
+  ],
+  'coordinator:accounts': [
+    ['acc-add', 'Invite your staff', 'Add a head of department or a teacher. They get a link to choose their own password; after that they just sign in.'],
+    ['acc-invite-all', 'All teachers at once', 'Teachers who have an email in your data get their invite links in one click.'],
+    ['acc-students', 'Students', 'Turn on one code for the whole college. Share the link or print the QR poster; students enter it once on their phone.'],
+  ],
+  'hod:dashboard': [
+    ['hod-status', 'Is your department ready?', 'When its data is complete, mark it ready so the timetable coordinator can include it.'],
+    ['nav-data', "Your department's data", 'Add or fix your courses, sections, teachers, subjects and who teaches what.'],
+    ['nav-timetable', 'The published timetable', 'See the timetable your coordinator published, for any section, teacher or room.'],
+    ['help', 'See this guide again', 'Click ? on any page to see what its buttons do.'],
+  ],
+  'hod:data': [
+    ['data-tabs', "Your department's lists", "Courses, sections, teachers, subjects and who teaches what. Other departments' records are shown but can't be changed."],
+    ['data-add', 'Add one at a time', 'Opens a short form. Samay tells you in plain words if something is missing.'],
+    ['data-import', 'Or import from Excel', 'Download a template, fill it in, and upload it. Every row is checked.'],
+  ],
+  'teacher:mine': [
+    ['t-today', 'Your classes today', 'With times, rooms and the class you teach. After your last class it shows your next teaching day.'],
+    ['t-week', 'Your whole week', 'Every class you teach this week, as one timetable.'],
+    ['nav-availability', "Can't teach at some time?", "Mark those periods here. Your coordinator's next timetable keeps them free."],
+    ['help', 'See this guide again', 'Click ? on any page to see what its buttons do.'],
+  ],
+  'teacher:availability': [
+    ['avail-grid', "Click the periods you can't teach", "Red means you can't teach then. Click again to make it free."],
+    ['avail-save', 'Then save', "Your coordinator's next timetable keeps those periods free."],
+  ],
+  'student:today': [
+    ['st-section', 'Choose your section', 'Samay remembers it on this phone.'],
+    ['st-today', "Today's classes", "With times, teachers and rooms. After the day's last class it shows the next day."],
+    ['nav-timetable', 'Any other timetable', "See any section's, teacher's or room's week."],
+  ],
+};
+TOURS['teacher:timetable'] = TOURS['student:timetable'] = TOURS['hod:timetable'] = TT_TOUR;
+let TOUR = null, tourTimer = null, tourFrame = 0;
+const roleKey = () => isStudent() ? 'student' : isTeacher() ? 'teacher' : isHod() ? 'hod' : 'coordinator';
+const tourKey = () => `${roleKey()}:${state.page}${state.page === 'timetable' && !current() ? '-empty' : ''}`;
+const hasTour = () => !!TOURS[tourKey()];
+const tourTarget = id => [...document.querySelectorAll(`#app [data-tour="${id}"]`)].find(el => el.getClientRects().length && el.offsetWidth > 0);
+const tourBusy = () => state.booting || !col() || state.modal || state.drawer || state.generating !== null || state.viewing || state.menu;
+function startTour(force) {
+  clearTimeout(tourTimer);
+  const key = tourKey(), list = (TOURS[key] || []).filter(([id]) => tourTarget(id));
+  if (!list.length) { if (force) toast('There is no guide for this page yet.'); return; }
+  TOUR = { key, steps: list, i: 0 };
+  showTourStep();
+}
+function maybeTour() {
+  if (TOUR) { placeTour(); return; }
+  if (tourBusy() || !hasTour() || storage.get('samay.tour.' + tourKey())) return;
+  const key = tourKey();
+  clearTimeout(tourTimer);
+  tourTimer = setTimeout(() => { if (!TOUR && !tourBusy() && tourKey() === key) startTour(); }, 700);
+}
+function endTour() {
+  if (TOUR) storage.set('samay.tour.' + TOUR.key, '1');
+  TOUR = null;
+  document.getElementById('tour').innerHTML = '';
+}
+function tourMove(d) {
+  if (!TOUR) return;
+  TOUR.i += d;
+  if (TOUR.i >= TOUR.steps.length) { endTour(); return; }
+  TOUR.i = Math.max(0, TOUR.i);
+  showTourStep();
+}
+function showTourStep() {
+  const el = tourTarget(TOUR.steps[TOUR.i][0]);
+  if (!el) {
+    TOUR.steps.splice(TOUR.i, 1);
+    if (!TOUR.steps.length) { endTour(); return; }
+    TOUR.i = Math.min(TOUR.i, TOUR.steps.length - 1);
+    showTourStep(); return;
+  }
+  const r = el.getBoundingClientRect();
+  if (r.top < 72 || r.bottom > innerHeight - 24) el.scrollIntoView({ block: r.height > innerHeight * 0.6 ? 'start' : 'center' });
+  const [, title, text] = TOUR.steps[TOUR.i], n = TOUR.steps.length, last = TOUR.i === n - 1;
+  document.getElementById('tour').innerHTML = `
+    <div class="tour-block"></div><div class="tour-spot"></div><div class="tour-ring"></div>
+    <svg class="tour-arrow" aria-hidden="true"><defs><marker id="tour-head" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#fff"/></marker></defs><path class="tour-path" marker-end="url(#tour-head)"/></svg>
+    <div class="tour-card" role="dialog" aria-modal="true" aria-labelledby="tour-title">
+      <div class="mb-1 text-xs font-semibold uppercase tracking-wider text-indigo-600">Quick guide · ${TOUR.i + 1} of ${n}</div>
+      <div id="tour-title" class="font-display text-base font-bold text-slate-900">${esc(title)}</div>
+      <p class="mt-1 text-sm leading-relaxed text-slate-600">${esc(text)}</p>
+      <div class="mt-4 flex items-center justify-between gap-2">
+        <button onclick="endTour()" class="text-sm font-medium text-slate-500 hover:text-slate-800">Skip guide</button>
+        <span class="flex gap-2">${TOUR.i ? '<button onclick="tourMove(-1)" class="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">Back</button>' : ''}
+          <button id="tour-next" onclick="tourMove(1)" class="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700">${last ? 'Got it' : 'Next'}</button></span>
+      </div>
+      <div class="mt-3 flex justify-center gap-1.5">${TOUR.steps.map((_, i) => `<span class="h-1.5 rounded-full ${i === TOUR.i ? 'w-4 bg-indigo-600' : 'w-1.5 bg-slate-200'}"></span>`).join('')}</div>
+    </div>`;
+  placeTour();
+  setTimeout(placeTour, 350);  // again once the page's fade-in and fonts have settled
+  document.getElementById('tour-next')?.focus({ preventScroll: true });
+}
+document.fonts?.ready.then(() => placeTour());
+function placeTour() {
+  if (!TOUR) return;
+  const root = document.getElementById('tour'), card = root.querySelector('.tour-card'), el = tourTarget(TOUR.steps[TOUR.i][0]);
+  if (!card) return;
+  if (!el) { showTourStep(); return; }
+  const r = el.getBoundingClientRect(), W = innerWidth, H = innerHeight, pad = 6, gap = 64, m = 12;
+  const box = { l: r.left - pad, t: r.top - pad, w: r.width + 2 * pad, h: r.height + 2 * pad };
+  for (const sel of ['.tour-spot', '.tour-ring']) Object.assign(root.querySelector(sel).style, { left: box.l + 'px', top: box.t + 'px', width: box.w + 'px', height: box.h + 'px' });
+  const cw = card.offsetWidth, ch = card.offsetHeight, cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  const clampX = x => Math.max(m, Math.min(W - cw - m, x)), clampY = y => Math.max(m, Math.min(H - ch - m, y));
+  let place = r.bottom + gap + ch < H - m ? 'below' : r.top - gap - ch > m ? 'above' : r.right + gap + cw < W - m ? 'right' : r.left - gap - cw > m ? 'left' : 'inside';
+  let left, top, sx, sy, ex, ey;
+  if (place === 'below' || place === 'above') {
+    left = clampX(cx - cw / 2); top = place === 'below' ? r.bottom + gap : r.top - gap - ch;
+    sx = Math.max(left + 28, Math.min(left + cw - 28, cx)); sy = place === 'below' ? top - 4 : top + ch + 4;
+    ex = cx; ey = place === 'below' ? box.t + box.h + 6 : box.t - 6;
+  } else if (place === 'right' || place === 'left') {
+    top = clampY(cy - ch / 2); left = place === 'right' ? r.right + gap : r.left - gap - cw;
+    sy = Math.max(top + 24, Math.min(top + ch - 24, cy)); sx = place === 'right' ? left - 4 : left + cw + 4;
+    ey = cy; ex = place === 'right' ? box.l + box.w + 6 : box.l - 6;
+  } else {  // the target fills the screen (like the timetable grid): card at the bottom, arrow up into it
+    left = clampX(cx - cw / 2); top = H - ch - 20;
+    sx = left + cw / 2; sy = top - 4; ex = sx + 40; ey = Math.max(r.top + 40, top - 110);
+  }
+  Object.assign(card.style, { left: left + 'px', top: top + 'px' });
+  const bend = (place === 'below' || place === 'above' || place === 'inside' ? 1 : -1) * Math.min(60, Math.abs(ex - sx) / 2 + 24);
+  const qx = (sx + ex) / 2 + (place === 'left' || place === 'right' ? 0 : bend), qy = (sy + ey) / 2 + (place === 'left' || place === 'right' ? bend : 0);
+  root.querySelector('.tour-path').setAttribute('d', `M ${sx} ${sy} Q ${qx} ${qy} ${ex} ${ey}`);
+}
+addEventListener('resize', () => { cancelAnimationFrame(tourFrame); tourFrame = requestAnimationFrame(placeTour); });
+addEventListener('scroll', () => { cancelAnimationFrame(tourFrame); tourFrame = requestAnimationFrame(placeTour); }, true);
+addEventListener('keydown', e => {
+  if (!TOUR) return;
+  if (e.key === 'Escape') endTour();
+  else if (e.key === 'ArrowRight') tourMove(1);
+  else if (e.key === 'ArrowLeft' && TOUR.i) tourMove(-1);
+});
+
 /* ------------------------------ layout ------------------------------ */
-const NAV_ITEMS = [['dashboard', 'Dashboard', 'grid'], ['timetable', 'Timetable', 'calendar'], ['data', 'Data', 'table'], ['precheck', 'Pre-check', 'shield'], ['scheme', 'College scheme', 'sliders'], ['accounts', 'Accounts', 'users']];
 const TEACHER_NAV = [['mine', 'My timetable', 'calendar'], ['timetable', 'All timetables', 'grid'], ['availability', "When I can't teach", 'clock'], ['account', 'My account', 'user']];
 const STUDENT_NAV = [['today', 'My section', 'calendar'], ['timetable', 'All timetables', 'grid']];
 const HOD_NAV = [['dashboard', 'My department', 'grid'], ['data', 'Department data', 'table'], ['timetable', 'Published timetable', 'calendar'], ['account', 'My account', 'user']];
-const NAV = { map: fn => (isStudent() ? STUDENT_NAV : isTeacher() ? TEACHER_NAV : isHod() ? HOD_NAV : NAV_ITEMS.filter(([id]) => id !== 'accounts' || state.live)).map(fn) };  // Accounts only exist with the server
+// The coordinator's menu is Home plus the five steps (Publish & share only exists with the server).
+const navItems = () => isStudent() ? STUDENT_NAV : isTeacher() ? TEACHER_NAV : isHod() ? HOD_NAV
+  : [['dashboard', 'Home', 'grid'], ...steps(col()).map(x => [x.page, x.title, x.icon, x])];
 
 function signUpPage() {
   const f = state.signup || {};
@@ -1150,11 +1583,8 @@ function signUpPage() {
   return `
   <div class="flex min-h-screen items-center justify-center p-4">
     <div class="w-full max-w-md ${anim('signup')}">
-      <div class="mb-6 flex items-center gap-3">
-        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-base font-bold text-white">S</div>
-        <div class="leading-tight"><div class="text-lg font-semibold">Samay</div><div class="text-xs text-slate-500">Clash-free college timetables</div></div>
-      </div>
-      <form onsubmit="signUpLive(event)" class="rounded-xl border border-slate-200 bg-white p-6">
+      <div class="mb-6">${brand('Clash-free college timetables')}</div>
+      <form onsubmit="signUpLive(event)" class="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
         <h1 class="text-lg font-semibold">Create your college's account</h1>
         <p class="mt-1 text-sm text-slate-500">You'll be its timetable coordinator. Your college's data is private to your college.</p>
         ${field('college', 'College name', 'text', 'Guru Nanak Model College', 'organization')}
@@ -1165,7 +1595,7 @@ function signUpPage() {
         ${state.signinError ? `<p class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">${esc(state.signinError)}</p>` : ''}
         <button type="submit" ${state.signingIn ? 'disabled' : ''} class="mt-4 w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60">
           ${state.signingIn ? 'Creating…' : 'Create account'}</button>
-        <p class="mt-4 text-center text-sm text-slate-600">Already have an account? <button type="button" onclick="state.signupMode = false; state.signinError = null; render()" class="font-medium text-indigo-600 hover:underline">Sign in</button></p>
+        <p class="mt-4 text-center text-sm text-slate-600">Already have an account? <button type="button" onclick="Object.assign(state, { signupMode: false, signinError: null, authView: 'signin' }); render()" class="font-medium text-indigo-600 hover:underline">Sign in</button></p>
       </form>
     </div>
   </div>`;
@@ -1205,14 +1635,12 @@ function signInPage() {
   if (state.live && state.forgotMode) return forgotPage();
   if (state.live && state.studentMode) return studentCodePage();
   if (state.live && state.signupMode) return signUpPage();
-  if (state.live) return `
+  if (!state.live || state.authView !== 'signin') return homePage();
+  return `
   <div class="flex min-h-screen items-center justify-center p-4">
     <div class="w-full max-w-md ${anim('signin')}">
-      <div class="mb-6 flex items-center gap-3">
-        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-base font-bold text-white">S</div>
-        <div class="leading-tight"><div class="text-lg font-semibold">Samay</div><div class="text-xs text-slate-500">Clash-free college timetables</div></div>
-      </div>
-      <form onsubmit="signInLive(event)" class="rounded-xl border border-slate-200 bg-white p-6">
+      <div class="mb-6">${brand('Clash-free college timetables')}</div>
+      <form onsubmit="signInLive(event)" class="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
         <h1 class="text-lg font-semibold">Sign in to your college</h1>
         <p class="mt-1 text-sm text-slate-500">You'll only see your own college's teachers, rooms and timetables.</p>
         <label class="mt-4 block"><span class="mb-1 block text-sm font-medium text-slate-700">Email</span>
@@ -1223,19 +1651,7 @@ function signInPage() {
         ${state.signinError ? `<p class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">${esc(state.signinError)}</p>` : ''}
         <button type="submit" ${state.signingIn ? 'disabled' : ''} class="mt-4 w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60">
           ${state.signingIn ? 'Signing in…' : 'Sign in'}</button>
-        ${state.demoAccounts?.length ? `
-          <div class="my-5 flex items-center gap-3 text-xs text-slate-400"><span class="h-px flex-1 bg-slate-200"></span>Or try a demo account<span class="h-px flex-1 bg-slate-200"></span></div>
-          <div class="space-y-2">${demoColleges().map(([college, place, accounts]) => `
-            <div class="rounded-lg border border-slate-200 p-3">
-              <div class="flex items-center gap-3">
-                <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">${icon('building')}</div>
-                <div class="min-w-0"><div class="truncate text-sm font-medium">${esc(college)}</div>${place ? `<div class="text-xs text-slate-500">${esc(place)}</div>` : ''}</div>
-              </div>
-              <div class="mt-2.5 flex flex-wrap gap-1.5">${accounts.map(a => `
-                <button type="button" onclick="signInDemo('${esc(a.email)}')" ${state.signingIn ? 'disabled' : ''} title="${a.role === 'coordinator' ? 'Timetable coordinator' : esc(a.name)}"
-                  class="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 disabled:opacity-60">${esc(DEMO_ROLE[a.role] || a.role_label)}</button>`).join('')}</div>
-            </div>`).join('')}</div>
-          <p class="mt-3 text-xs text-slate-500">Pick a college, then sign in as one of its people. No password needed. Changes are saved, so you can try everything.</p>` : ''}
+        <p class="mt-4 text-center text-sm text-slate-600">Just looking? <button type="button" onclick="toDemo()" class="font-medium text-indigo-600 hover:underline">Try the demo</button></p>
         ${state.signupEnabled ? `<p class="mt-4 border-t border-slate-100 pt-4 text-center text-sm text-slate-600">New college?
           <button type="button" onclick="state.signupMode = true; state.signinError = null; render()" class="font-medium text-indigo-600 hover:underline">Create an account</button></p>` : ''}
       </form>
@@ -1245,38 +1661,10 @@ function signInPage() {
       <p class="mt-4 text-center text-xs text-slate-400">Each college's data is private. Colleges can't see each other, or even which other colleges use Samay.</p>
     </div>
   </div>`;
-  return `
-  <div class="flex min-h-screen items-center justify-center p-4">
-    <div class="w-full max-w-md ${anim('signin')}">
-      <div class="mb-6 flex items-center gap-3">
-        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-base font-bold text-white">S</div>
-        <div class="leading-tight"><div class="text-lg font-semibold">Samay</div><div class="text-xs text-slate-500">Clash-free college timetables</div></div>
-      </div>
-      <div class="rounded-xl border border-slate-200 bg-white p-6">
-        <h1 class="text-lg font-semibold">Sign in to your college</h1>
-        <p class="mt-1 text-sm text-slate-500">Use your college email. You'll only see your own college's teachers, rooms and timetables.</p>
-        <div class="mt-4 space-y-3 opacity-60">
-          <input disabled placeholder="coordinator@yourcollege.edu" class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"/>
-          <button disabled class="w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white">Continue</button>
-        </div>
-        <div class="my-5 flex items-center gap-3 text-xs text-slate-400"><span class="h-px flex-1 bg-slate-200"></span>Prototype: pick a demo account<span class="h-px flex-1 bg-slate-200"></span></div>
-        <div class="space-y-2">
-          ${COLLEGES.map((x, i) => `
-            <button onclick="signIn(${i})" class="flex w-full items-center gap-3 rounded-lg border border-slate-200 p-3 text-left hover:border-indigo-300 hover:bg-indigo-50/40">
-              <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">${icon('building')}</div>
-              <div class="min-w-0"><div class="truncate text-sm font-medium">${x.name}</div>
-              <div class="text-xs text-slate-500">Timetable coordinator · ${x.place}</div></div>
-              <span class="ml-auto text-slate-400">${icon('check', 'w-4 h-4 opacity-0')}</span>
-            </button>`).join('')}
-        </div>
-      </div>
-      <p class="mt-4 text-center text-xs text-slate-400">Each college's data is private. Colleges can't see each other, or even which other colleges use Samay.</p>
-    </div>
-  </div>`;
 }
 
 function syncBadge() {
-  if (!state.live) return '<span class="hidden whitespace-nowrap rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 sm:inline" title="Opened without the Samay server: changes stay in this browser tab and are lost on reload">Demo · not saved</span>';
+  if (!state.live) return '<span class="hidden whitespace-nowrap rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 sm:inline" title="Opened without the Samay server: changes stay in this browser tab and are lost on reload">Try-out copy · not saved</span>';
   return {
     saving: '<span class="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">Saving…</span>',
     error: '<span class="rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700">Not saved</span>',
@@ -1284,55 +1672,54 @@ function syncBadge() {
 }
 
 function layout() {
-  if (state.booting) return '<div class="flex min-h-screen items-center justify-center text-sm text-slate-500">Loading Samay…</div>';
+  if (state.booting) return `<div class="flex min-h-screen flex-col items-center justify-center gap-3 text-sm text-slate-500">${logo('h-12 w-12', 'h-7 w-7')}Loading Samay…</div>`;
   if (!col()) return signInPage();
-  const c = col();
+  const c = col(), coord = !isViewer(), items = navItems();
+  const cur = coord ? items.find(x => x[3] && !x[3].done)?.[3] : null;
+  const navBtn = ([id, label, ic, st]) => `<button onclick="go('${id}')" data-tour="nav-${id}" class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm ${state.page === id ? 'bg-indigo-50 font-semibold text-indigo-700' : 'text-slate-600 hover:bg-slate-100'}">
+      ${st ? stepBadge(st, st === cur) : icon(ic)}<span class="truncate text-left">${label}</span></button>`;
+  const top = coord ? items.slice(0, 1) : items, stepsNav = coord ? items.slice(1) : [];
+  const who = state.live && state.me ? state.me.name : 'Timetable Coordinator';
   return `
-  <header class="no-print sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-slate-200 bg-white/90 px-4 backdrop-blur">
-    <div class="flex items-center gap-2">
-      <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-sm font-bold text-white">S</div>
-      <div class="leading-tight"><div class="text-sm font-semibold">Samay</div><div class="text-[11px] text-slate-500">Timetable Optimizer</div></div>
-    </div>
-    <div class="ml-2 hidden h-6 w-px bg-slate-200 sm:block"></div>
-    <div class="flex min-w-0 items-center gap-2 text-sm">
-      <span class="hidden text-slate-500 sm:inline">${icon('building', 'w-4 h-4')}</span>
-      <span class="truncate font-medium">${c.name}</span>
-    </div>
-    <span class="hidden rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-600 md:inline">${c.term}</span>
-    <div class="relative ml-auto flex items-center gap-2">
+  <header class="no-print sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-slate-200/80 bg-white/90 px-4 backdrop-blur">
+    <button onclick="go('${items[0][0]}')" class="flex shrink-0 items-center gap-2.5" aria-label="Home">${logo()}<span class="hidden font-display text-lg font-bold tracking-tight sm:inline">Samay</span></button>
+    <div class="ml-1 hidden h-7 w-px bg-slate-200 sm:block"></div>
+    <div class="min-w-0 leading-tight"><div class="truncate text-sm font-semibold">${esc(c.name)}</div>${c.term ? `<div class="truncate text-xs text-slate-500">${esc(c.term)}</div>` : ''}</div>
+    <div class="relative ml-auto flex shrink-0 items-center gap-2">
       ${isTeacher() || isStudent() ? '' : syncBadge()}
-      <span class="hidden rounded-md bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 sm:inline">${esc(state.live && state.me ? state.me.role_label : 'Timetable coordinator')}</span>
-      <button onclick="state.menu = !state.menu; render()" class="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-300" aria-label="Account menu">${esc(initials(state.live && state.me ? state.me.name : 'Timetable Coordinator'))}</button>
-      ${state.menu ? `<div class="absolute right-0 top-10 w-56 rounded-lg border border-slate-200 bg-white p-1 shadow-lg ${anim('menu')}">
+      <span class="hidden rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 lg:inline">${esc(state.live && state.me ? state.me.role_label : 'Timetable coordinator')}</span>
+      ${hasTour() ? `<button onclick="startTour(true)" data-tour="help" title="Show me around this page" aria-label="Show me around this page"
+        class="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-bold text-slate-600 hover:border-indigo-300 hover:text-indigo-700">?</button>` : ''}
+      <button onclick="state.menu = !state.menu; render()" class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-slate-700 to-slate-900 text-xs font-semibold text-white hover:opacity-90" aria-label="Account menu">${esc(initials(who))}</button>
+      ${state.menu ? `<div class="absolute right-0 top-11 w-60 rounded-xl border border-slate-200 bg-white p-1 shadow-lg ${anim('menu')}">
         <div class="px-3 py-2 text-xs text-slate-500">${state.live && state.me ? `<div class="truncate text-sm font-medium text-slate-900">${esc(state.me.name)}</div><div class="mb-1 truncate">${esc(state.me.email)}</div>` : ''}Signed in to<div class="truncate text-sm font-medium text-slate-900">${esc(c.name)}</div></div>
-        <button onclick="signOut()" class="w-full rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">${isStudent() ? 'Change college' : 'Sign out'}</button>
+        ${hasTour() ? `<button onclick="state.menu = false; render(); startTour(true)" class="w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">Show me around this page</button>` : ''}
+        <button onclick="signOut()" class="w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">${isStudent() ? 'Change college' : 'Sign out'}</button>
       </div>` : ''}
     </div>
   </header>
   <div class="flex">
-    <aside class="no-print sticky top-14 hidden h-[calc(100vh-3.5rem)] w-56 shrink-0 flex-col border-r border-slate-200 bg-white p-3 md:flex">
-      <nav class="space-y-1">
-        ${NAV.map(([id, label, ic]) => `
-          <button onclick="go('${id}')" class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm ${state.page === id ? 'bg-indigo-50 font-medium text-indigo-700' : 'text-slate-600 hover:bg-slate-50'}">
-            ${icon(ic)}${label}</button>`).join('')}
-      </nav>
-      ${isViewer() ? '' : `<button onclick="toggleDrawer(true)" class="mt-3 flex w-full items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">${icon('bot')}Assistant</button>`}
-      <div class="mt-auto rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-500">
+    <aside class="no-print sticky top-16 hidden h-[calc(100vh-4rem)] w-64 shrink-0 flex-col overflow-y-auto border-r border-slate-200/80 bg-white p-3 md:flex">
+      <nav class="space-y-1">${top.map(navBtn).join('')}</nav>
+      ${stepsNav.length ? `<div class="mb-1 mt-5 px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Make your timetable</div>
+        <nav class="space-y-1">${stepsNav.map(navBtn).join('')}</nav>` : ''}
+      ${coord ? `<button onclick="toggleDrawer(true)" data-tour="assistant" class="mt-5 flex w-full items-center gap-3 rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2.5 text-sm font-medium text-indigo-700 hover:bg-indigo-50">${icon('bot')}Ask the assistant</button>` : ''}
+      <div class="mt-auto rounded-xl bg-slate-50 p-3 text-xs leading-relaxed text-slate-500">
         <div class="mb-1 flex items-center gap-1.5 font-medium text-slate-700">${icon('shield', 'w-4 h-4')}Private to your college</div>
-        Only people from ${c.name} can see this data. Other colleges can't.
+        Only people from ${esc(c.name)} can see this. Other colleges can't.
       </div>
     </aside>
-    <main class="min-w-0 flex-1 p-4 md:p-6 ${state.drawer ? 'lg:pr-[400px]' : ''}">
-      <div class="no-print mb-4 flex gap-2 overflow-x-auto md:hidden">
-        ${NAV.map(([id, label]) => `<button onclick="go('${id}')" class="whitespace-nowrap rounded-full px-3 py-1 text-sm ${state.page === id ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}">${label}</button>`).join('')}
+    <main class="min-w-0 flex-1 px-4 py-5 md:px-8 md:py-7 ${state.drawer ? 'lg:pr-[400px]' : ''}">
+      <div class="no-print -mx-4 mb-5 flex gap-2 overflow-x-auto px-4 pb-1 md:hidden">
+        ${items.map(([id, label, , st]) => `<button onclick="go('${id}')" data-tour="nav-${id}" class="whitespace-nowrap rounded-full px-3 py-1.5 text-sm ${state.page === id ? 'bg-indigo-600 font-medium text-white' : 'border border-slate-200 bg-white text-slate-600'}">${st ? `${st.done ? '✓' : st.n + '.'} ` : ''}${label}</button>`).join('')}
       </div>
-      <div class="${anim('page:' + state.page)}">${page()}</div>
+      <div class="mx-auto max-w-6xl ${anim('page:' + state.page)}">${page()}</div>
     </main>
   </div>
   ${state.drawer ? drawer() : ''}
   ${state.modal ? modal() : ''}
   ${state.generating !== null ? overlay() : ''}
-  ${state.toast ? `<div class="no-print fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm text-white shadow-lg ${anim('toast:' + state.toast)}">${state.toast}</div>` : ''}`;
+  ${state.toast ? `<div class="no-print fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm text-white shadow-lg ${anim('toast:' + state.toast)}">${state.toast}</div>` : ''}`;
 }
 
 function page() {
@@ -1340,14 +1727,24 @@ function page() {
     : isTeacher() ? { mine: teacherHome, timetable, availability: availabilityPage, account: accountPage }
     : isHod() ? { dashboard: hodDashboard, data: dataPage, timetable, account: accountPage }
     : { dashboard, timetable, data: dataPage, precheck: precheckPage, scheme: schemePage, accounts: accountsPage };
-  return (pages[state.page] || Object.values(pages)[0])();
+  const html = (pages[state.page] || Object.values(pages)[0])();
+  return isViewer() || state.viewing ? html : html + nextBar(state.page);
+}
+
+// A small drop-down for the less-used buttons: [label, onclick, icon].
+function moreMenu(items) {
+  return `<div class="relative" data-tour="tt-more">
+    <button onclick="state.more = !state.more; render()" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">More<span class="text-xs">▾</span></button>
+    ${state.more ? `<div class="absolute right-0 z-20 mt-1 w-56 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">${items.map(([label, onclick, ic]) => `
+      <button onclick="state.more = false; render(); ${onclick}" class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">${icon(ic, 'w-4 h-4')}${label}</button>`).join('')}</div>` : ''}
+  </div>`;
 }
 
 function overlay() {
   const steps = window._steps || [];
   return `<div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
     <div class="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl ${anim('overlay')}">
-      <div class="text-base font-semibold">Generating timetable</div>
+      <div class="text-base font-semibold">Making your timetable</div>
       <div class="mb-4 text-sm text-slate-500">${col().name}</div>
       <ol class="space-y-2">${steps.map((s, i) => `
         <li class="flex items-center gap-2 text-sm ${i < state.generating ? 'text-emerald-700' : i === state.generating ? 'font-medium text-slate-900' : 'text-slate-400'}">
@@ -1356,12 +1753,12 @@ function overlay() {
     </div></div>`;
 }
 
-const btn = (label, onclick, kind = 'secondary', ic = '') => {
-  const cls = kind === 'primary' ? 'bg-indigo-600 text-white hover:bg-indigo-700' : kind === 'danger' ? 'border border-red-200 bg-white text-red-700 hover:bg-red-50' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50';
-  return `<button onclick="${onclick}" class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${cls}">${ic ? icon(ic, 'w-4 h-4') : ''}${label}</button>`;
+const btn = (label, onclick, kind = 'secondary', ic = '', attrs = '') => {
+  const cls = kind === 'primary' ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20 hover:bg-indigo-700' : kind === 'danger' ? 'border border-red-200 bg-white text-red-700 hover:bg-red-50' : 'border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50';
+  return `<button onclick="${onclick}" ${attrs} class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${cls}">${ic ? icon(ic, 'w-4 h-4') : ''}${label}</button>`;
 };
-const card = (inner, cls = '') => `<div class="rounded-xl border border-slate-200 bg-white p-4 ${cls}">${inner}</div>`;
-const stat = (label, value, sub = '', tone = 'text-slate-900') => card(`<div class="text-xs text-slate-500">${label}</div><div class="mt-1 text-2xl font-semibold ${tone}">${value}</div>${sub ? `<div class="mt-0.5 text-xs text-slate-500">${sub}</div>` : ''}`);
+const card = (inner, cls = '', attrs = '') => `<div ${attrs} class="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ${cls}">${inner}</div>`;
+const stat = (label, value, sub = '', tone = 'text-slate-900', help = '') => card(`<div class="text-xs font-medium text-slate-500">${label}${help ? tip(help) : ''}</div><div class="mt-1 font-display text-2xl font-bold ${tone}">${value}</div>${sub ? `<div class="mt-0.5 text-xs text-slate-500">${sub}</div>` : ''}`);
 
 function schemeSummary(c) {
   const S = c.scheme;
@@ -1414,30 +1811,18 @@ function toggleDeptStatus(id) {
   dataChanged(c, `${d.name}: ${d.status === 'review' ? 'needs review' : 'ready'}.`, false);
 }
 
-// Setup checklist for a college that is still adding its data; hidden once everything is in place.
-function gettingStarted(c, g) {
-  const n = { departments: c.departments.length, courses: (c.courses || []).length, sections: c.sections.length, teachers: c.teachers.length,
-              rooms: c.rooms.length, subjects: Object.keys(c.subjects).length, assignments: c.assignments.length };
-  const steps = [
-    ['scheme', 'Check your week', 'Working days, period times, breaks and lectures per subject', true, "go('scheme')"],
-    ['departments', 'Add departments', 'Like CSE, ECE, Applied Sciences', n.departments > 0],
-    ['courses', 'Add courses', 'Like B.Tech CSE or MCA, under a department', n.courses > 0],
-    ['sections', 'Add sections', 'Each with its course, semester, students and lab groups', n.sections > 0],
-    ['teachers', 'Add teachers', 'With their department and when they can\'t teach', n.teachers > 0],
-    ['rooms', 'Add classrooms and labs', 'With seats and type', n.rooms > 0],
-    ['subjects', 'Add subjects', 'Lectures, tutorials and labs', n.subjects > 0],
-    ['assignments', 'Say who teaches what', 'Teaching assignments: subject, section or lab group, teacher', n.assignments > 0],
-  ];
-  const done = steps.filter(s => s[3]).length;
-  if (done === steps.length && g) return '';
-  const open = (tab, action) => action || `state.dataTab = '${tab}'; go('data')`;
-  return card(`<div class="mb-3 flex flex-wrap items-center justify-between gap-2"><div>
-      <div class="font-medium">Getting started</div><div class="text-sm text-slate-500">${done} of ${steps.length + 1} steps done. Add your data, or import each list from Excel.</div></div>
-      <div class="h-2 w-40 overflow-hidden rounded-full bg-slate-100"><div class="h-2 rounded-full bg-indigo-600" style="width:${Math.round(100 * done / (steps.length + 1))}%"></div></div></div>
-    <ol class="grid gap-2 sm:grid-cols-2">${[...steps, ['generate', 'Generate your timetable', 'Samay places every class with 0 clashes', !!g, 'runGenerate()']].map(([tab, title, sub, ok, action], i) => `
-      <li><button onclick="${open(tab, action)}" class="flex w-full items-center gap-3 rounded-lg border ${ok ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/40'} p-2.5 text-left">
-        <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${ok ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-xs font-semibold text-slate-600'}">${ok ? icon('check', 'w-3.5 h-3.5') : i + 1}</span>
-        <span class="min-w-0"><span class="block text-sm font-medium">${title}</span><span class="block truncate text-xs text-slate-500">${sub}</span></span></button></li>`).join('')}</ol>`, 'mb-4');
+// While step 2 is the next step: which lists still need something.
+function dataChecklist(c) {
+  const n = k => k === 'subjects' ? Object.keys(c.subjects).length : (c[k] || []).length;
+  const items = [['departments', 'Departments', 'Like CSE, ECE, Applied Sciences'], ['courses', 'Courses', 'Like B.Tech CSE or MCA (optional for service departments)'],
+    ['sections', 'Sections', 'A class group like CSE-3A, with its students and lab groups'], ['teachers', 'Teachers', "With their department and when they can't teach"],
+    ['rooms', 'Classrooms and labs', 'With seats and type'], ['subjects', 'Subjects', 'Lectures, tutorials and labs'],
+    ['assignments', 'Who teaches what', 'A subject, the section or lab group, and its teacher']];
+  return card(`<div class="mb-1 font-medium">What to add</div><p class="mb-3 text-sm text-slate-500">Click a list to open it. Each one can also be imported from Excel.</p>
+    <ol class="grid gap-2 sm:grid-cols-2">${items.map(([k, title, sub], i) => { const ok = n(k) > 0; return `
+      <li><button onclick="state.dataTab = '${k}'; go('data')" class="flex w-full items-center gap-3 rounded-xl border p-2.5 text-left ${ok ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/40'}">
+        ${stepBadge({ done: ok, n: i + 1 }, false)}<span class="min-w-0"><span class="block text-sm font-medium">${title}${ok ? ` <span class="font-normal text-slate-500">· ${n(k)}</span>` : ''}</span>
+        <span class="block truncate text-xs text-slate-500">${sub}</span></span></button></li>`; }).join('')}</ol>`, 'mt-4');
 }
 
 function accountsPage() {
@@ -1451,8 +1836,10 @@ function accountsPage() {
   const free = c.teachers.filter(t => !withAccount.has(t.id));
   const asTeacher = a.role === 'teacher', picked = c.teachers.find(t => t.id === a.teacher);
   return `<div class="no-print">
-  <div class="mb-4"><h1 class="text-2xl font-semibold tracking-tight">Accounts</h1>
-    <p class="text-sm text-slate-500">People who can sign in to ${esc(c.name)}. Coordinators manage everything. Heads of department manage their own department's data. Teachers see the published timetable and say when they can't teach.</p></div>
+  <div class="mb-4"><h1 class="font-display text-2xl font-bold tracking-tight">Publish & share</h1>
+    <p class="text-sm text-slate-500">Invite heads of department and teachers to sign in, and give students a code to see the timetable. Everyone only sees ${esc(c.name)}.</p></div>
+  ${state.published ? '' : `<div class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
+    <span><b>Nothing is published yet.</b> Teachers and students only see a timetable after you publish it.</span>${btn('Go to the timetable', "go('timetable')", 'secondary', 'calendar')}</div>`}
   <div class="grid gap-4 lg:grid-cols-2">
     ${card(`<div class="mb-3 font-medium">People</div>
       <ul class="divide-y divide-slate-100">${a.users.map(u => `
@@ -1485,9 +1872,9 @@ function accountsPage() {
           <button type="submit" class="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">${a.withPassword ? 'Add' : 'Invite'} ${asTeacher ? 'teacher' : a.role === 'hod' ? 'head of department' : 'coordinator'}</button>
           <button type="button" onclick="state.accounts.withPassword = !state.accounts.withPassword; render()" class="text-xs font-medium text-slate-500 hover:text-slate-700 hover:underline">${a.withPassword ? 'Send an invite link instead' : 'Set a temporary password instead'}</button>
         </div>
-      </form>`)}
+      </form>`, '', 'data-tour="acc-add"')}
     ${inviteTeachersCard()}
-    ${studentAccessCard()}
+    <div data-tour="acc-students">${studentAccessCard()}</div>
     ${passwordCard()}
   </div></div>${studentPoster()}`;
 }
@@ -1538,7 +1925,7 @@ function inviteTeachersCard() {
     <p class="mb-3 text-sm text-slate-500">${open.length ? `${open.length} teacher${open.length === 1 ? '' : 's'} don't have an account yet; ${withEmail.length} of them ${withEmail.length === 1 ? 'has' : 'have'} an email.` : 'Every teacher has an account.'}
       Add emails in Data → Teachers (or an Email column in your Teachers sheet).</p>
     ${withEmail.length ? btn(`Invite ${withEmail.length} teacher${withEmail.length === 1 ? '' : 's'}`, 'inviteAllTeachers()', 'primary', 'users') : ''}
-    ${list}${skipped}`);
+    ${list}${skipped}`, '', 'data-tour="acc-invite-all"');
 }
 async function inviteAllTeachers() {
   try {
@@ -1612,7 +1999,7 @@ function myClassesOn(c, g, teacherId, day) {
 function teacherHome() {
   const c = col(), g = current(), me = state.teacherHome.me, S = c.scheme;
   const head = `<div class="mb-4 flex flex-wrap items-end justify-between gap-3">
-    <div><div class="text-sm text-slate-500">${esc(me.dept_name || deptName(c, me.dept))}</div><h1 class="text-2xl font-semibold tracking-tight">Hello, ${esc(me.name)}</h1></div>
+    <div><div class="text-sm text-slate-500">${esc(me.dept_name || deptName(c, me.dept))}</div><h1 class="font-display text-2xl font-bold tracking-tight">Hello, ${esc(me.name)}</h1></div>
     ${g ? `<div class="no-print flex gap-2">${btn('Print or save PDF', 'window.print()', 'secondary', 'printer')}</div>` : ''}</div>`;
   if (!g) return head + notPublishedCard();
   const AS = A(c), mine = g.entries.filter(e => AS[e.a].teacher === me.id);
@@ -1637,7 +2024,7 @@ function teacherHome() {
           <div class="w-20 shrink-0 text-xs"><div class="font-semibold">${from[1]}–${to[2]}</div><div class="opacity-75">${esc(from[0])}${x.to > x.from ? '–' + esc(to[0]) : ''}</div></div>
           <div class="min-w-0"><div class="truncate text-sm font-semibold">${esc(sj.name)}</div>
             <div class="truncate text-xs opacity-75">${esc(gLabel(c, a.group))} · ${esc(x.room)} · ${KIND[sj.kind].label}</div></div></li>`; }).join('')}</ol>`
-        : '<p class="text-sm text-slate-500">You have no classes in the published timetable.</p>'}`, 'lg:col-span-2')}
+        : '<p class="text-sm text-slate-500">You have no classes in the published timetable.</p>'}`, 'lg:col-span-2', 'data-tour="t-today"')}
     <div class="grid content-start gap-3">
       ${stat('Periods a week', mine.length, `with ${groups.size} section${groups.size === 1 ? '' : 's'} or lab group${groups.size === 1 ? '' : 's'}`)}
       ${stat('Busiest day', busiest[1] ? busiest[0] : '–', busiest[1] ? `${busiest[1]} periods` : '')}
@@ -1645,7 +2032,7 @@ function teacherHome() {
   </div>
   <div class="mb-2 mt-6 flex items-center justify-between"><h2 class="font-semibold">My week</h2>
     <span class="no-print text-xs text-slate-500">Published timetable v${g.version}</span></div>
-  <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2">${withView('teacher', me.id, () => grid(c, g.entries.map((e, i) => ({ ...e, i })), new Set()))}</div>
+  <div class="overflow-x-auto rounded-2xl border border-slate-200/80 bg-white p-2 shadow-sm" data-tour="t-week">${withView('teacher', me.id, () => grid(c, g.entries.map((e, i) => ({ ...e, i })), new Set()))}</div>
   <p class="no-print mt-3 text-xs text-slate-400">To see any section's, teacher's or room's timetable, open All timetables.</p>`;
 }
 
@@ -1657,9 +2044,9 @@ function availabilityPage() {
   const c = col(), g = current(), AS = g ? A(c) : [];
   const teaching = new Set(g ? g.entries.filter(e => AS[e.a].teacher === me.id).map(e => `${e.day}|${e.period}`) : []);
   return `
-  <div class="mb-4"><h1 class="text-2xl font-semibold tracking-tight">When I can't teach</h1>
+  <div class="mb-4"><h1 class="font-display text-2xl font-bold tracking-tight">When I can't teach</h1>
     <p class="text-sm text-slate-500">Click the periods you're not available, then save. The next timetable your coordinator generates will keep them free.</p></div>
-  ${card(`<div class="overflow-x-auto"><table class="w-full min-w-[640px] table-fixed border-separate border-spacing-1">
+  ${card(`<div class="overflow-x-auto" data-tour="avail-grid"><table class="w-full min-w-[640px] table-fixed border-separate border-spacing-1">
       <thead><tr><th class="w-14"></th>${S.periods.map(p => `<th class="px-1 pb-1 text-left font-normal"><div class="text-xs font-semibold text-slate-700">${esc(p.label)}</div><div class="text-[10px] text-slate-400">${p.start}–${p.end}</div></th>`).join('')}</tr></thead>
       <tbody>${S.days.map(d => `<tr><th class="pr-2 text-left text-sm font-semibold text-slate-700">${d}</th>${S.periods.map((_, i) => {
         const p = i + 1, off = isOff(d, p), busy = teaching.has(`${d}|${p}`);
@@ -1670,7 +2057,7 @@ function availabilityPage() {
     <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
       <span class="text-sm text-slate-600">${v.off.length ? `${v.off.length} period${v.off.length === 1 ? '' : 's'} marked` : 'Available every period'}${changed ? ' · <span class="font-medium text-amber-700">not saved yet</span>' : ''}</span>
       <span class="flex gap-2">${changed ? btn('Undo changes', 'state.avail = null; render()') : ''}
-        <button onclick="saveAvail()" ${!changed || v.saving ? 'disabled' : ''} class="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">${v.saving ? 'Saving…' : 'Save'}</button></span>
+        <button onclick="saveAvail()" data-tour="avail-save" ${!changed || v.saving ? 'disabled' : ''} class="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">${v.saving ? 'Saving…' : 'Save'}</button></span>
     </div>
     ${v.clashes.length ? `<p class="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">You have classes at ${v.clashes.map(([d, p]) => `${d} ${esc(S.periods[p - 1]?.label || 'P' + p)}`).join(', ')} in the published timetable.
       They'll move when your coordinator generates and publishes a new timetable. Until then, the published one stays as it is.</p>` : ''}`)}
@@ -1695,7 +2082,7 @@ async function saveAvail() {
 function accountPage() {
   const me = state.me, c = col();
   return `
-  <div class="mb-4"><h1 class="text-2xl font-semibold tracking-tight">My account</h1></div>
+  <div class="mb-4"><h1 class="font-display text-2xl font-bold tracking-tight">My account</h1></div>
   <div class="grid gap-4 lg:grid-cols-2">
     ${card(`<div class="mb-3 font-medium">You</div>
       <dl class="space-y-2 text-sm">
@@ -1735,13 +2122,13 @@ function hodDashboard() {
   return `
   <div class="mb-6 flex flex-wrap items-end justify-between gap-3">
     <div><div class="text-sm text-slate-500">Head of department · ${esc(c.name)}</div>
-      <h1 class="text-2xl font-semibold tracking-tight">${esc(d.name)}</h1></div>
+      <h1 class="font-display text-2xl font-bold tracking-tight">${esc(d.name)}</h1></div>
     <div class="flex gap-2">${btn('Department data', "go('data')", 'secondary', 'table')}${btn('Published timetable', "go('timetable')", 'secondary', 'calendar')}</div>
   </div>
   ${card(`<div class="flex flex-wrap items-center justify-between gap-3">
     <div><div class="font-medium">Your department's data is <span class="${ready ? 'text-emerald-700' : 'text-amber-700'}">${ready ? 'ready' : 'still being checked'}</span></div>
       <p class="text-sm text-slate-500">${ready ? 'The timetable coordinator can include it when they generate.' : "Mark it ready when its courses, sections, teachers, subjects and classes are complete. The coordinator sees this on their dashboard."}</p></div>
-    ${ready ? btn('Mark as needs review', `toggleDeptStatus('${esc(own)}')`) : btn('Mark as ready', `toggleDeptStatus('${esc(own)}')`, 'primary', 'check')}</div>`, 'mb-4')}
+    ${ready ? btn('Mark as needs review', `toggleDeptStatus('${esc(own)}')`) : btn('Mark as ready', `toggleDeptStatus('${esc(own)}')`, 'primary', 'check')}</div>`, 'mb-4', 'data-tour="hod-status"')}
   <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
     ${stat('Sections', sections.length, `${(c.courses || []).filter(x => x.dept === own).length} course(s)`)}
     ${stat('Teachers', teachers.length, 'In your department')}
@@ -1761,69 +2148,59 @@ function hodDashboard() {
 }
 
 function dashboard() {
-  const c = col(), g = current(), checks = precheck(c);
-  const errors = checks.filter(x => x.level === 'error').length, warns = checks.filter(x => x.level === 'warn').length;
+  const c = col(), g = current(), s = steps(c), cur = s.find(x => !x.done);
   const v = g ? validate(c, g.entries) : null, m = g ? metrics(c, g.entries) : null;
+  const h = new Date().getHours(), hello = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  const who = state.live && state.me && !/coordinator/i.test(state.me.name) ? state.me.name : '';
+  const pub = state.published;
   return `
-  <div class="mb-6 flex flex-wrap items-end justify-between gap-3">
-    <div>
-      <div class="text-sm text-slate-500">${esc([c.kind, c.place].filter(Boolean).join(' · ') || c.term)}</div>
-      <h1 class="text-2xl font-semibold tracking-tight">${esc(c.name)}</h1>
-    </div>
-    <div class="flex gap-2">${btn('Run pre-check', "go('precheck')", 'secondary', 'shield')}${btn(g ? 'Generate again' : 'Generate timetable', 'runGenerate()', 'primary', 'bolt')}</div>
-  </div>
-  ${gettingStarted(c, g)}
-  <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
-    ${state.live && g?.version
-      ? stat('Timetable', state.published?.version === g.version ? 'Published' : `v${g.version} ready`,
-          state.published ? (state.published.version === g.version ? `v${g.version} · teachers see this version` : `Teachers still see v${state.published.version}. Publish v${g.version} from the Timetable page.`) : "Not published yet: teachers can't see it",
-          state.published?.version === g.version ? 'text-emerald-600' : '')
-      : stat('Timetable', g ? 'Generated' : 'Not yet', g ? `at ${g.at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Click Generate to create one')}
-    ${stat('Conflicts', v ? v.messages.length : '–', v ? (v.messages.length ? 'Open the assistant to fix' : 'Verified by the clash checker') : 'Shown after generating', v ? (v.messages.length ? 'text-red-600' : 'text-emerald-600') : '')}
-    ${stat('Quality score', m ? m.score + '/100' : '–', m ? `${m.avg} gaps per day · ${m.parPct}% labs side by side` : 'Fewer gaps = higher score')}
-    ${stat('Pre-check', errors ? `${errors} to fix` : 'Ready', `${warns} warning${warns === 1 ? '' : 's'}`, errors ? 'text-red-600' : 'text-emerald-600')}
-  </div>
-  <div class="mt-4 grid gap-4 lg:grid-cols-3">
-    ${card(`<div class="mb-3 flex items-center justify-between"><div class="font-medium">Departments</div><span class="text-xs text-slate-500">Click a status to change it</span></div>
+  <div class="mb-6"><div class="text-sm text-slate-500">${esc([c.kind, c.place].filter(Boolean).join(' · ') || c.term)}</div>
+    <h1 class="font-display text-2xl font-bold tracking-tight sm:text-3xl">${hello}${who ? `, ${esc(who)}` : ''}</h1></div>
+  ${nextStepCard(c, s, g)}
+  ${stepProgress(s)}
+  ${cur?.page === 'data' ? dataChecklist(c) : ''}
+  ${g ? `<div class="mt-6 grid gap-3 sm:grid-cols-3">
+    ${state.live && g.version
+      ? stat('Timetable', pub?.version === g.version ? 'Published' : `Version ${g.version} ready`,
+          pub ? (pub.version === g.version ? 'Teachers and students see this version' : `They still see version ${pub.version}. Publish the new one on the Timetable page.`) : "Not published yet: nobody else can see it",
+          pub?.version === g.version ? 'text-emerald-600' : '', 'Only a published version is shown to teachers and students.')
+      : stat('Timetable', 'Made', `at ${g.at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`)}
+    ${stat('Clashes', v.messages.length, v.messages.length ? 'Open the assistant to fix them' : 'Checked: nobody is double-booked', v.messages.length ? 'text-red-600' : 'text-emerald-600', 'A clash is a teacher, room or class booked for two things at the same time.')}
+    ${stat('Quality score', m.score + '/100', `${m.avg} empty periods a day · ${m.parPct}% labs side by side`, '', 'Higher is better: fewer empty periods between classes, lab groups busy at the same time, and subjects spread over the week.')}
+  </div>` : ''}
+  <div class="mt-6 grid gap-4 lg:grid-cols-2">
+    ${card(`<div class="mb-3 flex items-center justify-between"><div class="font-medium">Departments${tip('Heads of department mark their department ready when its data is complete. You can change it here too.')}</div><span class="text-xs text-slate-500">Click a status to change it</span></div>
       <ul class="divide-y divide-slate-100">${c.departments.map(d => `
         <li class="flex items-center justify-between gap-2 py-2 text-sm"><span><span class="font-medium">${esc(d.name)}</span>
-          <span class="block text-xs text-slate-500">${(c.courses || []).filter(x => x.dept === d.id).length} courses · ${c.sections.filter(s => s.dept === d.id).length} sections · ${c.teachers.filter(t => t.dept === d.id).length} teachers</span></span>
-        <button onclick="toggleDeptStatus('${esc(d.id)}')" title="Click to change" class="shrink-0 rounded-md px-2 py-0.5 text-xs font-medium ${d.status === 'review' ? 'bg-amber-50 text-amber-800 hover:bg-amber-100' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}">${d.status === 'review' ? 'Needs review' : 'Ready'}</button></li>`).join('')
-        || '<li class="py-2 text-sm text-slate-500">No departments yet.</li>'}</ul>`, 'lg:col-span-1')}
-    ${card(`<div class="mb-3 font-medium">This college's scheme</div>
+          <span class="block text-xs text-slate-500">${(c.courses || []).filter(x => x.dept === d.id).length} courses · ${c.sections.filter(x => x.dept === d.id).length} sections · ${c.teachers.filter(t => t.dept === d.id).length} teachers</span></span>
+        <button onclick="toggleDeptStatus('${esc(d.id)}')" title="Click to change" class="shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${d.status === 'review' ? 'bg-amber-50 text-amber-800 hover:bg-amber-100' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}">${d.status === 'review' ? 'Needs review' : 'Ready'}</button></li>`).join('')
+        || `<li class="py-3 text-sm text-slate-500">No departments yet. <button onclick="state.dataTab = 'departments'; go('data')" class="font-medium text-indigo-600 hover:underline">Add one</button></li>`}</ul>`)}
+    ${card(`<div class="mb-3 font-medium">Your week</div>
       <p class="text-sm leading-relaxed text-slate-600">${schemeSummary(c)}</p>
-      <div class="mt-3 grid grid-cols-3 gap-2 text-center">
-        <div class="rounded-lg bg-slate-50 p-2"><div class="text-lg font-semibold">${c.sections.length}</div><div class="text-xs text-slate-500">Sections</div></div>
-        <div class="rounded-lg bg-slate-50 p-2"><div class="text-lg font-semibold">${c.teachers.length}</div><div class="text-xs text-slate-500">Teachers</div></div>
-        <div class="rounded-lg bg-slate-50 p-2"><div class="text-lg font-semibold">${c.rooms.length}</div><div class="text-xs text-slate-500">Rooms</div></div>
+      <div class="mt-4 grid grid-cols-3 gap-2 text-center">
+        ${[['Sections', c.sections.length], ['Teachers', c.teachers.length], ['Rooms', c.rooms.length]].map(([k, n]) => `<div class="rounded-xl bg-slate-50 p-3"><div class="font-display text-xl font-bold">${n}</div><div class="text-xs text-slate-500">${k}</div></div>`).join('')}
       </div>
-      <button onclick="go('scheme')" class="mt-3 text-sm font-medium text-indigo-600 hover:underline">View scheme →</button>`)}
-    ${card(`<div class="mb-3 font-medium">How it works</div>
-      <ol class="space-y-3 text-sm">
-        <li class="flex gap-3"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-xs font-semibold text-indigo-700">1</span><span>Departments add teachers, subjects, sections and labs, or import from Excel.</span></li>
-        <li class="flex gap-3"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-xs font-semibold text-indigo-700">2</span><span>Pre-check spots impossible data, then Generate builds a clash-free week.</span></li>
-        <li class="flex gap-3"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-xs font-semibold text-indigo-700">3</span><span>Review by section, teacher or room, fix with the assistant, then print.</span></li>
-      </ol>`)}
+      <button onclick="go('scheme')" class="mt-3 text-sm font-medium text-indigo-600 hover:underline">See or change your week →</button>`)}
   </div>`;
 }
 
 function timetable() {
   const c = col(), g = current(), ix = idx(c);
-  if (!g && isViewer()) return `<h1 class="mb-4 text-2xl font-semibold tracking-tight">${isHod() ? 'Published timetable' : 'All timetables'}</h1>${notPublishedCard()}`;
+  if (!g && isViewer()) return `<h1 class="mb-4 font-display text-2xl font-bold tracking-tight">${isHod() ? 'Published timetable' : 'All timetables'}</h1>${notPublishedCard()}`;
   if (!g) return `
-    <h1 class="mb-4 text-2xl font-semibold tracking-tight">Timetable</h1>
+    <h1 class="mb-4 font-display text-2xl font-bold tracking-tight">Timetable</h1>
     ${card(`<div class="flex flex-col items-center py-12 text-center">
       <div class="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">${icon('calendar', 'w-6 h-6')}</div>
-      <div class="text-lg font-medium">${state.staleVersion ? 'Your data changed: generate again' : 'Generate your first timetable'}</div>
+      <div class="font-display text-lg font-bold">${state.staleVersion ? 'Your data changed: make the timetable again' : 'Make your first timetable'}</div>
       <p class="mt-1 max-w-md text-sm text-slate-500">${state.staleVersion
-        ? `Timetable v${state.staleVersion} was made before your latest changes (yours, or a teacher's free times), so it may not match your data any more. Generate again to get an up-to-date timetable. Older versions stay saved.${state.published ? ` Teachers still see v${state.published.version} until you publish a new one.` : ''}`
+        ? `Timetable v${state.staleVersion} was made before your latest changes (yours, or a teacher's free times), so it may not match your data any more. Make it again to get an up-to-date timetable. Older versions stay saved.${state.published ? ` Teachers still see v${state.published.version} until you publish a new one.` : ''}`
         : `Samay places every class for ${esc(c.name)} while making sure no teacher, room or section is ever double-booked.`}</p>
-      <div class="mt-4 flex justify-center gap-2">${btn('Generate timetable', 'runGenerate()', 'primary', 'bolt')}${state.live && state.staleVersion ? btn('Versions', 'openHistory()', 'secondary', 'history') : ''}</div></div>`)}`;
+      <div class="mt-4 flex justify-center gap-2">${btn('Make the timetable', 'runGenerate()', 'primary', 'bolt', 'data-tour="tt-generate"')}${state.live && state.staleVersion ? btn('Versions', 'openHistory()', 'secondary', 'history') : ''}</div></div>`)}`;
 
   const roomOpts = [...new Set(c.rooms.map(r => r.type))].map(t => ({ group: typeName(t) + 's', items: c.rooms.filter(r => r.type === t).map(r => [r.id, r.id]) }));
   const options = { section: sectionOptions(c), teacher: teacherOptions(c), room: roomOpts }[state.view];
   const flat = options.flatMap(o => o.items || [o]);
-  if (!flat.length) return `<h1 class="mb-4 text-2xl font-semibold tracking-tight">Timetable</h1>
+  if (!flat.length) return `<h1 class="mb-4 font-display text-2xl font-bold tracking-tight">Timetable</h1>
     ${card(`<div class="py-10 text-center text-sm text-slate-600">There are no ${state.view === 'section' ? 'sections' : state.view === 'teacher' ? 'teachers' : 'rooms'} to show yet.
       <div class="mt-3">${btn('Go to Data', "go('data')")}</div></div>`)}`;
   if (!state.key || !flat.some(o => o[0] === state.key)) state.key = flat[0][0];
@@ -1841,37 +2218,35 @@ function timetable() {
     : ix.rooms[state.key].owner === 'Shared' ? 'Shared by all departments' : deptName(c, ix.rooms[state.key].owner);
 
   let badge;
-  if (isViewer()) badge = `<span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-700">${icon('check', 'w-4 h-4')}Published · 0 conflicts</span>`;
-  else if (state.preview) badge = `<span class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-sm font-medium text-amber-800">Preview: ${base.messages.length} → ${v.messages.length} conflicts</span>`;
-  else if (!base.messages.length) badge = `<span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-700">${icon('check', 'w-4 h-4')}0 conflicts · verified</span>`;
-  else badge = `<button onclick="toggleDrawer(true)" class="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1 text-sm font-medium text-red-700 hover:bg-red-100">${base.messages.length} conflict${base.messages.length > 1 ? 's' : ''} · fix with assistant</button>`;
+  if (isViewer()) badge = `<span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-700">${icon('check', 'w-4 h-4')}Published · 0 clashes</span>`;
+  else if (state.preview) badge = `<span class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-sm font-medium text-amber-800">Preview: ${base.messages.length} → ${v.messages.length} clashes</span>`;
+  else if (!base.messages.length) badge = `<span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-700">${icon('check', 'w-4 h-4')}0 clashes · checked</span>`;
+  else badge = `<button onclick="toggleDrawer(true)" class="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1 text-sm font-medium text-red-700 hover:bg-red-100">${base.messages.length} clash${base.messages.length > 1 ? 'es' : ''} · fix with the assistant</button>`;
 
   return `
   <div class="print-only mb-3">
     <div class="text-lg font-semibold">${c.name} · ${title}</div>
-    <div class="text-xs text-slate-500">${c.term} · Generated by Samay · ${base.messages.length ? base.messages.length + ' conflicts' : 'Verified: 0 conflicts'}</div>
+    <div class="text-xs text-slate-500">${c.term} · Generated by Samay · ${base.messages.length ? base.messages.length + ' clashes' : 'Checked: 0 clashes'}</div>
   </div>
   <div class="no-print mb-4 flex flex-wrap items-center justify-between gap-3">
-    <div><div class="flex items-center gap-3"><h1 class="text-2xl font-semibold tracking-tight">${esc(title)}</h1>${badge}</div>
+    <div><div class="flex items-center gap-3"><h1 class="font-display text-2xl font-bold tracking-tight">${esc(title)}</h1>${badge}</div>
       <p class="mt-0.5 text-sm text-slate-500">${g.version ? `${isViewer() ? 'Published timetable' : 'Timetable'} v${g.version} · ` : ''}${esc(subtitle)}</p></div>
-    <div class="flex flex-wrap gap-2">
+    <div class="flex flex-wrap items-center gap-2">
       ${state.live && !isViewer() && !state.viewing && g.version ? (state.published?.version === g.version
-        ? `<button onclick="openHistory()" title="Teachers see this version" class="inline-flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100">${icon('check', 'w-4 h-4')}Published</button>`
-        : btn('Publish', `publishVersion(${g.version})`, 'primary', 'check')) : ''}
-      ${state.viewing || isViewer() ? '' : `${btn(nLocked ? `Generate again · keeps ${nLocked} locked` : 'Generate again', 'runGenerate()', 'secondary', 'bolt')}
-      ${canSimulate() ? btn('Simulate a clash', 'simulateClash()', 'secondary') : ''}
-      ${btn('Assistant', 'toggleDrawer(true)', 'secondary', 'bot')}`}
-      ${isViewer() ? '' : btn('Versions', 'openHistory()', 'secondary', 'history')}
-      ${btn('Excel', 'exportExcel()', 'secondary', 'download')}
-      ${btn('Print or save PDF', 'window.print()', 'secondary', 'printer')}
+        ? `<button onclick="openHistory()" data-tour="tt-publish" title="Teachers and students see this version" class="inline-flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100">${icon('check', 'w-4 h-4')}Published</button>`
+        : btn('Publish', `publishVersion(${g.version})`, 'primary', 'check', 'data-tour="tt-publish"')) : ''}
+      ${state.viewing || isViewer() ? '' : `${btn(nLocked ? `Make again · keeps ${nLocked} locked` : 'Make again', 'runGenerate()', 'secondary', 'bolt')}
+      ${btn('Assistant', 'toggleDrawer(true)', 'secondary', 'bot', 'data-tour="tt-assistant"')}`}
+      ${moreMenu([...(state.viewing || isViewer() || !canSimulate() ? [] : [['Simulate a clash', 'simulateClash()', 'bolt']]),
+        ...(isViewer() ? [] : [['Older versions', 'openHistory()', 'history']]), ['Download Excel', 'exportExcel()', 'download'], ['Print or save as PDF', 'window.print()', 'printer']])}
     </div>
   </div>
   ${editBar(c, g)}
   <div class="no-print mb-4 flex flex-wrap items-center gap-3">
-    <div class="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
+    <div class="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm" data-tour="tt-views">
       ${[['section', 'Section'], ['teacher', 'Teacher'], ['room', 'Room']].map(([id, l]) => `<button onclick="setView('${id}')" class="rounded-md px-3 py-1.5 text-sm ${state.view === id ? 'bg-indigo-600 font-medium text-white' : 'text-slate-600 hover:bg-slate-50'}">${l}</button>`).join('')}
     </div>
-    <select onchange="setKey(this.value)" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+    <select onchange="setKey(this.value)" data-tour="tt-pick" aria-label="Which one" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
       ${optionsHtml(options, state.key)}
     </select>
     <div class="ml-auto flex flex-wrap items-center gap-3 text-xs text-slate-600">
@@ -1879,18 +2254,18 @@ function timetable() {
       <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm ring-2 ring-red-500"></span>Clash</span>
     </div>
   </div>
-  <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2">${grid(c, entries, v.bad)}</div>
+  <div class="overflow-x-auto rounded-2xl border border-slate-200/80 bg-white p-2 shadow-sm" data-tour="tt-grid">${grid(c, entries, v.bad)}</div>
   ${g.unplaced.length ? `<div class="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">${g.unplaced.length} class(es) could not be placed. Run the pre-check for details.</div>` : ''}
   ${isViewer() ? '' : `<div class="no-print mt-4 grid grid-cols-2 gap-3 md:grid-cols-5">
-    ${stat('Quality score', m.score + '/100', 'Higher is better')}
-    ${stat('Student gaps', m.avg, 'Free periods between classes, per day')}
-    ${stat('Labs side by side', m.parPct + '%', 'Lab groups busy together')}
+    ${stat('Quality score', m.score + '/100', 'Higher is better', '', 'Fewer empty periods, lab groups busy together and subjects spread over the week all raise the score.')}
+    ${stat('Empty periods', m.avg, 'Between classes, per section per day', '', 'A free period in the middle of a section\'s day. Fewer is better for students.')}
+    ${stat('Labs side by side', m.parPct + '%', 'Lab groups busy together', '', 'When A1 has a lab, A2 has a lab at the same time too, so neither group waits around.')}
     ${stat('Teacher load', `${m.lmin}–${m.lmax}`, 'Periods a week, lowest–highest')}
-    ${stat('Room use', m.roomUse + '%', `${m.classes} of ${m.required} periods placed`)}
+    ${stat('Rooms in use', m.roomUse + '%', `${m.classes} of ${m.required} periods placed`)}
   </div>`}
   <p class="no-print mt-3 text-xs text-slate-400">${isViewer() ? `Published by your timetable coordinator on ${g.at.toLocaleDateString([], { dateStyle: 'medium' })}. Every class was checked: no teacher, room or section is double-booked.` : state.live
     ? 'Generated on the Samay server with Google OR-Tools (CP-SAT) and saved only after the clash checker found 0 problems.'
-    : 'Demo mode: this page uses a simple in-browser generator. Open Samay from its server to generate with Google OR-Tools (CP-SAT) and save your work.'}</p>`;
+    : 'Try-out copy: this page uses a simple generator in your browser. The full Samay server uses Google OR-Tools and saves your work.'}</p>`;
 }
 
 function editBar(c, g) {
@@ -1913,7 +2288,7 @@ function editBar(c, g) {
   const when = `${e.day} ${pLabel(c, e.period)}${idxs.length > 1 ? '–' + pLabel(c, last.period) : ''}`;
   const locked = isLocked(g, state.sel.a, state.sel.day), n = state.targets.size;
   const text = `<b>${esc(desc(c, e))}</b> · ${when} · ${esc(e.room)}. ` + (locked
-    ? 'Locked: it stays here when you generate again. Unlock it to move it.'
+    ? 'Locked: it stays here when you make the timetable again. Unlock it to move it.'
     : n ? `${n} free slot${n > 1 ? 's' : ''} shown in green: click one to move it, or click another class to swap.`
         : 'No free slot for it in this view. Click another class to swap, or try the teacher or room view.');
   return bar('border-indigo-200 bg-indigo-50 text-indigo-900', text,
@@ -2013,7 +2388,7 @@ function drawer() {
   if (state.live && state.assistantOn) {
     body = chatBody(c, g);
   } else if (!g) {
-    body = `<p class="text-sm text-slate-600">Generate a timetable first. Then I can explain clashes, suggest fixes and move classes for you, always with a preview before anything changes.</p>`;
+    body = `<p class="text-sm text-slate-600">Make a timetable first. Then I can explain clashes, suggest fixes and move classes for you, always with a preview before anything changes.</p>`;
   } else {
     const v = validate(c, g.entries);
     if (state.preview) {
@@ -2026,8 +2401,8 @@ function drawer() {
       body = clashHelp(c, g, v);
     } else {
       body = `
-        ${state.applied ? `<div class="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">${state.applied} 0 conflicts.</div>` : ''}
-        ${bubble(`All clear: 0 conflicts in ${c.name}. I can help with changes. I'll always show a preview first and wait for you to apply it.`)}
+        ${state.applied ? `<div class="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">${state.applied} 0 clashes.</div>` : ''}
+        ${bubble(`All clear: 0 clashes in ${c.name}. I can help with changes. I'll always show a preview first and wait for you to apply it.`)}
         ${state.history.length ? btn('Undo last change', 'undoLast()', 'secondary') : ''}
         <div class="text-xs font-medium uppercase tracking-wide text-slate-400">Try asking</div>
         <div class="flex flex-wrap gap-2">${[c.teachers[0] && `${esc(c.teachers[0].name)} is absent on Monday`, `Find free rooms on ${c.scheme.days.at(-1)} P3`,
@@ -2059,7 +2434,7 @@ function clashHelp(c, g, v) {
   const ei = state.sim && v.bad.has(state.sim.ei) ? state.sim.ei : [...v.bad][0];
   const opts = freeSlots(c, g.entries, ei, 3);
   return `
-    ${bubble(`I found ${v.messages.length} conflict${v.messages.length > 1 ? 's' : ''}:`)}
+    ${bubble(`I found ${v.messages.length} clash${v.messages.length > 1 ? 'es' : ''}:`)}
     <ul class="space-y-1 text-sm">${v.messages.map(m => `<li class="rounded-md bg-red-50 px-3 py-2 text-red-800">${m}</li>`).join('')}</ul>
     ${bubble(`I can move <b>${desc(c, g.entries[ei])}</b> to a free slot. Everyone involved is free there and no other class has to move:`)}
     <div class="space-y-2">${opts.map((o, n) => `
@@ -2084,7 +2459,7 @@ function chatBody(c, g) {
     c.sections[0] && `Show ${c.sections[0].id}'s timetable for ${c.scheme.days.at(-1)}`,
     `Which rooms are free on ${c.scheme.days[2] || c.scheme.days[0]} ${pLabel(c, 3)}?`].filter(Boolean);
   const intro = !m.length ? `${bubble(g ? `Hi! Ask me about ${esc(c.name)}'s timetable in plain words. I can find clashes, free slots and rooms, and suggest changes. I'll always show a preview first; nothing changes until you apply it.`
-      : 'Generate a timetable first. Then I can answer questions about it and suggest changes.')}
+      : 'Make a timetable first. Then I can answer questions about it and suggest changes.')}
     ${g ? `<div class="text-xs font-medium uppercase tracking-wide text-slate-400">Try asking</div>
       <div class="flex flex-wrap gap-2">${ideas.map(q => `<button onclick="askChat(${esc(JSON.stringify(q))})" class="rounded-full border border-slate-200 px-3 py-1 text-left text-xs text-slate-600 hover:border-indigo-300 hover:bg-indigo-50">${esc(q)}</button>`).join('')}</div>` : ''}` : '';
   const turns = m.map(x => x.role === 'user'
@@ -2097,7 +2472,7 @@ function chatBody(c, g) {
       The changed classes are outlined on the grid. Conflicts: ${before} → ${after}. Nothing is saved until you apply.</div>
       <div class="flex gap-2">${btn('Apply change', 'applyPreview()', 'primary', 'check')}${btn('Discard', 'discardPreview()', 'secondary')}</div>`;
   } else if (state.applied) {
-    preview = `<div class="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">${esc(state.applied)} Saved with 0 conflicts.</div>
+    preview = `<div class="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">${esc(state.applied)} Saved with 0 clashes.</div>
       ${state.history.length ? btn('Undo last change', 'undoLast()', 'secondary') : ''}`;
   }
   // A clash on screen that isn't saved (e.g. from "Simulate a clash") is fixed here: the AI only sees saved timetables.
@@ -2212,7 +2587,7 @@ function dataChanged(c, message, affectsTimetable = true) {
   delete state.gen[c.id];
   Object.assign(state, { preview: null, history: [], applied: null, sim: null, modal: null });
   if (state.live && oldVersion) state.staleVersion = oldVersion;  // the saved timetable no longer matches the data
-  toast(hadTimetable ? `${message} Generate again to include the change in the timetable.` : message);
+  toast(hadTimetable ? `${message} Make the timetable again to include the change in the timetable.` : message);
   if (state.live) saveToServer(c);
 }
 
@@ -2685,15 +3060,12 @@ function setStudentSection(id) { state.studentSection = id; storage.set('samay.s
 const authShell = (key, inner) => `
   <div class="flex min-h-screen items-center justify-center p-4">
     <div class="w-full max-w-md ${anim(key)}">
-      <div class="mb-6 flex items-center gap-3">
-        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-base font-bold text-white">S</div>
-        <div class="leading-tight"><div class="text-lg font-semibold">Samay</div><div class="text-xs text-slate-500">Clash-free college timetables</div></div>
-      </div>${inner}</div></div>`;
+      <div class="mb-6">${brand('Clash-free college timetables')}</div>${inner}</div></div>`;
 const backToSignIn = `<p class="mt-4 border-t border-slate-100 pt-4 text-center text-sm text-slate-600">
-  <button type="button" onclick="Object.assign(state, { forgotMode: false, linkPage: null, forgotSent: null }); render()" class="font-medium text-indigo-600 hover:underline">Back to sign in</button></p>`;
+  <button type="button" onclick="Object.assign(state, { forgotMode: false, linkPage: null, forgotSent: null, authView: 'signin' }); render()" class="font-medium text-indigo-600 hover:underline">Back to sign in</button></p>`;
 function forgotPage() {
   const sent = state.forgotSent;
-  return authShell('forgot', `<form onsubmit="sendForgot(event)" class="rounded-xl border border-slate-200 bg-white p-6">
+  return authShell('forgot', `<form onsubmit="sendForgot(event)" class="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
     <h1 class="text-lg font-semibold">Forgot your password?</h1>
     ${sent ? (sent.email ? `<p class="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">${esc(sent.message)}</p>`
         : `<p class="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">This site can't send email yet. Ask your timetable coordinator for a reset link:
@@ -2721,10 +3093,10 @@ async function openLink(kind, token) {
 }
 function linkPage() {
   const L = state.linkPage, invite = L.kind === 'invite';
-  if (L.error) return authShell('link', `<div class="rounded-xl border border-slate-200 bg-white p-6">
+  if (L.error) return authShell('link', `<div class="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
     <h1 class="text-lg font-semibold">This link doesn't work any more</h1>
     <p class="mt-2 text-sm text-slate-600">${esc(L.error)} ${invite ? 'Ask your timetable coordinator to send a new invite.' : 'Use "Forgot password?" again, or ask your timetable coordinator.'}</p>${backToSignIn}</div>`);
-  return authShell('link', `<form onsubmit="setPasswordFromLink(event)" class="rounded-xl border border-slate-200 bg-white p-6">
+  return authShell('link', `<form onsubmit="setPasswordFromLink(event)" class="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
     <h1 class="text-lg font-semibold">${invite ? `Welcome to Samay, ${esc(L.info.name)}` : 'Choose a new password'}</h1>
     <p class="mt-1 text-sm text-slate-500">${invite ? `You've been invited to ${esc(L.info.college.name)}'s timetable. Choose a password to sign in.` : `For ${esc(L.info.name)} at ${esc(L.info.college.name)}. You'll be signed out on other devices.`}</p>
     <div class="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-sm"><span class="text-slate-500">Email</span> <span class="font-medium">${esc(L.info.email)}</span></div>
@@ -2758,11 +3130,8 @@ function studentCodePage() {
   return `
   <div class="flex min-h-screen items-center justify-center p-4">
     <div class="w-full max-w-md ${anim('student-code')}">
-      <div class="mb-6 flex items-center gap-3">
-        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-base font-bold text-white">S</div>
-        <div class="leading-tight"><div class="text-lg font-semibold">Samay</div><div class="text-xs text-slate-500">Your college timetable</div></div>
-      </div>
-      <form onsubmit="openStudent(event)" class="rounded-xl border border-slate-200 bg-white p-6">
+      <div class="mb-6">${brand('Your college timetable')}</div>
+      <form onsubmit="openStudent(event)" class="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
         <h1 class="text-lg font-semibold">See your timetable</h1>
         <p class="mt-1 text-sm text-slate-500">Enter the student code your college shared (on the notice board or in your class group), or scan its QR code. This phone will remember it.</p>
         <label class="mt-4 block"><span class="mb-1 block text-sm font-medium text-slate-700">College code</span>
@@ -2770,7 +3139,7 @@ function studentCodePage() {
         ${state.studentError ? `<p class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">${esc(state.studentError)}</p>` : ''}
         <button type="submit" ${state.signingIn ? 'disabled' : ''} class="mt-4 w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60">${state.signingIn ? 'Opening…' : 'Open timetable'}</button>
         <p class="mt-4 border-t border-slate-100 pt-4 text-center text-sm text-slate-600">College staff?
-          <button type="button" onclick="state.studentMode = false; render()" class="font-medium text-indigo-600 hover:underline">Sign in here</button></p>
+          <button type="button" onclick="Object.assign(state, { studentMode: false, authView: 'signin' }); render()" class="font-medium text-indigo-600 hover:underline">Sign in here</button></p>
       </form>
       <p class="mt-4 text-center text-xs text-slate-400">No account needed. You can only view your college's published timetable.</p>
     </div>
@@ -2789,7 +3158,7 @@ function sectionDay(c, g, sectionId, day) {
 }
 function studentToday() {
   const c = col(), g = current(), S = c.scheme, ix = idx(c);
-  if (!g) return `<h1 class="mb-4 text-2xl font-semibold tracking-tight">${esc(c.name)}</h1>${card(`<div class="py-10 text-center">
+  if (!g) return `<h1 class="mb-4 font-display text-2xl font-bold tracking-tight">${esc(c.name)}</h1>${card(`<div class="py-10 text-center">
     <div class="text-lg font-medium">No timetable published yet</div><p class="mt-1 text-sm text-slate-500">Your college hasn't published this term's timetable. Check again soon.</p></div>`)}`;
   const sec = state.studentSection && c.sections.some(s => s.id === state.studentSection) ? state.studentSection : c.sections[0]?.id;
   const today = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date().getDay()];
@@ -2808,16 +3177,16 @@ function studentToday() {
   };
   return `
   <div class="mb-4"><div class="text-sm text-slate-500">${esc(c.name)}</div>
-    <div class="mt-1 flex flex-wrap items-center gap-2"><h1 class="text-2xl font-semibold tracking-tight">My section</h1>
-      <select onchange="setStudentSection(this.value)" aria-label="Your section" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">${optionsHtml(sectionOptions(c), sec)}</select></div></div>
+    <div class="mt-1 flex flex-wrap items-center gap-2"><h1 class="font-display text-2xl font-bold tracking-tight">My section</h1>
+      <select onchange="setStudentSection(this.value)" aria-label="Your section" data-tour="st-section" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">${optionsHtml(sectionOptions(c), sec)}</select></div></div>
   ${card(`<div class="mb-3 font-medium">${heading}</div>
     ${list.length || kept.length ? `<ol class="space-y-2">${list.map(item).join('')}${kept.map(k => `<li class="flex gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-2.5 text-slate-600">
       <div class="w-20 shrink-0 text-xs font-semibold">${S.periods[k.p - 1][1]}–${S.periods[k.p - 1][2]}</div><div class="text-sm">${esc(k.name)}</div></li>`).join('')}</ol>`
       : '<p class="text-sm text-slate-500">No classes in the published timetable.</p>'}
-    <p class="mt-3 text-xs text-slate-500">If you're in a lab group or an elective, follow the classes for your group.</p>`)}
+    <p class="mt-3 text-xs text-slate-500">If you're in a lab group or an elective, follow the classes for your group.</p>`, '', 'data-tour="st-today"')}
   <div class="mb-2 mt-6 flex items-center justify-between"><h2 class="font-semibold">${esc(sec)} · week</h2>
     <span class="text-xs text-slate-500">Published timetable v${g.version}</span></div>
-  <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2">${withView('section', sec, () => grid(c, g.entries.map((e, i) => ({ ...e, i })), new Set()))}</div>
+  <div class="overflow-x-auto rounded-2xl border border-slate-200/80 bg-white p-2 shadow-sm">${withView('section', sec, () => grid(c, g.entries.map((e, i) => ({ ...e, i })), new Set()))}</div>
   <p class="mt-3 text-xs text-slate-400">See any section's, teacher's or room's timetable under Timetables.</p>`;
 }
 
@@ -3432,21 +3801,21 @@ function dataPage() {
   }[tab];
   return `
   <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-    <div><h1 class="text-2xl font-semibold tracking-tight">${isHod() ? `${esc(deptName(c, f))} data` : 'Data'}</h1>
-    <p class="text-sm text-slate-500">${isHod() ? "Your department's courses, sections, teachers, subjects and classes. Records of other departments are shown for reference and are view only." : 'Everything the generator needs. Add records one by one, or import a whole sheet at once.'}</p></div>
+    <div><h1 class="font-display text-2xl font-bold tracking-tight">${isHod() ? `${esc(deptName(c, f))} data` : 'College data'}</h1>
+    <p class="text-sm text-slate-500">${isHod() ? "Your department's courses, sections, teachers, subjects and classes. Records of other departments are shown for reference and are view only." : 'Everything Samay needs to make your timetable. Add records one by one, or import a whole sheet at once.'}</p></div>
     <div class="flex flex-wrap gap-2">
       ${tab !== 'departments' && !isHod() ? `<select onchange="state.deptFilter = this.value; render()" aria-label="Filter by department" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
         ${optionsHtml([['all', 'All departments'], ...c.departments.map(d => [d.id, d.name])], f || 'all')}</select>` : ''}
-      ${COLUMNS[tab] ? btn('Import from Excel', `openImport('${tab}')`, 'secondary', 'table') : ''}${btn(`Add ${ENT[tab].one}`, `openForm('${tab}')`, 'primary')}</div>
+      ${COLUMNS[tab] ? btn('Import from Excel', `openImport('${tab}')`, 'secondary', 'table', 'data-tour="data-import"') : ''}${btn(`Add ${ENT[tab].one}`, `openForm('${tab}')`, 'primary', '', 'data-tour="data-add"')}</div>
   </div>
-  <div class="mb-3 flex gap-1 overflow-x-auto border-b border-slate-200">
+  <div class="mb-3 flex gap-1 overflow-x-auto border-b border-slate-200" data-tour="data-tabs">
     ${Object.entries(ENT).filter(([k]) => !isHod() || !['departments', 'rooms', 'electives', 'reserved'].includes(k)).map(([k, e]) => `<button onclick="state.dataTab='${k}'; render()" class="-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm ${k === tab ? 'border-indigo-600 font-medium text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-700'}">
       ${e.label} <span class="ml-1 rounded-full bg-slate-100 px-1.5 text-xs text-slate-600">${counts[k]}</span></button>`).join('')}
   </div>
   ${f && tab !== 'departments' ? `<p class="mb-3 text-sm text-slate-500">Showing ${esc(deptName(c, f))}${tab === 'teachers' ? ', including guest teachers who teach its students' : tab === 'rooms' ? ' rooms and shared rooms' : tab === 'assignments' ? ': classes for its students and classes its teachers give elsewhere' : ''}.</p>` : ''}
   ${hint ? `<p class="mb-3 text-sm text-slate-500">${hint}</p>` : ''}
   ${rows.length ? card(`<div class="overflow-x-auto"><table class="w-full"><thead class="border-b border-slate-100"><tr>${heads.map(th).join('')}<th></th></tr></thead>
-    <tbody class="divide-y divide-slate-100">${rows.join('')}</tbody></table></div>`)
+    <tbody class="divide-y divide-slate-100">${rows.join('')}</tbody></table></div>`, '', 'data-tour="data-table"')
     : card(`<div class="py-10 text-center"><div class="font-medium">No ${ENT[tab].label.toLowerCase()} yet</div>
       <p class="mt-1 text-sm text-slate-500">Add them one by one or import a spreadsheet.</p>
       <div class="mt-4 flex justify-center gap-2">${COLUMNS[tab] ? btn('Import from Excel', `openImport('${tab}')`) : ''}${btn(`Add ${ENT[tab].one}`, `openForm('${tab}')`, 'primary')}</div></div>`)}`;
@@ -3461,18 +3830,18 @@ function precheckPage() {
   };
   return `
   <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-    <div><h1 class="text-2xl font-semibold tracking-tight">Pre-check</h1>
-    <p class="text-sm text-slate-500">Finds data that would make a timetable impossible, before you generate.</p></div>
-    ${btn('Generate timetable', 'runGenerate()', 'primary', 'bolt')}
+    <div><h1 class="font-display text-2xl font-bold tracking-tight">Check for problems</h1>
+    <p class="text-sm text-slate-500">Samay looks for anything that would make a timetable impossible. Fix the red ones, then make your timetable.</p></div>
+    ${btn('Make the timetable', 'runGenerate()', 'primary', 'bolt', 'data-tour="check-generate"')}
   </div>
   ${card(`<div class="flex items-center gap-3">
     <div class="flex h-10 w-10 items-center justify-center rounded-full ${errors ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'}">${icon(errors ? 'x' : 'check')}</div>
-    <div><div class="font-medium">${errors ? `${errors} problem${errors > 1 ? 's' : ''} to fix before generating` : 'Your data is ready to generate'}</div>
-    <div class="text-sm text-slate-500">${warns} warning${warns === 1 ? '' : 's'} · ${list.length} checks run</div></div></div>`, 'mb-4')}
-  <div class="space-y-2">${list.map(x => `
+    <div><div class="font-medium">${errors ? `${errors} problem${errors > 1 ? 's' : ''} to fix before making the timetable` : 'Your data is ready: make your timetable'}</div>
+    <div class="text-sm text-slate-500">${warns} warning${warns === 1 ? '' : 's'} · ${list.length} checks run</div></div></div>`, 'mb-4', 'data-tour="check-summary"')}
+  <div class="space-y-2">${list.map((x, i) => `
     <div class="flex items-start justify-between gap-3 rounded-lg ${style[x.level][0]} px-4 py-3 text-sm">
       <div class="flex gap-3"><span class="mt-0.5 shrink-0 rounded bg-white/70 px-1.5 py-0.5 text-[11px] font-semibold">${style[x.level][1]}</span><span>${x.text}</span></div>
-      ${x.fix ? `<button onclick="${x.action || `state.dataTab = '${x.fix.toLowerCase()}'; go('data')`}" class="shrink-0 font-medium underline-offset-2 hover:underline">${esc(x.label || `Fix in ${x.fix}`)}</button>` : ''}
+      ${x.fix ? `<button ${i === list.findIndex(y => y.fix) ? 'data-tour="check-fix"' : ''} onclick="${x.action || `state.dataTab = '${x.fix.toLowerCase()}'; go('data')`}" class="shrink-0 font-medium underline-offset-2 hover:underline">${esc(x.label || `Fix in ${x.fix}`)}</button>` : ''}
     </div>`).join('')}</div>`;
 }
 
@@ -3622,7 +3991,7 @@ function schemeForm(c, m) {
     .filter(t => !labNeeds.has(t) || t === c.scheme.theoryRoomType);
 
   return `
-    <div class="rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Changing the scheme clears the current timetable. Generate again after saving.</div>
+    <div class="rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Changing your week clears the current timetable. Make it again after saving.</div>
     ${section('Working days', 'Days when classes run.', `<div class="flex flex-wrap gap-2">${ALL_DAYS.map(d => `
       <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-sm hover:bg-slate-50">
         <input type="checkbox" ${v.days.includes(d) ? 'checked' : ''} onchange="toggleDay('${d}')" class="h-4 w-4 accent-indigo-600"/>${d}</label>`).join('')}</div>${err('days')}`)}
@@ -3671,20 +4040,20 @@ function schemePage() {
   const c = col(), S = c.scheme;
   const rows = [];
   S.periods.forEach(([l, s, e], i) => {
-    rows.push(`<tr><td class="px-3 py-2 text-sm font-medium">${l}</td><td class="px-3 py-2 text-sm">${s} – ${e}</td><td class="px-3 py-2 text-sm text-slate-500">Class</td></tr>`);
+    rows.push(`<tr><td class="px-3 py-2 text-sm font-medium">${l}</td><td class="whitespace-nowrap px-3 py-2 text-sm">${s} – ${e}</td><td class="px-3 py-2 text-sm text-slate-500">Class</td></tr>`);
     const b = S.breaks.find(b => b.after === i + 1);
     if (b) rows.push(`<tr class="bg-slate-50"><td class="px-3 py-2 text-sm font-medium text-slate-500">${b.label}</td><td class="px-3 py-2 text-sm text-slate-500">${b.time}</td><td class="px-3 py-2 text-sm text-slate-400">Break · no classes, labs can't run across it</td></tr>`);
   });
   return `
   <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-    <div><h1 class="text-2xl font-semibold tracking-tight">College scheme</h1>
-    <p class="text-sm text-slate-500">How ${c.name} runs its week. Every college sets its own.</p></div>
-    ${btn('Edit scheme', 'openScheme()', 'primary', 'sliders')}
+    <div><h1 class="font-display text-2xl font-bold tracking-tight">Your week</h1>
+    <p class="text-sm text-slate-500">How ${esc(c.name)} runs its week: days, period times, breaks and a few rules. Every college sets its own.</p></div>
+    ${btn('Change your week', 'openScheme()', 'primary', 'sliders', 'data-tour="scheme-edit"')}
   </div>
   <div class="grid gap-4 lg:grid-cols-2">
-    ${card(`<div class="mb-3 font-medium">Daily periods</div>
+    ${card(`<div class="mb-3 font-medium">Your day${tip('Each row is a time slot: a class period or a break. Labs never run across a break.')}</div>
       <div class="mb-3 flex flex-wrap gap-1">${S.days.map(d => `<span class="rounded-md bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700">${d}</span>`).join('')}</div>
-      <table class="w-full"><tbody class="divide-y divide-slate-100">${rows.join('')}</tbody></table>`)}
+      <table class="w-full"><tbody class="divide-y divide-slate-100">${rows.join('')}</tbody></table>`, '', 'data-tour="scheme-periods"')}
     ${card(`<div class="mb-3 font-medium">Rules</div>
       <dl class="divide-y divide-slate-100 text-sm">
         ${[['Lectures per subject', `${S.rules.lecturesPerWeek} a week (a subject can override this)`],
@@ -3693,11 +4062,11 @@ function schemePage() {
            ['New lab groups named', S.labPrefix === 'section' ? 'After the section (A1, A2…)' : `${esc(S.labPrefix)}1, ${esc(S.labPrefix)}2…`], ['Theory classes in', typeName(S.theoryRoomType) + 's'],
            ['Same subject per day', `At most ${S.rules.maxSameSubjectPerDay}`], ['Teacher default max a day', `${S.rules.teacherMaxPerDay} periods`],
            ['Room types', [...new Set(c.rooms.map(r => typeName(r.type)))].join(', ')]].map(([k, v]) => `<div class="flex justify-between gap-4 py-2"><dt class="text-slate-500">${k}</dt><dd class="text-right font-medium">${v}</dd></div>`).join('')}
-      </dl>`)}
+      </dl>`, '', 'data-tour="scheme-rules"')}
   </div>
   ${card(`<div class="flex gap-3"><div class="text-indigo-600">${icon('shield')}</div><div>
-    <div class="font-medium">Your scheme, your rules</div>
-    <p class="mt-1 text-sm text-slate-500">This scheme belongs to ${c.name} only. The generator and clash checker follow it instead of assuming a fixed week,
+    <div class="font-medium">Your week, your rules</div>
+    <p class="mt-1 text-sm text-slate-500">This week belongs to ${c.name} only. Samay and its clash checker follow it instead of assuming a fixed week,
     so colleges with different days, periods, breaks or lecture counts all get correct timetables. No other college can see it.</p></div></div>`, 'mt-4')}`;
 }
 

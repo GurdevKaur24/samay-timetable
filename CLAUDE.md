@@ -56,6 +56,10 @@ Full product plan and roadmap: `docs/requirements.md`.
   **demo mode** (built-in demo colleges, in-browser generator, nothing saved). `fromServer`/`toServer` convert between
   the server schema and the page's in-memory format. Rebuild `tailwind.css` after adding new classes (command in
   `web/tailwind.config.cjs`).
+  Signed out, it shows a home page (`homePage`, with the demo colleges under **Try the demo**); sign-in is `authView: 'signin'`.
+  The coordinator's menu is Home plus the five steps from `steps(c)` (Your week, College data, Check for problems, Make
+  the timetable, Publish & share), each page ending with `nextBar`. First-visit guides: `TOURS['role:page']` lists
+  `[data-tour id, title, text]`; elements carry `data-tour="..."`; seen guides are remembered in localStorage; `?` replays.
 - `services/demo.py`: with `SAMAY_DEMO_READY` (on by default when `RENDER` is set) the server generates and publishes
   demo-eng's timetable in the background at start and turns on student code DEMO-2026, since the free plan starts empty.
 - **render.yaml**: deploys one free Render web service (API + page on one address, HTTPS cookies, 2 solver threads).

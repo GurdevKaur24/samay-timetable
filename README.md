@@ -6,7 +6,7 @@ independent clash checker before it is saved, so "0 conflicts" is proved, not pr
 
 Built for **Hackathon 1, Punjab Jobs AI Bootcamp (J-PAL South Asia)**, individual project, with Claude Code.
 
-**Live demo: https://samay-timetable.onrender.com** · one-click demo accounts on the sign-in page, no password needed.
+**Live demo: https://samay-timetable.onrender.com** · click **Try the demo** on the home page, no password needed.
 (Free hosting sleeps when unused: the first visit can take about a minute to wake up.)
 
 ![The timetable of one section: 0 conflicts, lab groups doing different labs side by side](docs/screenshots/timetable.jpg)
@@ -58,7 +58,7 @@ Each college sees only its own data and never learns which other colleges use Sa
   - electives keep their sections free;
   - reserved times stay free.
 - An independent clash checker re-checks every timetable (generated or hand-edited). Nothing with a clash is ever saved.
-- Pre-check before generating, in plain English. It catches teachers with too many periods, sections that don't fit in the week, too few rooms, and rooms too small.
+- Check for problems before making the timetable, in plain English. It catches teachers with too many periods, sections that don't fit in the week, too few rooms, and rooms too small.
 
 **Any college, any scheme**
 - Each college sets its own days, periods, breaks, lunch, lab length, lectures per subject a week, lab group naming and
@@ -95,7 +95,7 @@ Each college sees only its own data and never learns which other colleges use Sa
 
 ## Try it
 ### Online
-Open the live demo link above. On the sign-in page, pick a college, then **Coordinator**, **Head of department** or
+Open the live demo link above and click **Try the demo**. Pick a college, then **Coordinator**, **Head of department** or
 **Teacher**. **Demo Engineering College** is a full example: its timetable is already generated and published, so every
 role shows it straight away. **Guru Nanak Dev Engineering College (demo)** is almost empty, so you can try entering a real
 college's data. **Students:** tap **I'm a student** and enter the code **DEMO-2026** (Demo Engineering College). 
@@ -131,20 +131,25 @@ accounts (one-click on the sign-in page). On macOS/Linux use `.venv/bin/python` 
 
 ## How to use it
 **Timetable coordinator**
-1. **College scheme:** check working days, period times, breaks, lectures per subject a week, lab length and elective class size.
-2. **Data:** add (or import from Excel) departments, courses, sections with lab groups, teachers (with times they can't
+The coordinator's menu is Home plus five numbered steps (a green tick when each is done), and Home always shows the next step.
+
+1. **Your week:** check working days, period times, breaks, lectures per subject a week, lab length and elective class size.
+2. **College data:** add (or import from Excel) departments, courses, sections with lab groups, teachers (with times they can't
    teach), rooms and labs, subjects, and **teaching assignments** (who teaches which subject to which section or lab group).
    Add **Electives** and **Reserved times** if you have them.
-3. **Pre-check:** fix anything marked red.
-4. **Generate:** a clash-free week in seconds. Look at it by section, teacher or room.
-5. **Adjust:** click a class to move or swap it, lock what must not move, or ask the **Assistant**. Generate again; locked classes stay.
+3. **Check for problems:** fix anything marked red.
+4. **Make the timetable:** a clash-free week in seconds. Look at it by section, teacher or room.
+5. **Adjust:** click a class to move or swap it, lock what must not move, or ask the **Assistant**. **Make again**; locked classes stay.
 6. **Publish:** teachers and students now see this version.
-7. **Share:** invite HODs and teachers under **Accounts**. Each gets a one-time link (emailed if email is set up, or
+7. **Publish & share:** invite HODs and teachers. Each gets a one-time link (emailed if email is set up, or
    copy it and send it yourself) to choose their own password. Give teachers an email (in Data → Teachers, or an
    **Email** column in the Teachers sheet) and **Invite all teachers** invites everyone without an account in one click,
    with a "Copy all links" list for WhatsApp. After that, everyone just signs in with their email and password. Turn on **Student access** to get the code, link and QR poster.
    Forgot a password? Use **Forgot password?** on the sign-in page, or the coordinator's **Reset link** next to their name.
-8. Print, save as PDF or export to Excel from the Timetable page.
+8. Print, save as PDF or export to Excel from the Timetable page (**More**).
+
+The first time anyone opens a page, a short guide dims the page and points an arrow at each button with a one-line
+explanation (Next / Skip). The **?** in the top bar shows it again. Every role has its own guides.
 
 **Head of department:** keep your department's data complete under **Department data** (other departments' records are
 view-only), then click **Mark as ready**. The coordinator sees each department's status on the dashboard.
@@ -156,14 +161,14 @@ save. The next generated timetable keeps them free.
 today's classes, or open **All timetables** for any section, teacher or room.
 
 ## 5-minute demo
-1. **Sign-in page:** one-click demo accounts. Pick **Demo Engineering College → Coordinator**.
-2. **Dashboard:** setup checklist, scheme summary, department status. Click **Generate timetable** (a few seconds).
+1. **Home page:** what Samay is, then **Try the demo** → **Demo Engineering College → Coordinator**.
+2. **Home:** the next step card, the five steps and department status. Follow the quick guide (or click **?**).
 3. **Timetable:**
-   - Switch Section / Teacher / Room. Notice A1/A2 doing different labs at the same time, and the green "0 conflicts · verified" badge.
+   - Switch Section / Teacher / Room. Notice A1/A2 doing different labs at the same time, and the green "0 clashes · checked" badge.
    - Click a class: green "Move here" slots; move it, then lock another.
-   - **Simulate a clash** → the assistant shows the clash and three fixes → **Preview** → **Apply**.
-4. **Data → Electives:** add "Departmental Elective-I" with 100 students for one subject. Watch it become 2 batches; generate again.
-5. **Publish**, then **Accounts → Student access → Turn on**. Open the link in a private window: the phone view of a student.
+   - **More → Simulate a clash** → the assistant shows the clash and three fixes → **Preview** → **Apply**.
+4. **College data → Electives:** add "Departmental Elective-I" with 100 students for one subject. Watch it become 2 batches; generate again.
+5. **Publish**, then **Publish & share → Student access → Turn on**. Open the link in a private window: the phone view of a student.
 6. Sign in as **Head of department**: only their department is editable. Sign in as **Teacher**: own week, and mark a period as unavailable.
 
 ## How it works
