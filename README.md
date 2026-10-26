@@ -104,10 +104,11 @@ Each college sees only its own data and never learns which other colleges use Sa
 
 ## Try it
 ### Online
-Open the live demo link above and click **Try the demo**. Pick a college, then **Coordinator**, **Head of department**, **Student** or
-**Teacher**. **Demo Engineering College** is a full example: its timetable is already generated and published, so every
-role shows it straight away. **Guru Nanak Dev Engineering College (demo)** is almost empty, so you can try entering a real
-college's data. **Students:** tap **I'm a student** and enter the code **DEMO-2026** (Demo Engineering College). 
+Open the live demo link above and click **Try the demo**. **Demo Engineering College** is a full example: its timetable
+is already generated and published, so every role shows it straight away. Pick **Coordinator**, **Head of department**,
+**Teacher** or **Student** (students use the code **DEMO-2026**); inside, the **Demo** bar switches role in one click.
+To see what a new college sees on day one, click **Start with an empty college**: a private, empty college just for
+you (no sign-up), deleted after a day.
 
 The free hosting plan restarts the demo database now and then, so changes you make online may not last.
 

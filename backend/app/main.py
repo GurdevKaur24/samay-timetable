@@ -58,6 +58,7 @@ def create_app(db_path: str | Path | None = None, seed_if_empty: bool = True, so
     app.state.timezone = config.TIMEZONE
     app.state.send_email = smtp_sender() if send_email is AUTO else send_email  # None: links are shown instead
     app.state.forgot_limiter = LoginLimiter(limit=5)  # password reset requests, per email
+    app.state.practice_limiter = LoginLimiter(limit=5)  # practice colleges started, per address
     if seed_if_empty and app.state.db.college_count() == 0:
         seed(app.state.db)
     if config.DEMO_READY if demo_ready is None else demo_ready:

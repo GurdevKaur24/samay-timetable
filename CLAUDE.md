@@ -7,8 +7,9 @@ Full product plan and roadmap: `docs/requirements.md`.
 - **backend/**: Python 3.12, FastAPI, Google OR-Tools (CP-SAT), pytest.
   - `app/schema.py`: the one data format for a college (Pydantic), with plain-English field and cross-reference checks.
   - `solver/`: generator, clash checker, scorecard. Pure Python; reads college dicts in the schema format.
-  - `data/colleges/*.json`: demo colleges: `demo-eng` (a full example) and `gndec` (almost empty, to try real data:
-    one department and one teacher so its demo HOD and teacher accounts work). `tests/data/` holds a test-only second
+  - `data/colleges/*.json`: the demo college `demo-eng` (a full example). An empty one is made on request:
+    `POST /api/auth/practice` (demo servers only) creates a private `practice-…` college with a passwordless coordinator
+    and signs in; practice colleges older than a day are deleted. `tests/data/` holds a test-only second
     college (`city-arts`, with `test_users.json`) that `tests/conftest.py` adds, so privacy tests always have two colleges.
   - `app/db.py`: SQLite (`data/samay.db`, git-ignored, created and seeded on first start). Tables: colleges, users,
     sessions, college_data (one validated JSON document per college), timetables.

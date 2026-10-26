@@ -147,21 +147,6 @@ const COLLEGES = [
       ['EC501L', 'ECE-5A/A1', 'T14'], ['EC502L', 'ECE-5A/A1', 'T15'], ['EC501L', 'ECE-5A/A2', 'T14'], ['EC502L', 'ECE-5A/A2', 'T15'],
     ],
   },
-  {
-    // An almost empty college, to try your own data: the standard week, one department and one teacher.
-    id: 'gndec', name: 'Guru Nanak Dev Engineering College (demo)', place: 'Ludhiana', term: '', kind: 'Engineering (B.Tech)',
-    scheme: {
-      days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
-      periods: [['P1', '09:00', '09:50'], ['P2', '09:50', '10:40'], ['P3', '10:40', '11:30'], ['P4', '11:30', '12:20'],
-                ['P5', '13:00', '13:50'], ['P6', '13:50', '14:40'], ['P7', '14:40', '15:30']],
-      breaks: [{ after: 4, label: 'Lunch', time: '12:20–13:00' }],
-      theoryRoomType: 'lecture', labPrefix: 'section', labBlock: 2,
-      rules: { lecturesPerWeek: 3, labSessionsPerWeek: 1, maxSameSubjectPerDay: 1, teacherMaxPerDay: 5, electiveClassSize: 70 },
-    },
-    departments: [{ id: 'CSE', name: 'Computer Science and Engineering', hod: 'Head of CSE (demo)', status: 'review' }],
-    courses: [], sections: [], rooms: [], subjects: {}, assignments: [],
-    teachers: [{ id: 'G01', name: 'Demo Teacher', dept: 'CSE' }],
-  },
 ];
 
 // Common room types every college can pick from; a college can also add its own (e.g. "Language lab").
@@ -1064,11 +1049,12 @@ async function signInDemo(email) {
 function signedOutState() {
   Object.assign(state, { liveCollege: null, gen: {}, preview: null, history: [], applied: null, sim: null, drawer: false, menu: false, modal: null, staleVersion: null,
                          role: 'coordinator', me: null, teacherHome: null, published: null, avail: null, hodPublished: null, changesList: null,
-                         weekDate: null, weekMode: 'week', chat: { messages: [], draft: '', sending: false } });
+                         weekDate: null, weekMode: 'week', chat: { messages: [], draft: '', sending: false },
+                         studentMode: false, studentError: null, signupMode: false, forgotMode: false, linkPage: null });
   if (TOUR) endTour();
 }
 async function signOutLive() {
-  const demo = isDemoSession();
+  const demo = isDemoSession() || isPractice();
   await api('/api/auth/logout', { method: 'POST' }).catch(() => {});
   signedOutState();
   // Demo accounts go back to the demo colleges (to try another role); real accounts to the sign-in screen.
@@ -1091,6 +1077,11 @@ async function switchDemoStudent(code) {
   await openStudent(null, code);
 }
 function demoBar() {
+  if (isPractice()) return `<div class="no-print border-b border-white/10 bg-indigo-800 px-4 py-2 text-white md:px-6">
+    <div class="no-scrollbar flex items-center gap-2 overflow-x-auto">
+      <span class="shrink-0 rounded bg-amber-300 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-navy-950">Practice</span>
+      <span class="shrink-0 whitespace-nowrap text-xs text-indigo-100">An empty college just for you. It's deleted after a day.</span>
+      <button onclick="signOut()" class="shrink-0 whitespace-nowrap rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white hover:bg-white/20">Back to the demo colleges</button></div></div>`;
   if (!isDemoSession()) return '';
   const college = isStudent() ? col().name : demoCollegeOf(), mine = demoColleges().find(g => g[0] === college);
   if (!mine) return '';
@@ -1330,6 +1321,7 @@ function homeDemo() {
   const err = state.signinError ? `<p class="mx-auto mt-4 max-w-xl rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">${esc(state.signinError)}</p>` : '';
   if (!state.live) return `<div class="mx-auto grid max-w-3xl gap-3 sm:grid-cols-2">${COLLEGES.map((x, i) => `
     <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div class="mb-3 font-display font-bold">${esc(x.name)}</div>${roleTile('Timetable coordinator', 'coordinator', `signIn(${i})`)}</div>`).join('')}</div>
+    ${practiceCard()}
     <p class="mt-4 text-center text-xs text-slate-500">This copy runs only in your browser: nothing is saved.</p>${err}`;
   const colleges = demoColleges();
   if (!colleges.length) return `<p class="text-center text-sm text-slate-500">Demo accounts are switched off on this server. ${state.signupEnabled ? 'Create your college to try Samay.' : ''}</p>`;
@@ -1345,7 +1337,31 @@ function homeDemo() {
       </div>
       ${code ? `<p class="mt-3 text-xs text-slate-500">Students use the college code <b class="font-mono text-slate-700">${esc(code)}</b>, or scan the QR poster.</p>` : ''}
     </div>`; }).join('')}</div>
-    <p class="mt-4 text-center text-sm text-slate-500">No password needed. Once inside, the <b>Demo</b> bar at the top switches role in one click. Sign out to pick another college.</p>${err}`;
+    ${practiceCard()}
+    <p class="mt-4 text-center text-sm text-slate-500">No password needed. Once inside, the <b>Demo</b> bar at the top switches role in one click.</p>${err}`;
+}
+// Start empty: a new college of your own, as a college sees Samay on its first day (deleted after a day).
+const practiceCard = () => `<div class="mx-auto mt-5 flex max-w-5xl flex-wrap items-center justify-between gap-4 rounded-2xl border-2 border-dashed border-indigo-200 bg-indigo-50/50 p-5">
+    <div class="flex items-start gap-3"><span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-indigo-700 ring-1 ring-indigo-200">${icon('sliders')}</span>
+      <div><div class="font-display text-lg font-bold">Start with an empty college</div>
+        <p class="text-sm text-slate-600">See Samay as a new college does on day one: set your week, add or import data, and make your first timetable. Just for you; nothing to sign up for.</p></div></div>
+    <button onclick="startPractice()" ${state.signingIn ? 'disabled' : ''} class="rounded-xl bg-navy-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-navy-800 disabled:opacity-60">Start empty →</button></div>`;
+const isPractice = () => state.live && /@practice\.samay$/.test(state.me?.email || '');
+async function startPractice() {
+  if (!state.live) {  // the copy that runs in the browser: an empty college with the usual week
+    const base = COLLEGES[0], c = { ...JSON.parse(JSON.stringify(base)), id: 'practice', name: 'Your College (practice)', place: '', term: '', kind: '',
+      departments: [], courses: [], sections: [], teachers: [], rooms: [], subjects: {}, assignments: [], electives: [], reserved: [] };
+    const i = COLLEGES.findIndex(x => x.id === 'practice');
+    if (i >= 0) COLLEGES[i] = c; else COLLEGES.push(c);
+    delete state.gen.practice;
+    signIn(COLLEGES.indexOf(c)); return;
+  }
+  Object.assign(state, { signingIn: true, signinError: null }); render();
+  try {
+    await loadSignedIn(await api('/api/auth/practice', { method: 'POST' }));
+    Object.assign(state, { signingIn: false, drawer: false, replaceRoute: true });
+    render(); toast('Your empty practice college is ready. Start with step 1: your week.');
+  } catch (e) { Object.assign(state, { signingIn: false, signinError: e.message }); render(); }
 }
 const scrollToId = id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
 function homePage() {
@@ -2415,7 +2431,7 @@ function dashboard() {
   const c = col(), g = current(), s = steps(c), cur = s.find(x => !x.done);
   const v = g ? validate(c, g.entries) : null, m = g ? metrics(c, g.entries) : null;
   const h = new Date().getHours(), hello = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-  const who = state.live && state.me && !/coordinator/i.test(state.me.name) ? state.me.name : '';
+  const who = state.live && state.me && !/coordinator/i.test(state.me.name) && !isPractice() ? state.me.name : '';
   const pub = state.published;
   return `
   <div class="mb-6"><div class="text-sm text-slate-500">${esc([c.kind, c.place].filter(Boolean).join(' · ') || c.term)}</div>

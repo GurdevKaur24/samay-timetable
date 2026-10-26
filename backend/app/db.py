@@ -144,6 +144,11 @@ class Database:
             conn.execute("INSERT INTO college_data (college_id, data, version, updated_at) VALUES (?, ?, 1, ?)",
                          (college_id, json.dumps(data), now))
 
+    def delete_old_colleges(self, prefix: str, before: float) -> int:
+        """Delete colleges whose id starts with `prefix`, made before `before` (practice colleges), with all their data."""
+        with self.connect() as conn:
+            return conn.execute("DELETE FROM colleges WHERE id LIKE ? AND created_at < ?", (prefix + "%", before)).rowcount
+
     def get_college_data(self, college_id: str) -> dict | None:
         with self.connect() as conn:
             row = conn.execute("SELECT data FROM college_data WHERE college_id = ?", (college_id,)).fetchone()

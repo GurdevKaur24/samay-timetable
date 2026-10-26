@@ -25,5 +25,4 @@ def test_getting_ready_twice_changes_nothing(app):
 
 def test_other_colleges_are_left_alone(app):
     prepare_demos(app)
-    assert app.state.db.published("gndec") is None and app.state.db.student_code("gndec") is None
     assert app.state.db.published("city-arts") is None

@@ -69,8 +69,8 @@ def test_too_many_wrong_passwords_are_slowed_down(make_client):
 def test_demo_accounts_sign_in_with_one_click(make_client):
     client = make_client()
     accounts = client.get("/api/auth/demo-accounts").json()["accounts"]
-    assert {a["college"] for a in accounts} == {"Demo Engineering College", "Guru Nanak Dev Engineering College (demo)"}
-    assert {a["role"] for a in accounts if a["college"].startswith("Guru Nanak")} == {"coordinator", "hod", "teacher"}
+    assert {a["college"] for a in accounts} == {"Demo Engineering College"}
+    assert {a["role"] for a in accounts} == {"coordinator", "hod", "teacher"}
     assert all("password" not in a for a in accounts)
     r = client.post("/api/auth/demo", json={"email": accounts[0]["email"]})
     assert r.status_code == 200 and COOKIE_NAME in client.cookies
@@ -105,3 +105,37 @@ def test_demo_accounts_show_only_the_fixed_public_student_code(app, eng, make_cl
     assert visitor.get("/api/auth/demo-accounts").json()["student_codes"] == {"Demo Engineering College": "DEMO-2026"}
     eng.post("/api/student-access")  # the coordinator makes a new, private code: it is never listed
     assert visitor.get("/api/auth/demo-accounts").json()["student_codes"] == {}
+
+
+# ---- practice colleges (demo only) ---------------------------------------------------------------------------
+def test_a_practice_college_is_empty_private_and_yours(app, make_client, eng):
+    you = make_client()
+    r = you.post("/api/auth/practice")
+    assert r.status_code == 201 and r.json()["user"]["role"] == "coordinator"
+    data = you.get("/api/college/data").json()["data"]
+    assert data["id"].startswith("practice-") and not data["departments"] and not data["teachers"] and not data["sections"]
+    assert eng.get("/api/college/data").json()["data"]["id"] == "demo-eng"  # others never see it, nor it them
+    other = make_client()
+    other.post("/api/auth/practice")
+    assert other.get("/api/college/data").json()["data"]["id"] != data["id"]  # each visitor gets their own
+
+
+def test_practice_colleges_are_removed_after_a_day(app, make_client):
+    import time
+    you = make_client()
+    you.post("/api/auth/practice")
+    college = you.get("/api/college/data").json()["data"]["id"]
+    with app.state.db.connect() as conn:
+        conn.execute("UPDATE colleges SET created_at = ? WHERE id = ?", (time.time() - 25 * 3600, college))
+    make_client().post("/api/auth/practice")
+    assert app.state.db.get_college_data(college) is None
+    assert you.get("/api/auth/me").status_code == 401  # its account and session went with it
+
+
+def test_practice_is_only_for_demo_servers_and_limited(app, make_client):
+    app.state.demo_login = False
+    assert make_client().post("/api/auth/practice").status_code == 404
+    app.state.demo_login = True
+    for _ in range(5):
+        assert make_client().post("/api/auth/practice").status_code == 201
+    assert make_client().post("/api/auth/practice").status_code == 429

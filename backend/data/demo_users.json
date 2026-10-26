@@ -23,29 +23,6 @@
       "teacher": "T01",
       "college": "demo-eng",
       "password": "demo-eng-Teacher-2026"
-    },
-    {
-      "email": "coordinator@gndec-demo.example",
-      "name": "GNDEC Coordinator (demo)",
-      "role": "coordinator",
-      "college": "gndec",
-      "password": "gndec-Demo-2026"
-    },
-    {
-      "email": "hod.cse@gndec-demo.example",
-      "name": "Head of CSE (demo)",
-      "role": "hod",
-      "dept": "CSE",
-      "college": "gndec",
-      "password": "gndec-Hod-2026"
-    },
-    {
-      "email": "teacher@gndec-demo.example",
-      "name": "Demo Teacher",
-      "role": "teacher",
-      "teacher": "G01",
-      "college": "gndec",
-      "password": "gndec-Teacher-2026"
     }
   ]
 }

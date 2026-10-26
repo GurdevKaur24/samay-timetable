@@ -1,4 +1,6 @@
 import json
+import secrets
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
@@ -97,6 +99,29 @@ class SignupIn(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     email: str = Field(pattern=EMAIL, max_length=254)
     password: str = Field(min_length=8, max_length=200)
+
+
+PRACTICE_DOMAIN = "practice.samay"  # accounts of practice colleges: no password, so only their own session gets in
+PRACTICE_SECONDS = 24 * 3600
+
+
+@router.post("/practice", status_code=status.HTTP_201_CREATED)
+def practice(request: Request, response: Response, db: Database = Depends(get_db)):
+    """Demo only: a new, empty college of your own, to try Samay from the very start (no sign-up). It is private
+    like any college, and deleted after a day."""
+    if not request.app.state.demo_login:
+        raise HTTPException(404, "Not found")
+    who, limiter = f"practice:{request.client.host if request.client else 'unknown'}", request.app.state.practice_limiter
+    if limiter.blocked(who):
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "You've started several practice colleges. Wait 15 minutes, then try again.")
+    limiter.failed(who)  # counts each one started
+    db.delete_old_colleges("practice-", time.time() - PRACTICE_SECONDS)
+    college_id = f"practice-{secrets.token_hex(4)}"
+    data = CollegeData.model_validate(empty_college(college_id, "Your College (practice)", "")).model_dump(mode="json", exclude_none=True)
+    db.add_college(college_id, data["name"], data)
+    email = f"{college_id}@{PRACTICE_DOMAIN}"
+    db.add_user(email, "You", "coordinator", college_id, None)
+    return start_session(db.find_user_by_email(email), request, response, db)
 
 
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
