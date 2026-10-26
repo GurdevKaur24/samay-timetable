@@ -23,7 +23,10 @@ Full product plan and roadmap: `docs/requirements.md`.
     `SAMAY_SOLVE_SECONDS`, default 120). `solver.model.solve` works in two stages: any timetable with no clashes (no
     objective, presolve off: fast), then improving it from that hint until it hasn't got better for
     `SAMAY_SOLVE_PATIENCE` seconds (default 10). The job reports `progress` (stage, found, better_pct);
-    `POST /api/jobs/{id}/stop` stops and keeps the best so far. A timetable is saved only if the clash checker finds
+    `POST /api/jobs/{id}/stop` stops and keeps the best so far. To keep memory small, each class may use at most
+    `SAMAY_MAX_ROOM_CHOICES` (6; 4 on Render) of the rooms that fit it (`room_choices`: smallest first, rotated so every room is used);
+    `SAMAY_SOLVER_MEMORY_MB` (200 on Render, else none) caps the solver's memory, since the free plan's 512 MB limit
+    otherwise stops the whole server. A timetable is saved only if the clash checker finds
     0 problems; versions are numbered per college and store the data they were built from.
   - `app/services/precheck.py`: plain-English pre-check (teacher load, section hours, room demand, room sizes).
   - `app/services/fingerprint.py`: a timetable is out of date only when scheduling data changed (not college or

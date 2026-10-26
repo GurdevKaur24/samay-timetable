@@ -16,6 +16,11 @@ DEMO_READY = os.environ.get("SAMAY_DEMO_READY", "1" if os.environ.get("RENDER") 
 SOLVE_SECONDS = float(os.environ.get("SAMAY_SOLVE_SECONDS", "120"))  # time limit for one generation run (a real college of ~25 sections needs ~1 min)
 # Stop generating once the timetable hasn't got better for this many seconds (the time limit above is the most it takes).
 SOLVE_PATIENCE = float(os.environ.get("SAMAY_SOLVE_PATIENCE", "10"))
+# Each class may use at most this many of the rooms that fit it (rotated, so every room is used): keeps the model small.
+MAX_ROOM_CHOICES = int(os.environ.get("SAMAY_MAX_ROOM_CHOICES", "4" if os.environ.get("RENDER") else "6"))  # Render: 512 MB
+# The generator stops (keeping its best timetable) before using more memory than this; 0 = no limit. On by default on
+# Render, whose free plan has 512 MB and would otherwise stop the whole server.
+SOLVER_MEMORY_MB = int(os.environ.get("SAMAY_SOLVER_MEMORY_MB", "200" if os.environ.get("RENDER") else "0"))
 SOLVER_WORKERS = int(os.environ.get("SAMAY_SOLVER_WORKERS", "8"))  # CPU threads per run; lower on small servers
 ALLOWED_ORIGINS = [o for o in os.environ.get("SAMAY_ORIGINS", "http://localhost:5500").split(",") if o]
 # The AI assistant needs an Anthropic API key in the environment (never in the code). SAMAY_ASSISTANT=0 turns it off.

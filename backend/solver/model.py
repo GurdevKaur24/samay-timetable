@@ -36,8 +36,21 @@ class _Improvements(cp_model.CpSolverSolutionCallback):
                 self.on_better(value)
 
 
+def room_choices(rooms: list[dict], aid: str, limit: int | None, keep: set[str]) -> list[dict]:
+    """At most `limit` rooms for one class: the smallest that fit, with rooms of the same size taken in a different
+    order for each class, so every room is still used. Fewer choices keep the model small enough for a small server;
+    rooms in `keep` (a locked class's room) are always included."""
+    if not limit or len(rooms) <= limit:
+        return rooms
+    shift = sum(map(ord, aid))
+    order = sorted(range(len(rooms)), key=lambda i: (rooms[i]["capacity"], (i + shift) % len(rooms)))
+    chosen = [rooms[i] for i in order[:limit]]
+    return chosen + [r for r in rooms if r["id"] in keep and r not in chosen]
+
+
 def solve(data: dict, time_limit: float = 20.0, workers: int = 8, fixed: list[dict] | None = None,
-          patience: float | None = None, stop: threading.Event | None = None, on_progress=None) -> dict:
+          patience: float | None = None, stop: threading.Event | None = None, on_progress=None, max_rooms: int | None = None,
+          max_memory_mb: int | None = None) -> dict:
     """`fixed` lists locked sessions that must stay exactly where they are:
     [{"assignment": id, "day": "Mon", "start": 3, "room": "LH-101"}] (start = first period of the session).
 
@@ -64,6 +77,7 @@ def solve(data: dict, time_limit: float = 20.0, workers: int = 8, fixed: list[di
         rooms = [r for r in c.rooms.values() if r["type"] == c.room_type(aid) and r["capacity"] >= group.strength]
         if not rooms:
             return _fail(started, f"No {c.room_type(aid).replace('_', ' ')} is big enough for {c.group_label(group.id)} ({group.strength} students).")
+        rooms = room_choices(rooms, aid, max_rooms, {f["room"] for f in fixed or [] if f["assignment"] == aid})
         unavailable = c.unavailable.get(a["teacher"], set())
         sections = c.sections_of(aid)  # reserved times of these sections are never used
 
@@ -171,6 +185,8 @@ def solve(data: dict, time_limit: float = 20.0, workers: int = 8, fixed: list[di
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = max(1.0, deadline - time.perf_counter())
         solver.parameters.num_search_workers = workers
+        if max_memory_mb:  # the search stops (keeping its best timetable) instead of running out of memory
+            solver.parameters.max_memory_in_mb = max_memory_mb
         for name, value in params.items():
             setattr(solver.parameters, name, value)
         done, settled = threading.Event(), threading.Event()
@@ -237,7 +253,9 @@ def solve(data: dict, time_limit: float = 20.0, workers: int = 8, fixed: list[di
 
 
 def _no_timetable(started: float, status, fixed: list[dict] | None) -> dict:
-    reason = "No timetable can satisfy all the rules with this data." if status == cp_model.INFEASIBLE else "No timetable found within the time limit."
+    reason = ("No timetable can satisfy all the rules with this data." if status == cp_model.INFEASIBLE else
+              "Samay couldn't finish a timetable in the time allowed. A big college takes longer, especially on a small "
+              "server: try again, or ask whoever runs Samay to allow more time (SAMAY_SOLVE_SECONDS).")
     if fixed:
         reason += f" {len(fixed)} class(es) are locked; try unlocking some of them."
     return {"status": "infeasible", "message": reason, "entries": [], "seconds": round(time.perf_counter() - started, 2)}

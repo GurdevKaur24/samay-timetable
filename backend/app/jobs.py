@@ -97,7 +97,8 @@ class JobRunner:
             data, data_version = loaded
             locked, dropped = matching_locks(data, job.locked)
             result = solve(data, time_limit=self.time_limit, fixed=locked, workers=config.SOLVER_WORKERS, patience=config.SOLVE_PATIENCE,
-                           stop=job.stop, on_progress=lambda **p: self._progress(job, p))
+                           stop=job.stop, on_progress=lambda **p: self._progress(job, p),
+                           max_rooms=config.MAX_ROOM_CHOICES or None, max_memory_mb=config.SOLVER_MEMORY_MB or None)
             if result["status"] == "stopped":
                 job.status, job.message = "failed", "Stopped before a timetable was found. Nothing was saved."
                 return

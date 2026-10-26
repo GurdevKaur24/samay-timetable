@@ -229,6 +229,8 @@ Set as environment variables before starting the server.
 | `SAMAY_COOKIE_SECURE` | `0` | Set `1` when served over HTTPS |
 | `SAMAY_SOLVE_SECONDS` | `120` | The most one generation run takes (a college of about 25 sections and 50 teachers has a first timetable in about 20 s) |
 | `SAMAY_SOLVE_PATIENCE` | `10` | Stop improving once the timetable hasn't got better for this many seconds |
+| `SAMAY_MAX_ROOM_CHOICES` | `6` (`4` on Render) | Rooms each class may be placed in (the smallest that fit, rotated): smaller and faster to solve |
+| `SAMAY_SOLVER_MEMORY_MB` | `200` on Render, else none | Most memory the generator may use; it then stops and keeps its best timetable |
 | `SAMAY_SOLVER_WORKERS` | `8` | CPU threads per run (use 1–2 on small servers) |
 | `ANTHROPIC_API_KEY` | – | Turns on the AI assistant (`SAMAY_ASSISTANT=0` turns it off again) |
 | `SAMAY_ASSISTANT_DAILY_LIMIT` | `150` | Most AI assistant questions a day for the whole site (`0` = no limit) |

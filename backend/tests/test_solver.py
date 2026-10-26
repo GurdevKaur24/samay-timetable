@@ -95,3 +95,19 @@ def test_stop_keeps_the_best_timetable_so_far():
     result = solve(data, time_limit=90, stop=stop, on_progress=progress)
     assert seen[0]["stage"] == "searching" and any(p.get("found") for p in seen)
     assert result["entries"] and validate(data, result["entries"]) == [] and result["stopped_early"]
+
+
+def test_each_class_gets_a_few_rooms_and_every_room_is_still_used():
+    from solver.model import room_choices
+    rooms = [{"id": f"R{i}", "capacity": 70} for i in range(10)] + [{"id": "BIG", "capacity": 200}]
+    picks = [room_choices(rooms, f"A{n}", 4, set()) for n in range(40)]
+    assert all(len(p) == 4 and "BIG" not in {r["id"] for r in p} for p in picks)  # the smallest rooms that fit first
+    assert {r["id"] for p in picks for r in p} == {f"R{i}" for i in range(10)}  # rotated: every room gets used
+    assert "BIG" in {r["id"] for r in room_choices(rooms, "A1", 4, {"BIG"})}  # a locked class keeps its room
+    assert room_choices(rooms, "A1", None, set()) == rooms
+
+
+def test_limiting_room_choices_still_gives_a_clash_free_timetable():
+    data = load_college("demo-eng")
+    result = solve(data, time_limit=60, patience=3, max_rooms=2, max_memory_mb=300)
+    assert result["entries"] and validate(data, result["entries"]) == []
