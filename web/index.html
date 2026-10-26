@@ -1178,8 +1178,12 @@ async function boot() {
     if (linkKind) { await openLink(linkKind, params.get(linkKind)); state.booting = false; render(); return; }
     if (!col() && code) { state.booting = false; await openStudent(null, code); return; }
     if (!col()) {
-      try { await loadStudent(); }
-      catch (e) {  // this phone used a code before, but it no longer works (changed or turned off)
+      try {
+        await loadStudent();
+        // The demo college's student view opens only from its Student button, not by itself on the next visit
+        // (a real college's students do go straight to their timetable).
+        if (isDemoSession()) Object.assign(state, { liveCollege: null, gen: {}, role: 'coordinator', me: null, page: 'dashboard' });
+      } catch (e) {  // this phone used a code before, but it no longer works (changed or turned off)
         if (e.status === 401 && storage.get('samay.student')) Object.assign(state, { studentMode: true, studentError: 'Your college changed its student code. Ask for the new one.' });
       }
     }
