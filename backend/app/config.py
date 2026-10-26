@@ -14,6 +14,8 @@ DEMO_LOGIN = os.environ.get("SAMAY_DEMO_LOGIN", "1") == "1"
 # On by default on Render (it sets RENDER=true), where the free plan starts with an empty database after every restart.
 DEMO_READY = os.environ.get("SAMAY_DEMO_READY", "1" if os.environ.get("RENDER") else "0") == "1"
 SOLVE_SECONDS = float(os.environ.get("SAMAY_SOLVE_SECONDS", "120"))  # time limit for one generation run (a real college of ~25 sections needs ~1 min)
+# Stop generating once the timetable hasn't got better for this many seconds (the time limit above is the most it takes).
+SOLVE_PATIENCE = float(os.environ.get("SAMAY_SOLVE_PATIENCE", "10"))
 SOLVER_WORKERS = int(os.environ.get("SAMAY_SOLVER_WORKERS", "8"))  # CPU threads per run; lower on small servers
 ALLOWED_ORIGINS = [o for o in os.environ.get("SAMAY_ORIGINS", "http://localhost:5500").split(",") if o]
 # The AI assistant needs an Anthropic API key in the environment (never in the code). SAMAY_ASSISTANT=0 turns it off.
@@ -27,4 +29,9 @@ EMAIL_FROM = os.environ.get("SAMAY_EMAIL_FROM", "")  # e.g. "Samay <timetable@yo
 # The site's public address, used in emailed links (e.g. https://samay-timetable.onrender.com).
 PUBLIC_URL = os.environ.get("SAMAY_PUBLIC_URL", "").rstrip("/")
 # Most AI assistant questions per day for the whole site (protects the API key on a public demo). 0 = no limit.
-ASSISTANT_DAILY_LIMIT = int(os.environ.get("SAMAY_ASSISTANT_DAILY_LIMIT", "60"))
+ASSISTANT_DAILY_LIMIT = int(os.environ.get("SAMAY_ASSISTANT_DAILY_LIMIT", "150"))
+# Most questions a day for each head of department or teacher, and for each student's phone.
+ASSISTANT_PERSON_LIMIT = int(os.environ.get("SAMAY_ASSISTANT_PERSON_LIMIT", "20"))
+ASSISTANT_STUDENT_LIMIT = int(os.environ.get("SAMAY_ASSISTANT_STUDENT_LIMIT", "10"))
+# The colleges' time zone: what "today" and "this week" mean for one-week changes.
+TIMEZONE = os.environ.get("SAMAY_TIMEZONE", "Asia/Kolkata")

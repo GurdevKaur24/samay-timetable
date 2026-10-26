@@ -18,18 +18,32 @@ Full product plan and roadmap: `docs/requirements.md`.
     (default) the sign-in page offers one-click demo sign-in (`/api/auth/demo-accounts`, `/api/auth/demo`), limited to
     those accounts. It must be off (`SAMAY_DEMO_LOGIN=0`) for any real deployment, since it lists the demo colleges.
   - `app/jobs.py`: generation runs in a background thread (one run per college at a time, time limit
-    `SAMAY_SOLVE_SECONDS`, default 120). A timetable is saved only if the clash checker finds 0 problems; versions are
-    numbered per college and store the data they were built from.
+    `SAMAY_SOLVE_SECONDS`, default 120). `solver.model.solve` works in two stages: any timetable with no clashes (no
+    objective, presolve off: fast), then improving it from that hint until it hasn't got better for
+    `SAMAY_SOLVE_PATIENCE` seconds (default 10). The job reports `progress` (stage, found, better_pct);
+    `POST /api/jobs/{id}/stop` stops and keeps the best so far. A timetable is saved only if the clash checker finds
+    0 problems; versions are numbered per college and store the data they were built from.
   - `app/services/precheck.py`: plain-English pre-check (teacher load, section hours, room demand, room sizes).
   - `app/services/fingerprint.py`: a timetable is out of date only when scheduling data changed (not college or
     department names, heads or ready status). Revise/restore refuse out-of-date versions.
   - Locks: `{assignment, subject, group, day, start, room}`; the solver's `fixed=` keeps them in place; locks that no
     longer match the class (subject/group changed) are dropped with a message. Version numbers never repeat.
-  - AI assistant (`routers/assistant.py`, coordinators only): Claude (`claude-opus-5-5`, tool runner) with the read-only
-    tools in `services/assistant_tools.py`, bound to the signed-in college. `propose_change` only checks moves with the
-    validator and returns a proposal; the page previews it and saves through `/revise`. On only when `ANTHROPIC_API_KEY`
-    is set (never in the code); `SAMAY_ASSISTANT=0` turns it off; `SAMAY_ASSISTANT_DAILY_LIMIT` (default 60) caps
-    questions per day for the whole site. Tests replace Claude with a stand-in.
+  - AI assistant (`routers/assistant.py`): Claude (`claude-opus-5-5`, tool runner), bound to the signed-in college.
+    Coordinators: `SchedulingTools` on the latest version; `propose_change` only checks moves with the validator, the
+    page previews it and saves through `/revise`. Heads of department and teachers: `WeekTools` on the published
+    timetable a week at a time; their `propose_change` checks a change (`services/changes.check`) and the page applies it
+    through `POST /api/changes`. Students (`POST /api/student/assistant`): look-up tools only. On only when
+    `ANTHROPIC_API_KEY` is set (never in the code); `SAMAY_ASSISTANT=0` turns it off. Daily limits: site total
+    `SAMAY_ASSISTANT_DAILY_LIMIT` (150), per head/teacher `SAMAY_ASSISTANT_PERSON_LIMIT` (20), per student phone
+    `SAMAY_ASSISTANT_STUDENT_LIMIT` (10). Tests replace Claude with a stand-in.
+  - Changes after publishing (`routers/changes.py`, `services/changes.py`, `services/change_store.py`, table
+    `class_changes`): move or cancel a class **for one week** (`scope: once`, stored with its week; applied on top of the
+    published version when a week is shown; never in the past, moves stay in the week, cancel is one-week only) or move it
+    **from now on** (`always`: a new version, published at once, with the class locked there). A change is refused if it
+    adds any validator problem. Coordinators: any class; HODs: classes whose sections are all in their department;
+    teachers: their own classes. Coordinators list and undo every change; others their own. Publishing a new version
+    carries one-week changes that still fit and removes the rest. "Today" uses `SAMAY_TIMEZONE` (Asia/Kolkata).
+    `GET /api/published`, `/api/teacher` and `/api/student/timetable` take `?week=<any date>` and return `week`.
   - Invites and resets (`services/links.py`, `services/email.py`, table `password_tokens`): coordinators add people without
     a password (stored as `"!"`, which never matches) and get a one-time `/?invite=` link (7 days); forgot password and the
     coordinator's reset link give `/?reset=` (1 hour). Links are stored hashed, work once, and setting a password ends

@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from ..auth import CurrentUser, coordinator_only, get_db
 from ..db import STUDENT_SESSION_SECONDS, Database
 from ..security import new_student_code, normalize_code
-from ..services.published import published_timetable
+from ..services.published import published_timetable, week_from
 
 router = APIRouter(tags=["students"])
 
@@ -71,9 +71,9 @@ def student_college(request: Request, db: Database = Depends(get_db)):
 
 
 @router.get("/api/student/timetable")
-def timetable(college=Depends(student_college), db: Database = Depends(get_db)):
-    """The college's published timetable (no drafts, no teachers' free times)."""
-    return {"college": {"name": college["name"]}, "published": published_timetable(college["id"], db)}
+def timetable(request: Request, week: str | None = None, college=Depends(student_college), db: Database = Depends(get_db)):
+    """The college's published timetable (no drafts, no teachers' free times), and one week of it with its changes."""
+    return {"college": {"name": college["name"]}, "published": published_timetable(college["id"], db, tz=request.app.state.timezone, week_of=week_from(week))}
 
 
 @router.post("/api/student/leave")

@@ -120,3 +120,26 @@ def test_job_status_never_reveals_the_college(eng):
                                          ("get", "/api/timetables/latest"), ("get", "/api/jobs/abc")])
 def test_generation_endpoints_need_sign_in(make_client, method, path):
     assert getattr(make_client(), method)(path).status_code == 401
+
+
+def test_a_run_can_be_stopped_and_keeps_its_best_timetable(app, eng):
+    import time
+    app.state.jobs.time_limit = 120
+    job = eng.post("/api/timetables").json()
+    assert job["progress"]["stage"] in ("preparing", "searching")
+    for _ in range(600):
+        job = eng.get(f"/api/jobs/{job['id']}").json()
+        if job["progress"].get("found") or job["status"] != "running":
+            break
+        time.sleep(0.1)
+    stopped = eng.post(f"/api/jobs/{job['id']}/stop")
+    assert stopped.status_code == 200
+    done = wait_for(eng, stopped.json())
+    assert done["status"] == "done" and done["timetable_version"] == 1
+    assert eng.get("/api/timetables/latest").json()["version"] == 1
+
+
+def test_only_the_college_that_started_a_run_can_stop_it(eng, arts):
+    job = eng.post("/api/timetables").json()
+    assert arts.post(f"/api/jobs/{job['id']}/stop").status_code == 404
+    wait_for(eng, job)

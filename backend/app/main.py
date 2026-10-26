@@ -5,10 +5,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import config
-from .auth import DailyQuota, LoginLimiter
+from .auth import DailyQuota, LoginLimiter, PersonQuota
 from .db import Database
 from .jobs import JobRunner
-from .routers import assistant, auth, college, students, teacher, timetables, users
+from .routers import assistant, auth, changes, college, students, teacher, timetables, users
 from .seed import seed
 from .services import demo
 from .services.email import smtp_sender
@@ -51,6 +51,9 @@ def create_app(db_path: str | Path | None = None, seed_if_empty: bool = True, so
     app.state.cookie_secure = config.COOKIE_SECURE
     app.state.assistant_chat = default_assistant() if assistant_chat is AUTO else assistant_chat
     app.state.assistant_quota = DailyQuota(config.ASSISTANT_DAILY_LIMIT)
+    app.state.person_quota = PersonQuota(config.ASSISTANT_PERSON_LIMIT)  # each head of department or teacher
+    app.state.student_quota = PersonQuota(config.ASSISTANT_STUDENT_LIMIT)  # each student's phone
+    app.state.timezone = config.TIMEZONE
     app.state.send_email = smtp_sender() if send_email is AUTO else send_email  # None: links are shown instead
     app.state.forgot_limiter = LoginLimiter(limit=5)  # password reset requests, per email
     if seed_if_empty and app.state.db.college_count() == 0:
@@ -71,6 +74,7 @@ def create_app(db_path: str | Path | None = None, seed_if_empty: bool = True, so
     app.include_router(users.router)
     app.include_router(teacher.router)
     app.include_router(assistant.router)
+    app.include_router(changes.router)
     app.include_router(students.router)
 
     @app.get("/api/health")

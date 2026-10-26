@@ -507,6 +507,7 @@ const state = {
   assistantOn: false, chat: { messages: [], draft: '', sending: false },
   studentMode: false, studentError: null, studentSection: null,  // students: no account, a college code
   emailOn: false, linkPage: null, forgotMode: false, forgotSent: null, lastLink: null,  // invites and password resets
+  weekDate: null, weekMode: 'week', changesList: null, changesLoading: false,  // the published timetable a week at a time, and changes to it
 };
 const isTeacher = () => state.live && state.role === 'teacher';
 const isHod = () => state.live && state.role === 'hod';
@@ -572,14 +573,14 @@ function anim(key) {
   return 'fade-in';
 }
 function render() {
-  _frame = new Set(); _steps = null;
+  _frame = new Set(); _stepsCache = null;
   document.getElementById('app').innerHTML = layout();
   [..._shown].forEach(k => { if (!_frame.has(k)) _shown.delete(k); });
   drawQrs();
   maybeTour();
 }
 function go(page) {
-  state.page = page; state.viewing = null; state.sel = null; state.more = false; state.menu = false;
+  state.page = page; state.viewing = null; state.sel = null; state.more = false; state.menu = false; state.changesList = null;
   if (page === 'accounts') state.accounts = null;  // always show the latest list
   if (page === 'scheme' && col() && !isViewer()) storage.set(`samay.week.${col().id}`, '1');  // step 1 is done once the week has been looked at
   render(); window.scrollTo(0, 0);
@@ -602,10 +603,18 @@ function toast(text) {
   state.toast = text; render();
   clearTimeout(window._tt); window._tt = setTimeout(() => { state.toast = null; render(); }, 3200);
 }
+// What the server is doing while it makes a timetable (job.progress.stage), in order.
+const LIVE_STEPS = ["Reading your college's data", 'Finding a timetable with no clashes', 'Making it better: fewer gaps, labs side by side', 'Checking it and saving'];
+const LIVE_STAGE = { preparing: 0, searching: 1, improving: 2 };
+async function stopGenerating() {
+  if (!state.genJob || state.genStopping) return;
+  state.genStopping = true; render();
+  try { state.genJob = await api(`/api/jobs/${state.genJob.id}/stop`, { method: 'POST' }); } catch (e) { toast(e.message); }
+}
 function runGenerate() {
   const steps = ['Checking data and rules', 'Placing labs side by side', 'Placing lectures and tutorials', 'Verifying: no clashes'];
   window._steps = steps;
-  if (state.live) { runGenerateLive(); return; }
+  if (state.live) { window._steps = LIVE_STEPS; runGenerateLive(); return; }
   state.generating = 0; render();
   const timer = setInterval(() => {
     state.generating++;
@@ -945,12 +954,21 @@ async function loadCollege() {
   if (isHod()) await loadPublishedForHod(); else await loadLatestTimetable();
 }
 
+// The published timetable as the page shows it: one week with that week's changes (moved or cancelled classes),
+// or the usual week without them.
+const weekQuery = () => state.weekDate ? `?week=${state.weekDate}` : '';
+function publishedGen(c, p) {
+  const pos = new Map(allIds(c).map((id, i) => [id, i]));
+  const map = list => list.filter(e => pos.has(e.assignment)).map(e => ({ a: pos.get(e.assignment), day: e.day, period: e.period, room: e.room,
+    ...(e.cancelled ? { cancelled: true } : {}), ...(e.moved_from ? { movedFrom: e.moved_from } : {}), ...(e.change ? { change: e.change } : {}) }));
+  const usual = map(p.entries), week = p.week ? map(p.week.entries) : usual;
+  return { entries: state.weekMode === 'usual' ? usual : week, usual, week: p.week, unplaced: [], at: new Date(p.published_at * 1000), version: p.version, locked: new Set() };
+}
 async function loadPublishedForHod() {
   try {
-    const t = await api('/api/published');
-    const college = fromServer(t.data), pos = new Map(allIds(college).map((id, i) => [id, i]));
-    state.hodPublished = { college, gen: { entries: t.entries.filter(e => pos.has(e.assignment)).map(e => ({ a: pos.get(e.assignment), day: e.day, period: e.period, room: e.room })),
-                                           unplaced: [], at: new Date(t.published_at * 1000), version: t.version, locked: new Set() } };
+    const t = await api('/api/published' + weekQuery());
+    const college = fromServer(t.data);
+    state.hodPublished = { college, gen: publishedGen(college, t) };
     state.published = { version: t.version, published_at: t.published_at };
   } catch (e) {
     if (e.status !== 404) throw e;
@@ -987,16 +1005,12 @@ async function loadSignedIn(me) {
 }
 
 async function loadTeacher(collegeName) {
-  const h = await api('/api/teacher');
+  const h = await api('/api/teacher' + weekQuery());
   const empty = { id: 'college', name: collegeName, scheme: h.scheme, departments: [], courses: [], sections: [], teachers: [], rooms: [], subjects: [], assignments: [] };
   const c = fromServer(h.published ? h.published.data : empty);
   c.name = collegeName;
   Object.assign(state, { liveCollege: c, gen: {}, teacherHome: h, view: 'teacher', key: h.me.id, preview: null, history: [], sel: null, viewing: null, modal: null, signinError: null });
-  if (h.published) {
-    const pos = new Map(allIds(c).map((id, i) => [id, i]));
-    state.gen[c.id] = { entries: h.published.entries.filter(e => pos.has(e.assignment)).map(e => ({ a: pos.get(e.assignment), day: e.day, period: e.period, room: e.room })),
-                        unplaced: [], at: new Date(h.published.published_at * 1000), version: h.published.version, locked: new Set() };
-  }
+  if (h.published) state.gen[c.id] = publishedGen(c, h.published);
 }
 
 async function publishVersion(v) {
@@ -1075,19 +1089,20 @@ async function runGenerateLive() {
       locked = (await api(`/api/timetables/${state.staleVersion}`).catch(() => ({}))).locked || [];
     }
     let job = await api('/api/timetables', { method: 'POST', body: { locked } });
-    const started = Date.now();
+    Object.assign(state, { genJob: job, genStarted: Date.now(), genStopping: false });
     while (job.status === 'queued' || job.status === 'running') {
-      state.generating = Math.min(2, Math.floor((Date.now() - started) / 900)); render();
-      await sleep(400);
+      state.generating = LIVE_STAGE[job.progress?.stage] ?? 0; state.genJob = job; render();
+      await sleep(500);
       job = await api(`/api/jobs/${job.id}`);
     }
+    Object.assign(state, { genJob: null, genStopping: false });
     if (job.status !== 'done') { state.generating = null; render(); toast(job.message); go('precheck'); return; }
     state.generating = 3; render();
     await loadLatestTimetable();
     Object.assign(state, { generating: null, preview: null, history: [], applied: null, sim: null, page: 'timetable' });
     render(); toast(job.message);
   } catch (e) {
-    state.generating = null; render(); toast(e.message);
+    Object.assign(state, { generating: null, genJob: null, genStopping: false }); render(); toast(e.message);
   }
 }
 
@@ -1329,9 +1344,9 @@ function homePage() {
 
 /* ------------------------------ the coordinator's five steps ------------------------------ */
 const DATA_LISTS = ['departments', 'sections', 'teachers', 'rooms', 'subjects', 'assignments'];
-let _steps = null;  // worked out once per render
+let _stepsCache = null;  // worked out once per render
 function steps(c) {
-  if (_steps) return _steps;
+  if (_stepsCache) return _stepsCache;
   const g = current();
   const dataOk = DATA_LISTS.every(k => (k === 'subjects' ? Object.keys(c.subjects).length : c[k].length) > 0);
   const errors = dataOk ? precheck(c).filter(x => x.level === 'error').length : null;
@@ -1342,7 +1357,7 @@ function steps(c) {
     { n: 4, page: 'timetable', title: 'Make the timetable', icon: 'calendar', done: !!g },
   ];
   if (state.live) list.push({ n: 5, page: 'accounts', title: 'Publish & share', icon: 'users', done: !!state.published });
-  return (_steps = list);
+  return (_stepsCache = list);
 }
 const firstEmptyList = c => DATA_LISTS.find(k => !(k === 'subjects' ? Object.keys(c.subjects).length : c[k].length)) || 'departments';
 function goData() { state.dataTab = firstEmptyList(col()); go('data'); }
@@ -1442,6 +1457,7 @@ const TOURS = {
     ['hod-status', 'Is your department ready?', 'When its data is complete, mark it ready so the timetable coordinator can include it.'],
     ['nav-data', "Your department's data", 'Add or fix your courses, sections, teachers, subjects and who teaches what.'],
     ['nav-timetable', 'The published timetable', 'See the timetable your coordinator published, for any section, teacher or room.'],
+    ['assistant', 'Change a class', "Ask the assistant to move or cancel a class of your department, for one week or from now on. It checks for clashes, and you click Apply."],
     ['help', 'See this guide again', 'Click ? on any page to see what its buttons do.'],
   ],
   'hod:data': [
@@ -1452,6 +1468,8 @@ const TOURS = {
   'teacher:mine': [
     ['t-today', 'Your classes today', 'With times, rooms and the class you teach. After your last class it shows your next teaching day.'],
     ['t-week', 'Your whole week', 'Every class you teach this week, as one timetable.'],
+    ['week-pick', 'This week or next', 'Moved or cancelled classes show for the week they happen. "Usual timetable" shows every week without them.'],
+    ['assistant', 'Change a class', 'Away one day? Ask the assistant to move or cancel your class, for one week or from now on. It checks for clashes, and you click Apply.'],
     ['nav-availability', "Can't teach at some time?", "Mark those periods here. Your coordinator's next timetable keeps them free."],
     ['help', 'See this guide again', 'Click ? on any page to see what its buttons do.'],
   ],
@@ -1462,6 +1480,8 @@ const TOURS = {
   'student:today': [
     ['st-section', 'Choose your section', 'Samay remembers it on this phone.'],
     ['st-today', "Today's classes", "With times, teachers and rooms. After the day's last class it shows the next day."],
+    ['week-pick', 'This week or next', 'If a class is moved or cancelled, it shows for that week.'],
+    ['assistant', 'Ask a question', 'For example "Where is my next class?" or "Is anything cancelled this week?"'],
     ['nav-timetable', 'Any other timetable', "See any section's, teacher's or room's week."],
   ],
 };
@@ -1711,7 +1731,7 @@ function layout() {
       <nav class="space-y-1">${top.map(navBtn).join('')}</nav>
       ${stepsNav.length ? `<div class="mb-1.5 mt-6 px-3 text-[11px] font-semibold uppercase tracking-wider text-indigo-300/70">Make your timetable</div>
         <nav class="space-y-1">${stepsNav.map(navBtn).join('')}</nav>` : ''}
-      ${coord ? `<button onclick="toggleDrawer(true)" data-tour="assistant" class="mt-6 flex w-full items-center gap-3 rounded-xl bg-indigo-600 px-3 py-2.5 text-sm font-semibold text-white shadow-lg shadow-navy-950/30 hover:bg-indigo-500">${icon('bot')}Ask the assistant</button>` : ''}
+      ${coord || (state.live && state.assistantOn) ? `<button onclick="toggleDrawer(true)" data-tour="assistant" class="mt-6 flex w-full items-center gap-3 rounded-xl bg-indigo-600 px-3 py-2.5 text-sm font-semibold text-white shadow-lg shadow-navy-950/30 hover:bg-indigo-500">${icon('bot')}Ask the assistant</button>` : ''}
       <div class="mt-auto rounded-xl bg-white/5 p-3 text-xs leading-relaxed text-indigo-200 ring-1 ring-white/10">
         <div class="mb-1 flex items-center gap-1.5 font-medium text-white">${icon('shield', 'w-4 h-4')}Private to your college</div>
         Only people from ${esc(c.name)} can see this. Other colleges can't.
@@ -1725,6 +1745,7 @@ function layout() {
     </main>
   </div>
   ${state.drawer ? drawer() : ''}
+  ${(coord || (state.live && state.assistantOn)) && !state.drawer ? `<button onclick="toggleDrawer(true)" aria-label="Ask the assistant" class="no-print fixed bottom-5 right-5 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 text-white shadow-xl shadow-navy-950/30 hover:bg-indigo-500 md:hidden">${icon('bot', 'w-6 h-6')}</button>` : ''}
   ${state.modal ? modal() : ''}
   ${state.generating !== null ? overlay() : ''}
   ${state.toast ? `<div class="no-print fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm text-white shadow-lg ${anim('toast:' + state.toast)}">${state.toast}</div>` : ''}`;
@@ -1758,7 +1779,17 @@ function overlay() {
         <li class="flex items-center gap-2 text-sm ${i < state.generating ? 'text-emerald-700' : i === state.generating ? 'font-medium text-slate-900' : 'text-slate-400'}">
           ${i < state.generating ? icon('check', 'w-4 h-4') : `<span class="inline-block h-4 w-4 rounded-full border-2 ${i === state.generating ? 'border-indigo-500 border-t-transparent animate-spin' : 'border-slate-200'}"></span>`}
           ${s}</li>`).join('')}</ol>
+      ${state.live && state.genJob ? generatingNote(state.genJob) : ''}
     </div></div>`;
+}
+// While the server makes a timetable: how long so far, and once one exists, the choice to use it now.
+function generatingNote(job) {
+  const secs = Math.round((Date.now() - (state.genStarted || Date.now())) / 1000), p = job.progress || {};
+  if (!p.found) return `<p class="mt-4 text-xs text-slate-500">${secs} s · Big colleges take up to a minute to find the first timetable.</p>`;
+  return `<div class="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+      <div class="font-semibold">A timetable with 0 clashes is ready.</div>
+      <p class="mt-0.5 text-xs">${p.better_pct ? `It's already ${p.better_pct}% better than the first one. ` : ''}Samay keeps improving it until it stops getting better (${secs} s so far). You can use it now.</p>
+      <button onclick="stopGenerating()" ${state.genStopping ? 'disabled' : ''} class="mt-2.5 w-full rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60">${state.genStopping ? 'Saving it…' : 'Use this timetable now'}</button></div>`;
 }
 
 const btn = (label, onclick, kind = 'secondary', ic = '', attrs = '') => {
@@ -1985,6 +2016,111 @@ function withView(view, key, fn) {
   state.view = view; state.key = key;
   try { return fn(); } finally { [state.view, state.key] = keep; }
 }
+const isoDate = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+// Reload whatever a teacher, head of department or student is looking at (after a change, or another week).
+async function reloadViewer() {
+  const keep = { page: state.page, view: state.view, key: state.key, studentSection: state.studentSection, drawer: state.drawer };
+  try {
+    if (isTeacher()) await loadTeacher(col().name);
+    else if (isHod()) await loadPublishedForHod();
+    else if (isStudent()) await loadStudent();
+  } catch (e) { toast(e.message); }
+  Object.assign(state, keep);
+}
+async function setWeek(which) {
+  if (which === 'usual') state.weekMode = 'usual';
+  else { const d = new Date(); d.setDate(d.getDate() + 7 * which); Object.assign(state, { weekMode: 'week', weekDate: which ? isoDate(d) : null }); }
+  await reloadViewer(); render();
+}
+function weekBar(g) {
+  if (!g?.week) return '';
+  const start = new Date(g.week.start + 'T00:00'), end = new Date(start), n = g.week.changes.length;
+  end.setDate(start.getDate() + 6);
+  const fmt = d => d.toLocaleDateString([], { day: 'numeric', month: 'short' }), usual = state.weekMode === 'usual';
+  const pill = (label, on, click) => `<button onclick="${click}" class="rounded-md px-3 py-1.5 text-sm ${on ? 'bg-navy-900 font-semibold text-white' : 'text-slate-600 hover:bg-slate-50'}">${label}</button>`;
+  return `<div class="no-print mb-4 flex flex-wrap items-center gap-3">
+    <div class="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm" data-tour="week-pick">
+      ${pill('This week', !usual && !state.weekDate, 'setWeek(0)')}${pill('Next week', !usual && !!state.weekDate, 'setWeek(1)')}${pill('Usual timetable', usual, "setWeek('usual')")}</div>
+    <span class="text-sm text-slate-500">${usual ? 'Every week, without one-week changes' : `${fmt(start)} – ${fmt(end)} · ${n ? `<b class="text-amber-700">${n} change${n === 1 ? '' : 's'} this week</b>` : 'no changes'}`}</span>
+  </div>`;
+}
+// "Mon · 2 Nov" for a day of the week on screen ("Mon · every week" for the usual timetable).
+const dayWithDate = (g, day) => state.weekMode === 'usual' || !g.week?.dates[day] ? `${day} · every week`
+  : `${day} · ${new Date(g.week.dates[day] + 'T00:00').toLocaleDateString([], { day: 'numeric', month: 'short' })}`;
+const changeTag = x => x.cancelled ? '<span class="ml-1.5 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">Cancelled</span>'
+  : x.movedFrom ? '<span class="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">Moved this week</span>' : '';
+
+const niceDate = iso => iso ? new Date(iso + 'T00:00').toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' }) : '';
+// Changes made after publishing: the coordinator sees everyone's (and can undo any); others see their own.
+async function loadChanges() {
+  state.changesLoading = true;
+  try { state.changesList = (await api('/api/changes')).changes; } catch { state.changesList = []; }
+  state.changesLoading = false; render();
+}
+function changesCard(own) {
+  if (!state.live) return '';
+  if (!state.changesList) { if (!state.changesLoading) setTimeout(loadChanges); return ''; }
+  const list = state.changesList;
+  if (!list.length && own) return '';
+  const role = { coordinator: 'coordinator', hod: 'head of department', teacher: 'teacher' };
+  return card(`<div class="mb-1 font-medium">${own ? 'Your changes' : 'Changes by teachers and heads'}${tip('A change is for one week only (the usual timetable comes back by itself afterwards) or from now on. Every change was checked: it caused no clash.')}</div>
+    ${list.length ? `<ul class="mt-2 divide-y divide-slate-100">${list.map(ch => `
+      <li class="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm">
+        <div class="min-w-[14rem] flex-1"><div class="text-slate-800">${esc(ch.summary)}</div>
+          <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+            <span class="rounded-full px-2 py-0.5 font-medium ${ch.scope === 'once' ? 'bg-amber-50 text-amber-800' : 'bg-indigo-50 text-indigo-700'}">${ch.scope === 'once' ? (ch.kind === 'cancel' ? `Cancelled on ${niceDate(ch.date)}` : `${niceDate(ch.date)}${ch.to_date && ch.to_date !== ch.date ? ` → ${niceDate(ch.to_date)}` : ''} only`) : `From now on · v${ch.new_version}`}</span>
+            ${own ? '' : `<span>by ${esc(ch.made_by_name)} (${role[ch.made_by_role] || ch.made_by_role})</span>`}</div></div>
+        ${btn('Undo', `undoChange(${ch.id})`)}</li>`).join('')}</ul>`
+      : '<p class="text-sm text-slate-500">None yet. When a teacher or head of department moves or cancels a class, it shows here and you can undo it.</p>'}`, 'mt-6');
+}
+async function undoChange(id) {
+  try {
+    const r = await api(`/api/changes/${id}`, { method: 'DELETE' });
+    toast(r.message); state.changesList = null;
+    if (isViewer()) await reloadViewer(); else await loadLatestTimetable();
+    render();
+  } catch (e) { toast(e.message); }
+}
+// A change the assistant proposed to a head of department or teacher: applied only when they click Apply.
+async function applyChange() {
+  const p = state.chat.proposal;
+  if (!p) return;
+  state.chat.applying = true; render();
+  try {
+    const r = await api('/api/changes', { method: 'POST', body: p.request });
+    state.chat.messages.push({ role: 'assistant', content: r.message });
+    Object.assign(state.chat, { proposal: null, applying: false });
+    state.changesList = null;
+    await reloadViewer(); toast('Done. The timetable is updated.');
+  } catch (e) {
+    state.chat.messages.push({ role: 'assistant', content: e.message, error: true });
+    Object.assign(state.chat, { proposal: null, applying: false });
+  }
+  render(); scrollChat();
+}
+function viewerChat(c) {
+  const m = state.chat.messages, g = current(), day = c.scheme.days[1] || c.scheme.days[0];
+  const subject = Object.values(c.subjects)[0]?.name, sec = state.studentSection || c.sections[0]?.id;
+  const ideas = isStudent() ? [`Where is ${sec}'s next class?`, subject && `When is ${subject} this week?`, 'Is any class cancelled this week?']
+    : isTeacher() ? ['What are my classes tomorrow?', `I can't come on ${day}. What can I do with my classes?`, 'Move my first class this week to a free period']
+    : [`Show ${sec}'s timetable today`, `Which classes of my department are on ${day}?`, 'Move a class of my department to another time this week'];
+  const intro = !m.length ? `${bubble(isStudent() ? `Hi! Ask me about ${esc(c.name)}'s timetable: when a class is, where it is now, or what changed this week.`
+      : `Hi! Ask me about the timetable, or ask me to move or cancel ${isTeacher() ? 'one of your classes' : "a class of your department"}, for one week or from now on. I check every change for clashes, and nothing changes until you click Apply.`)}
+    ${g ? `<div class="text-xs font-medium uppercase tracking-wide text-slate-400">Try asking</div>
+      <div class="flex flex-wrap gap-2">${ideas.filter(Boolean).map(q => `<button onclick="askChat(${esc(JSON.stringify(q))})" class="rounded-full border border-slate-200 px-3 py-1 text-left text-xs text-slate-600 hover:border-indigo-300 hover:bg-indigo-50">${esc(q)}</button>`).join('')}</div>` : ''}` : '';
+  const turns = m.map(x => x.role === 'user'
+    ? `<div class="ml-8 rounded-lg bg-indigo-600 p-3 text-sm leading-relaxed text-white">${esc(x.content)}</div>`
+    : `<div class="mr-4 rounded-lg ${x.error ? 'bg-red-50 text-red-800' : 'bg-slate-50 text-slate-700'} p-3 text-sm leading-relaxed">${chatText(x.content)}</div>`).join('');
+  const p = state.chat.proposal;
+  const proposal = p ? `<div class="rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-950">
+      <div class="text-xs font-semibold uppercase tracking-wide text-indigo-600">${p.request.scope === 'once' ? 'For that week only' : 'From now on'}</div>
+      <div class="mt-1 font-medium">${esc(p.summary)}</div><div class="mt-1 text-xs text-indigo-800">${esc(p.detail)}</div>
+      <div class="mt-3 flex gap-2">${btn(state.chat.applying ? 'Applying…' : 'Apply', 'applyChange()', 'primary', 'check')}${btn('Discard', 'state.chat.proposal = null; render()')}</div>
+      <p class="mt-2 text-[11px] text-indigo-700">Checked: no clashes. ${p.request.scope === 'once' ? 'The usual timetable comes back by itself afterwards.' : 'Teachers and students see it at once.'}</p></div>` : '';
+  const thinking = state.chat.sending ? `<div class="mr-4 flex items-center gap-2 rounded-lg bg-slate-50 p-3 text-sm text-slate-500">
+    <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent"></span>Looking at the timetable…</div>` : '';
+  return intro + turns + proposal + thinking;
+}
 function notPublishedCard() {
   return card(`<div class="flex flex-col items-center py-12 text-center">
     <div class="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">${icon('calendar', 'w-6 h-6')}</div>
@@ -1999,8 +2135,8 @@ function myClassesOn(c, g, teacherId, day) {
   const out = [];
   mine.forEach(e => {
     const last = out.at(-1);
-    if (last && last.a === e.a && last.to === e.period - 1 && last.room === e.room) last.to = e.period;
-    else out.push({ a: e.a, from: e.period, to: e.period, room: e.room });
+    if (last && last.a === e.a && last.to === e.period - 1 && last.room === e.room && !!last.cancelled === !!e.cancelled) last.to = e.period;
+    else out.push({ a: e.a, from: e.period, to: e.period, room: e.room, cancelled: e.cancelled, movedFrom: e.movedFrom });
   });
   return out;
 }
@@ -2015,13 +2151,14 @@ function teacherHome() {
   const teachesToday = S.days.includes(today);
   const hasClasses = d => myClassesOn(c, g, me.id, d).length > 0;
   const nextDay = S.days.find((d, i) => i > S.days.indexOf(today) && hasClasses(d)) || S.days.find(hasClasses);
-  const showDay = teachesToday && hasClasses(today) ? today : nextDay;
+  const other = state.weekMode === 'usual' || !!state.weekDate;  // looking at next week or the usual week, not today
+  const showDay = other ? S.days.find(hasClasses) : teachesToday && hasClasses(today) ? today : nextDay;
   const list = showDay ? myClassesOn(c, g, me.id, showDay) : [];
   const perDay = S.days.map(d => [d, mine.filter(e => e.day === d).length]);
   const busiest = perDay.reduce((x, y) => (y[1] > x[1] ? y : x), ['', 0]);
   const groups = new Set(mine.map(e => gLabel(c, AS[e.a].group)));
-  const heading = !showDay ? 'No classes this week' : showDay === today ? `Today · ${today}` : teachesToday ? `No classes today. Next: ${showDay}` : `No classes today (${today}). Next: ${showDay}`;
-  return `${head}
+  const heading = !showDay ? 'No classes this week' : other ? dayWithDate(g, showDay) : showDay === today ? `Today · ${today}` : teachesToday ? `No classes today. Next: ${showDay}` : `No classes today (${today}). Next: ${showDay}`;
+  return `${head}${weekBar(g)}
   <div class="print-only mb-3"><div class="text-lg font-semibold">${esc(c.name)} · ${esc(me.name)}</div>
     <div class="text-xs text-slate-500">${esc(c.term)} · Published timetable v${g.version}</div></div>
   <div class="no-print grid gap-4 lg:grid-cols-3">
@@ -2030,7 +2167,7 @@ function teacherHome() {
         const a = AS[x.a], sj = subj(c, a), from = S.periods[x.from - 1], to = S.periods[x.to - 1];
         return `<li class="flex gap-3 rounded-lg border p-2.5 ${KIND[sj.kind].cls}">
           <div class="w-20 shrink-0 text-xs"><div class="font-semibold">${from[1]}–${to[2]}</div><div class="opacity-75">${esc(from[0])}${x.to > x.from ? '–' + esc(to[0]) : ''}</div></div>
-          <div class="min-w-0"><div class="truncate text-sm font-semibold">${esc(sj.name)}</div>
+          <div class="min-w-0"><div class="truncate text-sm font-semibold"><span class="${x.cancelled ? 'line-through opacity-70' : ''}">${esc(sj.name)}</span>${changeTag(x)}</div>
             <div class="truncate text-xs opacity-75">${esc(gLabel(c, a.group))} · ${esc(x.room)} · ${KIND[sj.kind].label}</div></div></li>`; }).join('')}</ol>`
         : '<p class="text-sm text-slate-500">You have no classes in the published timetable.</p>'}`, 'lg:col-span-2', 'data-tour="t-today"')}
     <div class="grid content-start gap-3">
@@ -2041,6 +2178,7 @@ function teacherHome() {
   <div class="mb-2 mt-6 flex items-center justify-between"><h2 class="font-semibold">My week</h2>
     <span class="no-print text-xs text-slate-500">Published timetable v${g.version}</span></div>
   <div class="overflow-x-auto rounded-2xl border border-slate-200/80 bg-white p-2 shadow-sm" data-tour="t-week">${withView('teacher', me.id, () => grid(c, g.entries.map((e, i) => ({ ...e, i })), new Set()))}</div>
+  ${changesCard(true)}
   <p class="no-print mt-3 text-xs text-slate-400">To see any section's, teacher's or room's timetable, open All timetables.</p>`;
 }
 
@@ -2152,7 +2290,8 @@ function hodDashboard() {
       <p class="text-sm text-slate-600">${state.published ? `Version ${state.published.version}, published ${new Date(state.published.published_at * 1000).toLocaleDateString([], { dateStyle: 'medium' })}.` : 'Not published yet. The timetable coordinator generates and publishes it.'}</p>
       ${state.published ? `<button onclick="go('timetable')" class="mt-3 text-sm font-medium text-indigo-600 hover:underline">View it →</button>` : ''}
       <p class="mt-3 text-xs text-slate-500">You can give your sections' classes to any teacher, including other departments' teachers. Only the coordinator generates and publishes timetables.</p>`)}
-  </div>`;
+  </div>
+  ${changesCard(true)}`;
 }
 
 function dashboard() {
@@ -2189,7 +2328,8 @@ function dashboard() {
         ${[['Sections', c.sections.length], ['Teachers', c.teachers.length], ['Rooms', c.rooms.length]].map(([k, n]) => `<div class="rounded-xl bg-slate-50 p-3"><div class="font-display text-xl font-bold">${n}</div><div class="text-xs text-slate-500">${k}</div></div>`).join('')}
       </div>
       <button onclick="go('scheme')" class="mt-3 text-sm font-medium text-indigo-600 hover:underline">See or change your week →</button>`)}
-  </div>`;
+  </div>
+  ${state.published ? changesCard(false) : ''}`;
 }
 
 function timetable() {
@@ -2213,8 +2353,8 @@ function timetable() {
       <div class="mt-3">${btn('Go to Data', "go('data')")}</div></div>`)}`;
   if (!state.key || !flat.some(o => o[0] === state.key)) state.key = flat[0][0];
   const entries = displayEntries();
-  const v = validate(c, entries.filter(e => !e.ghost));
-  const base = validate(c, g.entries);
+  const v = validate(c, entries.filter(e => !e.ghost && !e.cancelled));
+  const base = validate(c, g.entries.filter(e => !e.cancelled));
   const m = metrics(c, g.entries);
   if (state.sel && !sessionIdx(g, state.sel.a, state.sel.day).length) state.sel = null;
   state.targets = editTargets(c, g);
@@ -2249,6 +2389,7 @@ function timetable() {
         ...(isViewer() ? [] : [['Older versions', 'openHistory()', 'history']]), ['Download Excel', 'exportExcel()', 'download'], ['Print or save as PDF', 'window.print()', 'printer']])}
     </div>
   </div>
+  ${isViewer() ? weekBar(g) : ''}
   ${editBar(c, g)}
   <div class="no-print mb-4 flex flex-wrap items-center gap-3">
     <div class="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm" data-tour="tt-views">
@@ -2262,7 +2403,7 @@ function timetable() {
       <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm ring-2 ring-red-500"></span>Clash</span>
     </div>
   </div>
-  <div class="overflow-x-auto rounded-2xl border border-slate-200/80 bg-white p-2 shadow-sm" data-tour="tt-grid">${grid(c, entries, v.bad)}</div>
+  <div class="overflow-x-auto rounded-2xl border border-slate-200/80 bg-white p-2 shadow-sm" data-tour="tt-grid">${grid(c, entries, isViewer() ? new Set() : v.bad)}</div>
   ${g.unplaced.length ? `<div class="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">${g.unplaced.length} class(es) could not be placed. Run the pre-check for details.</div>` : ''}
   ${isViewer() ? '' : `<div class="no-print mt-4 grid grid-cols-2 gap-3 md:grid-cols-5">
     ${stat('Quality score', m.score + '/100', 'Higher is better', '', 'Fewer empty periods, lab groups busy together and subjects spread over the week all raise the score.')}
@@ -2306,7 +2447,7 @@ function editBar(c, g) {
 function grid(c, entries, bad) {
   const ix = idx(c), S = c.scheme;
   const at = (d, p) => entries.filter(e => e.day === d && e.period === p && inView(c, e));
-  const sig = items => items.map(e => `${e.a}@${e.room}${e.preview ? 'p' : ''}${e.ghost ? 'g' : ''}`).sort().join(',');
+  const sig = items => items.map(e => `${e.a}@${e.room}${e.preview ? 'p' : ''}${e.ghost ? 'g' : ''}${e.cancelled ? 'x' : ''}${e.movedFrom ? 'm' : ''}`).sort().join(',');
   let head = '<th class="w-12"></th>';
   ix.P.forEach(p => {
     const [l, s, e] = S.periods[p - 1];
@@ -2375,18 +2516,22 @@ function block(c, e, bad) {
   const g = current(), selected = state.sel && state.sel.a === e.a && state.sel.day === e.day && !e.ghost && !e.preview;
   const locked = !e.ghost && isLocked(g, e.a, e.day);
   let extra = '';
-  if (e.ghost) extra = ' opacity-40';
+  if (e.cancelled) extra = ' opacity-60 grayscale';
+  else if (e.movedFrom) extra = ' ring-2 ring-amber-400';
+  else if (e.ghost) extra = ' opacity-40';
   else if (e.preview) extra = ' outline outline-2 outline-dashed outline-amber-500 outline-offset-1';
   else if (selected) extra = ' ring-2 ring-indigo-500';
   else if (bad.has(e.i)) extra = ' ring-2 ring-red-500';
   const line2 = state.view === 'section' ? `${T.name} · ${e.room}` : state.view === 'teacher' ? `${G.elective ? ix.electives[G.elective].name : gLabel(c, a.group)} · ${e.room}` : `${G.elective ? ix.electives[G.elective].name : gLabel(c, a.group)} · ${T.name}`;
   const tag = G.elective ? `<span class="mr-1 rounded bg-white/80 px-1 text-[10px] font-semibold" title="${esc(ix.electives[G.elective].name)}">${esc((c.electives || []).find(x => x.id === G.elective)?.id || 'Elective')}</span>`
     : G.isSub && state.view === 'section' ? `<span class="mr-1 rounded bg-white/80 px-1 text-[10px] font-semibold">${G.label}</span>` : '';
-  const note = e.preview ? '<span class="text-[10px] font-semibold text-amber-700">New</span>' : e.ghost ? '<span class="text-[10px] font-semibold text-slate-500">Moving</span>'
+  const note = e.cancelled ? '<span class="rounded bg-red-100 px-1 text-[10px] font-semibold text-red-700">Cancelled</span>'
+    : e.movedFrom ? `<span class="rounded bg-amber-100 px-1 text-[10px] font-semibold text-amber-800" title="Usually ${esc(e.movedFrom[0])} ${esc(pLabel(c, e.movedFrom[1]))}">This week</span>`
+    : e.preview ? '<span class="text-[10px] font-semibold text-amber-700">New</span>' : e.ghost ? '<span class="text-[10px] font-semibold text-slate-500">Moving</span>'
     : locked ? `<span class="text-slate-500" title="Locked in place">${icon('lock', 'w-3 h-3')}</span>` : '';
   const clickable = g && !e.ghost && !e.preview && !state.preview && !state.viewing && !isViewer();
   return `<div ${clickable ? `onclick="pickSession(${e.a}, '${e.day}')" role="button" tabindex="0"` : ''} class="tt-cell rounded-lg border px-2 py-1.5 shadow-sm ${KIND[s.kind].cls}${extra}${clickable ? ' cursor-pointer transition hover:-translate-y-px hover:shadow-md' : ''}" title="${esc(s.name)} · ${KIND[s.kind].label}${locked ? ' · locked' : ''}">
-    <div class="flex items-center justify-between gap-1"><span class="truncate text-[13px] font-semibold ${e.ghost ? 'line-through' : ''}">${tag}${G.elective ? esc(G.label) : s.short}</span>${note}</div>
+    <div class="flex items-center justify-between gap-1"><span class="truncate text-[13px] font-semibold ${e.ghost || e.cancelled ? 'line-through' : ''}">${tag}${G.elective ? esc(G.label) : s.short}</span>${note}</div>
     <div class="truncate text-[11px] opacity-75">${line2}</div></div>`;
 }
 
@@ -2394,7 +2539,7 @@ function drawer() {
   const c = col(), g = current();
   let body;
   if (state.live && state.assistantOn) {
-    body = chatBody(c, g);
+    body = isViewer() ? viewerChat(c) : chatBody(c, g);
   } else if (!g) {
     body = `<p class="text-sm text-slate-600">Make a timetable first. Then I can explain clashes, suggest fixes and move classes for you, always with a preview before anything changes.</p>`;
   } else {
@@ -2419,10 +2564,10 @@ function drawer() {
         ${canSimulate() ? '<div class="text-sm text-slate-500">To see a fix in action, click <b>Simulate a clash</b> on the timetable.</div>' : ''}`;
     }
   }
-  return `<aside class="no-print fixed bottom-0 right-0 top-14 z-40 flex w-full max-w-[390px] flex-col border-l border-slate-200 bg-white shadow-xl ${anim('drawer')}">
+  return `<aside class="no-print fixed bottom-0 right-0 top-[72px] z-40 flex w-full max-w-[390px] flex-col border-l border-slate-200 bg-white shadow-xl ${anim('drawer')}">
     <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
       <div class="flex items-center gap-2"><div class="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">${icon('bot')}</div>
-      <div><div class="text-sm font-semibold">Scheduling assistant</div><div class="text-[11px] text-slate-500">Suggests and previews changes. You approve.</div></div></div>
+      <div><div class="text-sm font-semibold">${isStudent() ? 'Timetable assistant' : 'Scheduling assistant'}</div><div class="text-[11px] text-slate-500">${isStudent() ? 'Ask anything about the timetable.' : 'Suggests changes and checks them. You approve.'}</div></div></div>
       <button onclick="toggleDrawer(false)" class="rounded-md p-1 text-slate-500 hover:bg-slate-100" aria-label="Close assistant">${icon('x')}</button>
     </div>
     <div class="flex-1 space-y-3 overflow-y-auto p-4">${body}</div>
@@ -2500,9 +2645,10 @@ async function sendChat(ev) {
   Object.assign(ch, { draft: '', sending: true });
   render(); scrollChat();
   try {
-    const r = await api('/api/assistant/chat', { method: 'POST', body: { message, history } });
+    const r = await api(isStudent() ? '/api/student/assistant' : '/api/assistant/chat', { method: 'POST', body: { message, history } });
     ch.messages.push({ role: 'assistant', content: r.reply });
-    if (r.proposal) showProposal(r.proposal);
+    if (r.proposal?.kind === 'change') ch.proposal = r.proposal;
+    else if (r.proposal) showProposal(r.proposal);
   } catch (e) {
     ch.messages.push({ role: 'assistant', content: e.message, error: true });
   }
@@ -3028,7 +3174,7 @@ const storage = {
 };
 
 async function loadStudent() {
-  const r = await api('/api/student/timetable');
+  const r = await api('/api/student/timetable' + weekQuery());
   const empty = { id: 'college', name: r.college.name, scheme: EMPTY_SCHEME, departments: [], courses: [], sections: [], teachers: [], rooms: [], subjects: [], assignments: [] };
   const c = fromServer(r.published ? r.published.data : empty);
   c.name = r.college.name;
@@ -3036,11 +3182,7 @@ async function loadStudent() {
   Object.assign(state, { role: 'student', me: { name: 'Student', email: '', role_label: 'Student view' }, liveCollege: c, gen: {}, page: 'today',
     studentMode: false, studentError: null, view: 'section', key: null, sel: null, viewing: null, modal: null, drawer: false,
     studentSection: c.sections.some(s => s.id === remembered) ? remembered : c.sections[0]?.id || null });
-  if (r.published) {
-    const pos = new Map(allIds(c).map((id, i) => [id, i]));
-    state.gen[c.id] = { entries: r.published.entries.filter(e => pos.has(e.assignment)).map(e => ({ a: pos.get(e.assignment), day: e.day, period: e.period, room: e.room })),
-                        unplaced: [], at: new Date(r.published.published_at * 1000), version: r.published.version, locked: new Set() };
-  }
+  if (r.published) state.gen[c.id] = publishedGen(c, r.published);
 }
 async function openStudent(ev, code) {
   ev?.preventDefault();
@@ -3159,8 +3301,8 @@ function sectionDay(c, g, sectionId, day) {
   const AS = A(c), list = g.entries.filter(e => e.day === day && secsOf(c, AS[e.a].group).includes(sectionId)).sort((x, y) => x.period - y.period || x.a - y.a);
   const out = [];
   list.forEach(e => {
-    const prev = out.find(x => x.a === e.a && x.to === e.period - 1 && x.room === e.room);
-    if (prev) prev.to = e.period; else out.push({ a: e.a, from: e.period, to: e.period, room: e.room });
+    const prev = out.find(x => x.a === e.a && x.to === e.period - 1 && x.room === e.room && !!x.cancelled === !!e.cancelled);
+    if (prev) prev.to = e.period; else out.push({ a: e.a, from: e.period, to: e.period, room: e.room, cancelled: e.cancelled, movedFrom: e.movedFrom });
   });
   return out.sort((x, y) => x.from - y.from);
 }
@@ -3171,22 +3313,24 @@ function studentToday() {
   const sec = state.studentSection && c.sections.some(s => s.id === state.studentSection) ? state.studentSection : c.sections[0]?.id;
   const today = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date().getDay()];
   const has = d => sectionDay(c, g, sec, d).length > 0;
-  const day = S.days.includes(today) && has(today) ? today : S.days.find((d, i) => i > S.days.indexOf(today) && has(d)) || S.days.find(has);
+  const other = state.weekMode === 'usual' || !!state.weekDate;  // next week or the usual week: start from its first day
+  const day = other ? S.days.find(has) : S.days.includes(today) && has(today) ? today : S.days.find((d, i) => i > S.days.indexOf(today) && has(d)) || S.days.find(has);
   const list = day ? sectionDay(c, g, sec, day) : [];
   const kept = day ? ix.P.filter(p => ix.reservedAt.has(key(sec, day, p))).map(p => ({ p, name: ix.reservedAt.get(key(sec, day, p)) })) : [];
-  const heading = !day ? 'No classes this week' : day === today ? `Today · ${today}` : `${S.days.includes(today) ? 'No classes today' : `No classes today (${today})`}. Next: ${day}`;
+  const heading = !day ? 'No classes this week' : other ? dayWithDate(g, day) : day === today ? `Today · ${today}` : `${S.days.includes(today) ? 'No classes today' : `No classes today (${today})`}. Next: ${day}`;
   const item = x => {
     const a = A(c)[x.a], sj = subj(c, a), G = ix.groups[a.group], from = S.periods[x.from - 1], to = S.periods[x.to - 1];
     const who = G.elective ? `${ix.electives[G.elective].name} · ${G.label}` : G.isSub ? `Lab group ${G.label}` : '';
     return `<li class="flex gap-3 rounded-lg border p-2.5 ${KIND[sj.kind].cls}">
       <div class="w-20 shrink-0 text-xs"><div class="font-semibold">${from[1]}–${to[2]}</div><div class="opacity-75">${esc(from[0])}${x.to > x.from ? '–' + esc(to[0]) : ''}</div></div>
-      <div class="min-w-0"><div class="truncate text-sm font-semibold">${esc(sj.name)}</div>
+      <div class="min-w-0"><div class="truncate text-sm font-semibold"><span class="${x.cancelled ? 'line-through opacity-70' : ''}">${esc(sj.name)}</span>${changeTag(x)}</div>
         <div class="truncate text-xs opacity-75">${[who, ix.teachers[a.teacher]?.name, x.room].filter(Boolean).map(esc).join(' · ')}</div></div></li>`;
   };
   return `
   <div class="mb-4"><div class="text-sm text-slate-500">${esc(c.name)}</div>
     <div class="mt-1 flex flex-wrap items-center gap-2"><h1 class="font-display text-2xl font-bold tracking-tight">My section</h1>
       <select onchange="setStudentSection(this.value)" aria-label="Your section" data-tour="st-section" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">${optionsHtml(sectionOptions(c), sec)}</select></div></div>
+  ${weekBar(g)}
   ${card(`<div class="mb-3 font-medium">${heading}</div>
     ${list.length || kept.length ? `<ol class="space-y-2">${list.map(item).join('')}${kept.map(k => `<li class="flex gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-2.5 text-slate-600">
       <div class="w-20 shrink-0 text-xs font-semibold">${S.periods[k.p - 1][1]}–${S.periods[k.p - 1][2]}</div><div class="text-sm">${esc(k.name)}</div></li>`).join('')}</ol>`

@@ -127,11 +127,12 @@ def test_assistant_is_off_without_an_api_key(eng, make_client):
     assert r.status_code == 503 and "API key" in r.json()["detail"]
 
 
-def test_only_coordinators_can_use_the_assistant(app, hod, kumar, make_client):
+def test_staff_use_the_assistant_and_strangers_dont(app, hod, kumar, make_client):
     app.state.assistant_chat = stand_in([])
-    assert hod.post("/api/assistant/chat", json={"message": "hi"}).status_code == 403
-    assert kumar.post("/api/assistant/chat", json={"message": "hi"}).status_code == 403
+    assert hod.post("/api/assistant/chat", json={"message": "hi"}).status_code == 200
+    assert kumar.post("/api/assistant/chat", json={"message": "hi"}).status_code == 200
     assert make_client().post("/api/assistant/chat", json={"message": "hi"}).status_code == 401
+    assert make_client().post("/api/student/assistant", json={"message": "hi"}).status_code == 401
 
 
 def test_a_proposal_is_saved_only_when_the_coordinator_applies_it(app, eng, make_client):
@@ -176,3 +177,72 @@ def test_the_assistant_stops_after_its_daily_limit(app, eng):
     assert eng.post("/api/assistant/chat", json={"message": "two"}).status_code == 200
     r = eng.post("/api/assistant/chat", json={"message": "three"})
     assert r.status_code == 429 and "back tomorrow" in r.json()["detail"]
+
+
+# ---- heads of department, teachers and students: the published timetable --------------------------------------------
+def week_stand_in(seen):
+    """Behaves like the assistant asked to move the person's first class for next week."""
+    def chat(college_name, wt, history, message):
+        seen.append(wt)
+        if wt.role != "student" and wt.base:
+            import datetime as dt
+            from app.services import changes
+            start = changes.week_start(changes.today(wt.tz)) + dt.timedelta(days=7)
+            dates = changes.week_dates(wt.c.days, start)
+            mine = json.loads(wt.show_timetable("teacher", wt.teacher_id, dates[wt.c.days[0]]))["classes"] if wt.teacher_id else []
+            for cls in mine:
+                slots = json.loads(wt.find_free_times(cls["class_id"], cls["date"], cls["start_period"]))["free_times"]
+                if slots and cls["periods"] == 1:
+                    s = slots[0]
+                    wt.propose_change("move", "once", cls["class_id"], cls["date"], cls["start_period"], "Moved one class.", s["date"], s["start"], s["room"])
+                    break
+        return {"reply": "Here's an option.", "proposal": wt.proposal}
+    return chat
+
+
+def test_a_teachers_assistant_proposes_and_the_teacher_applies(app, eng, kumar):
+    from .test_timetables import generate as make
+    make(eng)
+    eng.post("/api/timetables/1/publish")
+    seen = []
+    app.state.assistant_chat = week_stand_in(seen)
+    r = kumar.post("/api/assistant/chat", json={"message": "Move my first class next week"}).json()
+    assert seen[0].role == "teacher" and r["proposal"]["kind"] == "change"
+    assert kumar.get("/api/changes").json()["changes"] == []  # nothing saved by the assistant
+    assert kumar.post("/api/changes", json=r["proposal"]["request"]).status_code == 201
+
+
+def test_students_get_only_question_tools_and_their_own_limit(app, eng, make_client):
+    from app.auth import PersonQuota
+    from app.services.assistant import make_week_tools
+    seen = []
+    app.state.assistant_chat = week_stand_in(seen)
+    app.state.student_quota = PersonQuota(1)
+    eng.post("/api/student-access")
+    phone = make_client()
+    phone.post("/api/student/open", json={"code": eng.get("/api/student-access").json()["code"]})
+    assert phone.post("/api/student/assistant", json={"message": "when is DBMS?"}).status_code == 200
+    assert phone.post("/api/student/assistant", json={"message": "again"}).status_code == 429
+    names = {t.name for t in make_week_tools(seen[0])}
+    assert seen[0].role == "student" and names == {"today", "college_overview", "show_timetable"}
+
+
+def test_teachers_and_heads_have_a_daily_limit_each(app, kumar, hod):
+    from app.auth import PersonQuota
+    app.state.assistant_chat = week_stand_in([])
+    app.state.person_quota = PersonQuota(1)
+    assert kumar.post("/api/assistant/chat", json={"message": "one"}).status_code == 200
+    assert kumar.post("/api/assistant/chat", json={"message": "two"}).status_code == 429
+    assert hod.post("/api/assistant/chat", json={"message": "one"}).status_code == 200
+
+
+def test_week_tools_never_show_free_times(app, eng, kumar):
+    from .test_timetables import generate as make
+    make(eng)
+    eng.post("/api/timetables/1/publish")
+    seen = []
+    app.state.assistant_chat = week_stand_in(seen)
+    kumar.post("/api/assistant/chat", json={"message": "hi"})
+    wt = seen[0]
+    text = wt.overview() + wt.show_timetable("teacher", "T01")
+    assert "unavailable" not in text and "max_per_day" not in text

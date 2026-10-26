@@ -74,3 +74,24 @@ def test_impossible_data_is_reported_not_crashed():
     result = solve(data, time_limit=10)
     assert result["status"] == "infeasible"
     assert result["entries"] == []
+
+
+def test_generating_stops_once_the_timetable_stops_improving():
+    data = load_college("demo-eng")
+    result = solve(data, time_limit=90, patience=2)
+    assert result["entries"] and validate(data, result["entries"]) == []
+    assert result["seconds"] < 60  # without patience the search would use the whole 90 s
+
+
+def test_stop_keeps_the_best_timetable_so_far():
+    import threading
+    data, stop, seen = load_college("demo-eng"), threading.Event(), []
+
+    def progress(**p):
+        seen.append(p)
+        if p.get("found"):
+            stop.set()  # "use it now" as soon as there is one
+
+    result = solve(data, time_limit=90, stop=stop, on_progress=progress)
+    assert seen[0]["stage"] == "searching" and any(p.get("found") for p in seen)
+    assert result["entries"] and validate(data, result["entries"]) == [] and result["stopped_early"]

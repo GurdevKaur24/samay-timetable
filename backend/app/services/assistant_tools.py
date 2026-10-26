@@ -6,12 +6,15 @@ endpoint, which checks it again). Pure Python, so it can be tested without calli
 """
 
 import copy
+import datetime as dt
 import json
 from collections import defaultdict
+from zoneinfo import ZoneInfo
 
 from solver.college import build
 from solver.validator import validate
 
+from . import changes
 from .fingerprint import schedule_fingerprint
 
 MAX_FREE_SLOTS = 12
@@ -202,3 +205,151 @@ class SchedulingTools:
         self.proposal = {"summary": summary.strip()[:400], "changes": changes, "version": self.timetable["version"]}
         return as_text({"proposed": True, "clashes_after": 0, "changed_periods": len(changes),
                         "note": "The coordinator now sees this as a preview on the timetable. It is saved only if they click Apply."})
+
+
+class WeekTools:
+    """What the assistant can look at for a head of department, a teacher or a student: the published timetable, one
+    week at a time with that week's changes. Heads of department and teachers can also find free times and propose a
+    change to a class they're allowed to change; the page shows it and the person applies it (POST /api/changes, which
+    checks it again). Nobody's free times or daily limits are ever shown. `week_changes(week)` reads one week's changes."""
+
+    def __init__(self, *, college_name: str, base: dict | None, current_data: dict, week_changes, role: str,
+                 teacher_id: str | None = None, dept_id: str | None = None, person: str = "", tz: str = "Asia/Kolkata"):
+        self.role, self.person, self.college_name = role, person, college_name
+        self.base, self.current_data, self.week_changes = base, current_data, week_changes
+        self.teacher_id, self.dept_id, self.tz = teacher_id, dept_id, tz
+        self.data = base["data"] if base else current_data
+        self.c = build(self.data)
+        self.entries = [{k: e[k] for k in ("assignment", "day", "period", "room")} for e in base["entries"]] if base else []
+        self.proposal: dict | None = None
+
+    # ---- helpers ------------------------------------------------------------------------------------------------
+    def _date(self, value: str | None) -> dt.date | None:
+        try:
+            return dt.date.fromisoformat(value) if value else changes.today(self.tz)
+        except ValueError:
+            return None
+
+    def _week(self, date: dt.date) -> tuple[dt.date, list[dict], list[dict]]:
+        start = changes.week_start(date)
+        found = self.week_changes(start.isoformat()) if self.base else []
+        return start, found, changes.apply(self.entries, found)
+
+    def _teacher(self, key: str) -> str | None:
+        c = self.c
+        return key if key in c.teachers else next((t for t, v in c.teachers.items() if v["name"].lower() == key.strip().lower()), None)
+
+    def _staff_only(self) -> str | None:
+        if self.role == "student":
+            return "Students can't change the timetable."
+        if not self.base:
+            return "No timetable has been published yet."
+        return None
+
+    # ---- tools --------------------------------------------------------------------------------------------------
+    def today(self) -> str:
+        now = dt.datetime.now(ZoneInfo(self.tz))
+        day = changes.day_of(self.c.days, now.date())
+        hhmm, current = now.strftime("%H:%M"), "no class period right now"
+        for p, s in zip(self.c.periods, self.data["scheme"]["periods"]):
+            if s["start"] <= hhmm < s["end"]:
+                current = f"{self.c.period_labels[p]} (period {p}, {s['start']}–{s['end']})"
+        you = {"teacher": f"the teacher {self.c.teachers.get(self.teacher_id, {}).get('name', self.person)} (teacher id {self.teacher_id})",
+               "hod": f"the head of department {self.dept_id}", "student": "a student"}.get(self.role, self.role)
+        return as_text({"date": now.date().isoformat(), "time": hhmm, "day": day or "not a working day", "now": current,
+                        "this_week": changes.week_dates(self.c.days, changes.week_start(now.date())), "you_are": you})
+
+    def overview(self) -> str:
+        c = self.c
+        return as_text({
+            "published": f"version {self.base['version']}" if self.base else "nothing published yet",
+            "days": c.days,
+            "periods": [{"period": p, "label": c.period_labels[p], "start": s["start"], "end": s["end"]} for p, s in zip(c.periods, self.data["scheme"]["periods"])],
+            "breaks_after_period": sorted(c.breaks_after),
+            "departments": [{"id": d["id"], "name": d["name"]} for d in self.data["departments"]],
+            "sections": [{"id": s["id"], "dept": s["dept"], "lab_groups": [c.groups[g].label for g in c.subsections[s["id"]]]} for s in self.data["sections"]],
+            "teachers": [{"id": t["id"], "name": t["name"], "dept": t["dept"]} for t in self.data["teachers"]],
+            "rooms": [{"id": r["id"], "type": r["type"], "seats": r["capacity"]} for r in self.data["rooms"]],
+            "subjects": [{"id": s["id"], "name": s["name"], "short": s["short"], "kind": s["kind"]} for s in self.data["subjects"]],
+        })
+
+    def show_timetable(self, kind: str, key: str, date: str | None = None) -> str:
+        if not self.base:
+            return "No timetable has been published yet."
+        when = self._date(date)
+        if when is None:
+            return "Give the date like 2026-10-28, or leave it out for this week."
+        c = self.c
+        if kind == "section":
+            if key not in c.groups or c.groups[key].is_sub:
+                return f"No section {key}. Sections: {', '.join(s['id'] for s in self.data['sections'])}."
+            match = lambda a: key in c.sections_of(a["id"])  # noqa: E731
+        elif kind == "teacher":
+            tid = self._teacher(key)
+            if tid is None:
+                return f"No teacher {key}. Use a teacher id or exact name from the overview."
+            match = lambda a: a["teacher"] == tid  # noqa: E731
+        elif kind == "room":
+            if key not in c.rooms:
+                return f"No room {key}."
+            match = None
+        else:
+            return "kind must be section, teacher or room."
+        start, _, week = self._week(when)
+        dates = changes.week_dates(c.days, start)
+        rows: list[dict] = []
+        for e in sorted(week, key=lambda e: (c.days.index(e["day"]), e["period"])):
+            a = c.assignments.get(e["assignment"])
+            if a is None or (match is None and e["room"] != key) or (match is not None and not match(a)):
+                continue
+            last = rows[-1] if rows else None
+            same = last and (last["class_id"], last["day"], last["_change"], last["_cancelled"]) == (e["assignment"], e["day"], e.get("change"), bool(e.get("cancelled")))
+            if same and last["_end"] + 1 == e["period"]:
+                last["periods"] += 1
+                last["_end"] = e["period"]
+                continue
+            subject = c.subjects[a["subject"]]
+            status = ("cancelled this week" if e.get("cancelled") else
+                      f"moved here for this week only (usually {c.slot_label(*e['moved_from'])})" if e.get("moved_from") else "as usual")
+            rows.append({"day": e["day"], "date": dates.get(e["day"]), "start": c.period_labels[e["period"]], "start_period": e["period"],
+                         "periods": 1, "subject": subject["name"], "kind": subject["kind"], "taught_to": c.group_label(a["group"]),
+                         "teacher": c.teachers[a["teacher"]]["name"], "room": e["room"], "class_id": e["assignment"], "status": status,
+                         "_end": e["period"], "_change": e.get("change"), "_cancelled": bool(e.get("cancelled"))})
+        for r in rows:
+            for k in ("_end", "_change", "_cancelled"):
+                r.pop(k)
+        return as_text({"week_of": start.isoformat(), "classes": rows})
+
+    def find_free_times(self, class_id: str, date: str, start_period: int, scope: str = "once") -> str:
+        if refused := self._staff_only():
+            return refused
+        if not changes.may_change(self.role, self.teacher_id, self.dept_id, self.data, class_id):
+            return "You can only change your own classes." if self.role == "teacher" else "You can only change your own department's classes."
+        when = self._date(date)
+        if when is None:
+            return "Give the date of the class like 2026-10-28."
+        start, found, _ = self._week(when)
+        dates, today = changes.week_dates(self.c.days, start), changes.today(self.tz).isoformat()
+        days = [d for d in self.c.days if scope == "always" or (dates.get(d) or "") >= today]
+        slots = changes.suggest(self.entries, self.data, self.current_data, found if scope == "once" else [], assignment=class_id,
+                                day=changes.day_of(self.c.days, when) or "", start=start_period, scope=scope, days=days)
+        for s in slots:
+            s["date"] = dates.get(s["day"]) if scope == "once" else None
+        return as_text({"free_times": slots, "note": "Each keeps 0 clashes if only this class moves." if slots else "No free time found."})
+
+    def propose_change(self, action: str, scope: str, class_id: str, date: str, from_start: int, summary: str,
+                       to_date: str | None = None, to_start: int | None = None, to_room: str | None = None) -> str:
+        if refused := self._staff_only():
+            return refused
+        request = {"action": action, "scope": scope, "assignment": class_id, "date": date, "from_start": from_start,
+                   "to_date": to_date, "to_start": to_start, "to_room": to_room}
+        when = self._date(date)
+        found = self._week(when)[1] if when and scope == "once" else []
+        try:
+            record = changes.check(request, version_entries=self.entries, version_data=self.data, current_data=self.current_data,
+                                   week_changes=found, role=self.role, teacher_id=self.teacher_id, dept_id=self.dept_id, tz=self.tz)
+        except changes.ChangeError as e:
+            return as_text({"proposed": False, "reason": str(e), "problems": e.problems})
+        described = changes.describe_change(self.data, record)
+        self.proposal = {"kind": "change", "request": request, "summary": summary.strip()[:400] or described, "detail": described}
+        return as_text({"proposed": True, "change": described, "note": "The person now sees this with an Apply button. Nothing changes until they click it."})

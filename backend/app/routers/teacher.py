@@ -1,13 +1,13 @@
 """A teacher's own pages: the published timetable of their college and the times they can't teach.
 Teachers can't see or change anything else; the college still comes only from their session."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ValidationError
 
 from ..auth import CurrentUser, teacher_only, get_db
 from ..db import Database
 from ..schema import CollegeData
-from ..services.published import published_timetable
+from ..services.published import published_timetable, week_from
 
 router = APIRouter(prefix="/api/teacher", tags=["teacher"])
 
@@ -20,12 +20,12 @@ def my_record(user: CurrentUser, data: dict) -> dict:
 
 
 @router.get("")
-def home(user: CurrentUser = Depends(teacher_only), db: Database = Depends(get_db)):
+def home(request: Request, week: str | None = None, user: CurrentUser = Depends(teacher_only), db: Database = Depends(get_db)):
     data = db.get_college_data(user.college_id) or {}
     me = my_record(user, data)
     dept = next((d["name"] for d in data.get("departments", []) if d["id"] == me["dept"]), me["dept"])
     return {"me": {"id": me["id"], "name": me["name"], "dept": me["dept"], "dept_name": dept, "unavailable": me.get("unavailable", [])},
-            "scheme": data["scheme"], "published": published_timetable(user.college_id, db)}
+            "scheme": data["scheme"], "published": published_timetable(user.college_id, db, tz=request.app.state.timezone, week_of=week_from(week), staff=True)}
 
 
 class Unavailable(BaseModel):

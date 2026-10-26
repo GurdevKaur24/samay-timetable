@@ -25,7 +25,7 @@ services:
       - key: ANTHROPIC_API_KEY     # optional: turns on the AI assistant; leave empty to keep it off
         sync: false
       - key: SAMAY_ASSISTANT_DAILY_LIMIT  # most AI questions a day for the whole site, so a public link can't drain the key
-        value: "60"
+        value: "150"
       - key: SAMAY_PUBLIC_URL      # used in emailed invite and reset links
         value: https://samay-timetable.onrender.com
       # Optional email for invites and password resets (without it, Samay shows the links to copy):

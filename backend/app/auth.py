@@ -64,6 +64,22 @@ def teacher_only(user: CurrentUser = Depends(current_user)) -> CurrentUser:
     return user
 
 
+class PersonQuota:
+    """At most `limit` uses per calendar day for each person (or phone); 0 means no limit."""
+
+    def __init__(self, limit: int):
+        self.limit, self.day, self.used = limit, None, defaultdict(int)
+
+    def take(self, who: str) -> bool:
+        today = time.strftime("%Y-%m-%d")
+        if today != self.day:
+            self.day, self.used = today, defaultdict(int)
+        if self.limit and self.used[who] >= self.limit:
+            return False
+        self.used[who] += 1
+        return True
+
+
 class DailyQuota:
     """At most `limit` uses per calendar day (server time) for the whole site; 0 means no limit."""
 

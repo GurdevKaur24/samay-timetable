@@ -65,6 +65,30 @@ CREATE TABLE IF NOT EXISTS timetable_numbers (
     college_id  TEXT PRIMARY KEY REFERENCES colleges(id) ON DELETE CASCADE,
     last        INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS class_changes (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    college_id    TEXT NOT NULL REFERENCES colleges(id) ON DELETE CASCADE,
+    version       INTEGER NOT NULL,
+    scope         TEXT NOT NULL,
+    kind          TEXT NOT NULL,
+    assignment    TEXT NOT NULL,
+    date          TEXT,
+    week          TEXT,
+    from_day      TEXT NOT NULL,
+    from_start    INTEGER NOT NULL,
+    from_room     TEXT,
+    to_date       TEXT,
+    to_day        TEXT,
+    to_start      INTEGER,
+    to_room       TEXT,
+    made_by       INTEGER,
+    made_by_name  TEXT NOT NULL,
+    made_by_role  TEXT NOT NULL,
+    summary       TEXT NOT NULL,
+    new_version   INTEGER,
+    created_at    REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_changes_college ON class_changes(college_id, week);
 CREATE INDEX IF NOT EXISTS idx_users_college ON users(college_id);
 CREATE INDEX IF NOT EXISTS idx_timetables_college ON timetables(college_id);
 """
@@ -366,3 +390,46 @@ class Database:
         with self.connect() as conn:
             conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (hash_password(password), user_id))
             conn.execute("DELETE FROM sessions WHERE user_id = ? AND token_hash != ?", (user_id, token_hash(keep_token or "")))
+
+    # ---- changes after publishing: one week only, or from now on ---------------------------------------------
+    CHANGE_FIELDS = ("version", "scope", "kind", "assignment", "date", "week", "from_day", "from_start", "from_room", "to_date",
+                     "to_day", "to_start", "to_room", "made_by", "made_by_name", "made_by_role", "summary", "new_version")
+
+    def add_change(self, college_id: str, change: dict) -> int:
+        cols = ", ".join(self.CHANGE_FIELDS)
+        with self.connect() as conn:
+            return conn.execute(f"INSERT INTO class_changes (college_id, {cols}, created_at) VALUES (?, {', '.join('?' * len(self.CHANGE_FIELDS))}, ?)",
+                                (college_id, *(change.get(k) for k in self.CHANGE_FIELDS), time.time())).lastrowid
+
+    def week_changes(self, college_id: str, version: int, week: str) -> list[dict]:
+        """One week's one-week changes on a published version, oldest first."""
+        with self.connect() as conn:
+            rows = conn.execute("SELECT * FROM class_changes WHERE college_id = ? AND version = ? AND scope = 'once' AND week = ? ORDER BY id",
+                                (college_id, version, week)).fetchall()
+        return [dict(r) for r in rows]
+
+    def list_changes(self, college_id: str, from_week: str, since: float) -> list[dict]:
+        """One-week changes from `from_week` on, and changes from now on made after `since`; newest first."""
+        with self.connect() as conn:
+            rows = conn.execute("SELECT * FROM class_changes WHERE college_id = ? AND ((scope = 'once' AND week >= ?) OR (scope = 'always' AND created_at >= ?)) "
+                                "ORDER BY id DESC", (college_id, from_week, since)).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_change(self, college_id: str, change_id: int) -> dict | None:
+        with self.connect() as conn:
+            row = conn.execute("SELECT * FROM class_changes WHERE college_id = ? AND id = ?", (college_id, change_id)).fetchone()
+        return dict(row) if row else None
+
+    def delete_change(self, college_id: str, change_id: int) -> bool:
+        with self.connect() as conn:
+            return conn.execute("DELETE FROM class_changes WHERE college_id = ? AND id = ?", (college_id, change_id)).rowcount > 0
+
+    def set_change_version(self, college_id: str, change_id: int, version: int) -> None:
+        with self.connect() as conn:
+            conn.execute("UPDATE class_changes SET version = ? WHERE college_id = ? AND id = ?", (version, college_id, change_id))
+
+    def future_weeks(self, college_id: str, version: int, from_week: str) -> list[str]:
+        with self.connect() as conn:
+            rows = conn.execute("SELECT DISTINCT week FROM class_changes WHERE college_id = ? AND version = ? AND scope = 'once' AND week >= ? ORDER BY week",
+                                (college_id, version, from_week)).fetchall()
+        return [r["week"] for r in rows]

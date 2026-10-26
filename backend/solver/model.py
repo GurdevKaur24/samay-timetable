@@ -4,6 +4,7 @@ Decision variable x[assignment, day, start, room] = 1 when a session of that ass
 Choices are pre-filtered (room type and capacity, lab block fits before a break, teacher available), so the model stays small.
 """
 
+import threading
 import time
 from collections import defaultdict
 
@@ -16,9 +17,36 @@ ELECTIVE_SPREAD_WEIGHT = 4  # per period an elective group keeps its sections bu
 LATE_PERIOD_COST = {6: 1, 7: 3}  # prefer finishing the day early
 
 
-def solve(data: dict, time_limit: float = 20.0, workers: int = 8, fixed: list[dict] | None = None) -> dict:
+class _Improvements(cp_model.CpSolverSolutionCallback):
+    """Remembers when the timetable last got noticeably better (lower cost)."""
+
+    def __init__(self, on_better=None):
+        super().__init__()
+        self.best: float | None = None
+        self.improved_at: float | None = None
+        self.on_better = on_better
+
+    def on_solution_callback(self):
+        value = self.ObjectiveValue()
+        if self.best is None or value < self.best - max(1.0, 0.005 * abs(self.best)):
+            self.improved_at = time.perf_counter()
+        if self.best is None or value < self.best:
+            self.best = value
+            if self.on_better:
+                self.on_better(value)
+
+
+def solve(data: dict, time_limit: float = 20.0, workers: int = 8, fixed: list[dict] | None = None,
+          patience: float | None = None, stop: threading.Event | None = None, on_progress=None) -> dict:
     """`fixed` lists locked sessions that must stay exactly where they are:
-    [{"assignment": id, "day": "Mon", "start": 3, "room": "LH-101"}] (start = first period of the session)."""
+    [{"assignment": id, "day": "Mon", "start": 3, "room": "LH-101"}] (start = first period of the session).
+
+    Two stages: first any timetable with no clashes, found fast (no quality goal, no presolve); then that one is
+    improved (fewer gaps, labs side by side, ...). `patience`: stop improving once the best timetable hasn't got
+    noticeably better for this many seconds (the search for a better one rarely ends on its own). `stop`: set it to
+    stop at once and keep the best timetable so far. `on_progress(stage=..., found=..., cost=...)` reports progress."""
+    report = on_progress or (lambda **_: None)
+    stop = stop or threading.Event()
     c = build(data)
     started = time.perf_counter()
     m = cp_model.CpModel()
@@ -136,23 +164,66 @@ def solve(data: dict, time_limit: float = 20.0, workers: int = 8, fixed: list[di
     if cost_terms:
         m.Minimize(sum(cost_terms))
 
-    solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = time_limit
-    solver.parameters.num_search_workers = workers
-    status = solver.Solve(m)
+    deadline = started + time_limit
+
+    def run(model, callback=None, settle=False, **params):
+        """One solver run until it ends, the time limit, `stop`, or (with `settle`) no improvement for `patience`."""
+        solver = cp_model.CpSolver()
+        solver.parameters.max_time_in_seconds = max(1.0, deadline - time.perf_counter())
+        solver.parameters.num_search_workers = workers
+        for name, value in params.items():
+            setattr(solver.parameters, name, value)
+        done, settled = threading.Event(), threading.Event()
+
+        def watch():
+            while not done.wait(0.25):
+                calm = settle and patience and callback.improved_at is not None and time.perf_counter() - callback.improved_at >= patience
+                if stop.is_set() or calm:
+                    settled.set()
+                    solver.StopSearch()
+                    return
+
+        threading.Thread(target=watch, daemon=True).start()
+        status = solver.Solve(model, callback) if callback else solver.Solve(model)
+        done.set()
+        return solver, status, settled.is_set()
+
+    report(stage="searching", found=False)
+    first = None  # stage 1: any timetable with no clashes, values by variable index
+    if cost_terms and not stop.is_set():
+        quick = cp_model.CpModel()
+        quick.Proto().CopyFrom(m.Proto())
+        quick.Proto().ClearField("objective")
+        quick_solver, quick_status, _ = run(quick, cp_model_presolve=False)
+        if quick_status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            first = list(quick_solver.ResponseProto().solution)
+            m.Proto().solution_hint.vars.extend(range(len(first)))
+            m.Proto().solution_hint.values.extend(first)
+            report(stage="improving", found=True)
+        elif quick_status == cp_model.INFEASIBLE:
+            return _no_timetable(started, cp_model.INFEASIBLE, fixed)
+
+    solver, status, stopped = None, cp_model.UNKNOWN, stop.is_set()
+    if not stop.is_set() and time.perf_counter() < deadline - 1:  # stage 2: make it better
+        progress = _Improvements(on_better=lambda cost: report(stage="improving", found=True, cost=cost))
+        solver, status, stopped = run(m, progress, settle=True, max_presolve_iterations=1)
     elapsed = round(time.perf_counter() - started, 2)
 
-    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        reason = "No timetable can satisfy all the rules with this data." if status == cp_model.INFEASIBLE else "No timetable found within the time limit."
-        if fixed:
-            reason += f" {len(fixed)} class(es) are locked; try unlocking some of them."
-        return {"status": "infeasible", "message": reason, "entries": [], "seconds": elapsed}
+    improved = status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+    if improved:
+        chosen = solver.Value
+    elif first is not None:  # stopped before stage 2 found anything: keep stage 1's timetable
+        chosen, status = (lambda v: first[v.Index()]), cp_model.FEASIBLE
+    else:
+        if stop.is_set():
+            return {"status": "stopped", "message": "Stopped before a timetable was found.", "entries": [], "seconds": elapsed}
+        return _no_timetable(started, status, fixed)
 
     entries = [
         {"assignment": aid, "day": day, "period": p, "room": room}
         for aid, options in starts.items()
         for v, day, start, room, covered in options
-        if solver.Value(v)
+        if chosen(v)
         for p in covered
     ]
     return {
@@ -160,9 +231,16 @@ def solve(data: dict, time_limit: float = 20.0, workers: int = 8, fixed: list[di
         "message": "Timetable generated.",
         "entries": entries,
         "seconds": elapsed,
-        "objective": solver.ObjectiveValue() if cost_terms else 0,
+        "objective": solver.ObjectiveValue() if improved and cost_terms else None,
+        "stopped_early": stopped,
     }
 
+
+def _no_timetable(started: float, status, fixed: list[dict] | None) -> dict:
+    reason = "No timetable can satisfy all the rules with this data." if status == cp_model.INFEASIBLE else "No timetable found within the time limit."
+    if fixed:
+        reason += f" {len(fixed)} class(es) are locked; try unlocking some of them."
+    return {"status": "infeasible", "message": reason, "entries": [], "seconds": round(time.perf_counter() - started, 2)}
 
 def _fail(started: float, message: str) -> dict:
     return {"status": "infeasible", "message": message, "entries": [], "seconds": round(time.perf_counter() - started, 2)}

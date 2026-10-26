@@ -8,7 +8,7 @@ import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 
 from solver.metrics import metrics
 from solver.model import solve
@@ -28,12 +28,12 @@ class Job:
     finished_at: float | None = None
     timetable_version: int | None = None
     locked: list[dict] = field(default_factory=list)
+    # stage: preparing → searching → improving; found: a timetable with no clashes exists (it can be used now)
+    progress: dict = field(default_factory=lambda: {"stage": "preparing", "found": False})
+    stop: threading.Event = field(default_factory=threading.Event, repr=False)
 
     def public(self) -> dict:
-        d = asdict(self)
-        d.pop("college_id")
-        d.pop("locked")
-        return d
+        return {k: getattr(self, k) for k in ("id", "status", "message", "created_at", "finished_at", "timetable_version", "progress")}
 
 
 def matching_locks(data: dict, locked: list[dict]) -> tuple[list[dict], int]:
@@ -70,6 +70,24 @@ class JobRunner:
         job = self.jobs.get(job_id)
         return job if job is not None and job.college_id == college_id else None
 
+    def stop(self, college_id: str, job_id: str) -> Job | None:
+        """Stop a run now and keep the best timetable found so far (if any)."""
+        job = self.get(college_id, job_id)
+        if job is not None:
+            job.stop.set()
+        return job
+
+    @staticmethod
+    def _progress(job: Job, update: dict) -> None:
+        """Keep the stage, and how much better the timetable is than the first one found (0-100%)."""
+        progress = job.progress
+        progress.update({k: v for k, v in update.items() if k != "cost"})
+        if update.get("cost") is not None:
+            progress.setdefault("first_cost", update["cost"])
+            first = progress["first_cost"]
+            progress["better_pct"] = round(100 * (first - update["cost"]) / first) if first else 0
+            progress["improvements"] = progress.get("improvements", 0) + 1
+
     def _run(self, job: Job) -> None:
         job.status, job.message = "running", "Generating the timetable."
         try:
@@ -78,7 +96,11 @@ class JobRunner:
                 raise RuntimeError("Your college's data couldn't be found.")
             data, data_version = loaded
             locked, dropped = matching_locks(data, job.locked)
-            result = solve(data, time_limit=self.time_limit, fixed=locked, workers=config.SOLVER_WORKERS)
+            result = solve(data, time_limit=self.time_limit, fixed=locked, workers=config.SOLVER_WORKERS, patience=config.SOLVE_PATIENCE,
+                           stop=job.stop, on_progress=lambda **p: self._progress(job, p))
+            if result["status"] == "stopped":
+                job.status, job.message = "failed", "Stopped before a timetable was found. Nothing was saved."
+                return
             if result["status"] not in ("optimal", "feasible"):
                 job.status, job.message = "failed", f"{result['message']} Run the pre-check to see what to change."
                 return
@@ -97,7 +119,9 @@ class JobRunner:
                 "data": data,  # the exact data it was built from, so old versions still display correctly
             })
             job.status = "done"
-            job.message = f"Timetable v{job.timetable_version} generated and checked: 0 clashes."
+            job.message = f"Timetable v{job.timetable_version} made and checked: 0 clashes."
+            if job.stop.is_set():
+                job.message += " You stopped it early, so it may have a few more gaps; make it again any time for a better one."
             if locked:
                 job.message += f" {len(locked)} locked class(es) stayed where they were."
             if dropped:

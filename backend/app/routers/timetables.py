@@ -10,7 +10,8 @@ from ..auth import CurrentUser, coordinator_only, current_user, get_db
 from ..db import Database
 from ..services.fingerprint import schedule_fingerprint
 from ..services.precheck import precheck
-from ..services.published import published_timetable
+from ..services.change_store import carry_forward
+from ..services.published import published_timetable, week_from
 
 router = APIRouter(prefix="/api", tags=["timetables"])
 
@@ -58,6 +59,15 @@ class GenerateIn(BaseModel):
 def generate(request: Request, body: GenerateIn | None = None, user: CurrentUser = Depends(coordinator_only)):
     locked = [lock.model_dump() for lock in (body.locked if body else [])]
     return request.app.state.jobs.start(user.college_id, locked).public()
+
+
+@router.post("/jobs/{job_id}/stop")
+def stop_job(job_id: str, request: Request, user: CurrentUser = Depends(coordinator_only)):
+    """Stop making the timetable now and keep the best one found so far."""
+    job = request.app.state.jobs.stop(user.college_id, job_id)
+    if job is None:
+        raise HTTPException(404, "That generation run wasn't found.")
+    return job.public()
 
 
 @router.get("/jobs/{job_id}")
@@ -163,17 +173,21 @@ def restore(version: int, user: CurrentUser = Depends(coordinator_only), db: Dat
 
 
 @router.post("/timetables/{version}/publish")
-def publish(version: int, user: CurrentUser = Depends(coordinator_only), db: Database = Depends(get_db)):
+def publish(version: int, request: Request, user: CurrentUser = Depends(coordinator_only), db: Database = Depends(get_db)):
     """Make this version the official timetable that teachers see. Only an up-to-date version can be published."""
     current_base(version, user, db)
+    before = (db.published(user.college_id) or {}).get("version")
     db.set_published(user.college_id, version)
-    return {"published": db.published(user.college_id), "message": f"Timetable v{version} is published. Teachers now see this version."}
+    removed = carry_forward(db, user.college_id, before, version, request.app.state.timezone)
+    note = f" {removed} one-week change(s) made on the old version no longer fit, so they were removed." if removed else ""
+    return {"published": db.published(user.college_id), "message": f"Timetable v{version} is published. Teachers now see this version.{note}"}
 
 
 @router.get("/published")
-def published_for_viewers(user: CurrentUser = Depends(current_user), db: Database = Depends(get_db)):
-    """The published timetable, for anyone signed in to this college (without anyone's free times)."""
-    published = published_timetable(user.college_id, db)
+def published_for_viewers(request: Request, week: str | None = None, user: CurrentUser = Depends(current_user), db: Database = Depends(get_db)):
+    """The published timetable, for anyone signed in to this college (without anyone's free times), and one week of it
+    (`week`: any date in that week; this week by default) with that week's changes."""
+    published = published_timetable(user.college_id, db, tz=request.app.state.timezone, week_of=week_from(week), staff=True)
     if published is None:
         raise HTTPException(404, "No timetable has been published yet.")
     return published

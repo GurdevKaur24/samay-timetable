@@ -85,6 +85,15 @@ Each college sees only its own data and never learns which other colleges use Sa
   - Ask in plain words, e.g. "Dr. Kumar is absent on Monday, which classes need to move?"
   - It looks at your timetable, finds free slots and proposes changes.
   - Every proposal is checked for clashes and shown as a **preview**. Nothing is saved until you click **Apply**.
+- **Changes after publishing:** a teacher (their own classes), a head of department (their department's classes) or the
+  coordinator (any class) can move a class or cancel it for one day. Each change is **for one week only** (the usual
+  timetable comes back by itself afterwards) or **from now on** (published as a new version, with the class locked
+  there). Every change is checked for clashes. The coordinator sees all changes on Home and can **undo** any of them.
+- **An assistant for every role** (Claude, optional): heads of department and teachers ask questions or ask it to move or
+  cancel a class ("I can't come on Tuesday"); it proposes the change and they click **Apply**. Students ask simple
+  questions ("Where is my next class?"). Daily limits: 20 questions per teacher or head, 10 per student phone, and a total
+  for the whole site.
+- **This week / Next week / Usual timetable:** teachers, heads and students see moved and cancelled classes for the week they happen.
 - **Student access:** one code per college, a share link and a printable **QR poster**. Change the code or turn it off at any time.
 
 **Privacy and safety**
@@ -138,7 +147,9 @@ The coordinator's menu is Home plus five numbered steps (a green tick when each 
    teach), rooms and labs, subjects, and **teaching assignments** (who teaches which subject to which section or lab group).
    Add **Electives** and **Reserved times** if you have them.
 3. **Check for problems:** fix anything marked red.
-4. **Make the timetable:** a clash-free week in seconds. Look at it by section, teacher or room.
+4. **Make the timetable:** Samay first finds a timetable with 0 clashes (seconds for a small college, about 20 s for one
+   of 25 sections), then keeps improving it. Click **Use this timetable now** at any time, or let it finish: it stops by
+   itself once it stops getting better. Look at it by section, teacher or room.
 5. **Adjust:** click a class to move or swap it, lock what must not move, or ask the **Assistant**. **Make again**; locked classes stay.
 6. **Publish:** teachers and students now see this version.
 7. **Publish & share:** invite HODs and teachers. Each gets a one-time link (emailed if email is set up, or
@@ -152,13 +163,16 @@ The first time anyone opens a page, a short guide dims the page and points an ar
 explanation (Next / Skip). The **?** in the top bar shows it again. Every role has its own guides.
 
 **Head of department:** keep your department's data complete under **Department data** (other departments' records are
-view-only), then click **Mark as ready**. The coordinator sees each department's status on the dashboard.
+view-only), then click **Mark as ready**. The coordinator sees each department's status on the dashboard. Ask the
+**assistant** to move or cancel a class of your department, for one week or from now on; your changes are listed on your Home.
 
-**Teacher:** **My timetable** shows today's (or the next) classes and your week. **When I can't teach**: click periods,
-save. The next generated timetable keeps them free.
+**Teacher:** **My timetable** shows today's (or the next) classes and your week (**This week / Next week / Usual
+timetable**). **When I can't teach**: click periods, save. The next generated timetable keeps them free. Away one day?
+Ask the **assistant** to move or cancel that class; check its proposal and click **Apply**. Undo it under **Your changes**.
 
 **Student:** open the link or scan the QR code (or tap **I'm a student** and type the code). Pick your section to see
-today's classes, or open **All timetables** for any section, teacher or room.
+today's classes, or open **All timetables** for any section, teacher or room. Moved or cancelled classes are marked.
+Ask the assistant simple questions like "Where is my next class?".
 
 ## 5-minute demo
 1. **Home page:** what Samay is, then **Try the demo** → **Demo Engineering College → Coordinator**.
@@ -192,7 +206,8 @@ Browser (web/index.html)        ──JSON over HTTPS──►  FastAPI (backend
 - **Data format:** `backend/app/schema.py` (Pydantic) checks every field and cross-reference, with plain-English messages.
 - **AI assistant:** Claude (`claude-opus-5-5`) with read-only tools bound to the signed-in college: clashes, a section,
   teacher or room timetable, free slots, free rooms, teacher load, and `propose_change`. That tool only checks moves; the
-  coordinator applies them.
+  coordinator applies them. Heads of department and teachers get tools on the published timetable (a week at a time) that
+  can propose a change only to classes they may change; students get only the look-up tools. Nobody's free times are shown.
 
 Project notes for Claude Code (structure, rules, glossary, conventions) are in [CLAUDE.md](CLAUDE.md). The product plan
 and roadmap are in [docs/requirements.md](docs/requirements.md).
@@ -205,10 +220,14 @@ Set as environment variables before starting the server.
 | `SAMAY_DEMO_LOGIN` | `1` | One-click demo accounts on the sign-in page. **Set `0` for a real college.** |
 | `SAMAY_SIGNUP` | `1` | Lets new colleges create an account |
 | `SAMAY_COOKIE_SECURE` | `0` | Set `1` when served over HTTPS |
-| `SAMAY_SOLVE_SECONDS` | `120` | Time limit for one generation run (a college of about 25 sections and 50 teachers needs about a minute) |
+| `SAMAY_SOLVE_SECONDS` | `120` | The most one generation run takes (a college of about 25 sections and 50 teachers has a first timetable in about 20 s) |
+| `SAMAY_SOLVE_PATIENCE` | `10` | Stop improving once the timetable hasn't got better for this many seconds |
 | `SAMAY_SOLVER_WORKERS` | `8` | CPU threads per run (use 1–2 on small servers) |
 | `ANTHROPIC_API_KEY` | – | Turns on the AI assistant (`SAMAY_ASSISTANT=0` turns it off again) |
-| `SAMAY_ASSISTANT_DAILY_LIMIT` | `60` | Most AI assistant questions a day for the whole site (`0` = no limit) |
+| `SAMAY_ASSISTANT_DAILY_LIMIT` | `150` | Most AI assistant questions a day for the whole site (`0` = no limit) |
+| `SAMAY_ASSISTANT_PERSON_LIMIT` | `20` | Most questions a day for each head of department or teacher |
+| `SAMAY_ASSISTANT_STUDENT_LIMIT` | `10` | Most questions a day for each student's phone |
+| `SAMAY_TIMEZONE` | `Asia/Kolkata` | What "today" and "this week" mean for one-week changes |
 | `SAMAY_DB` | `backend/data/samay.db` | Where the database file lives |
 | `SAMAY_DEMO_READY` | `1` on Render, else `0` | At start, generate and publish the demo college's timetable and turn on its student code (DEMO-2026) |
 | `SAMAY_SMTP_HOST`, `SAMAY_SMTP_PORT`, `SAMAY_SMTP_USER`, `SAMAY_SMTP_PASSWORD`, `SAMAY_EMAIL_FROM` | – | Email for invites and password resets, through any SMTP server (e.g. Gmail with an app password, or Brevo). Without it, Samay shows the links for the coordinator to share |
