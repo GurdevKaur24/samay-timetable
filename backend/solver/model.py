@@ -6,6 +6,7 @@ Choices are pre-filtered (room type and capacity, lab block fits before a break,
 
 import threading
 import time
+import zlib
 from collections import defaultdict
 
 from ortools.sat.python import cp_model
@@ -37,14 +38,15 @@ class _Improvements(cp_model.CpSolverSolutionCallback):
 
 
 def room_choices(rooms: list[dict], aid: str, limit: int | None, keep: set[str]) -> list[dict]:
-    """At most `limit` rooms for one class: the smallest that fit, with rooms of the same size taken in a different
-    order for each class, so every room is still used. Fewer choices keep the model small enough for a small server;
-    rooms in `keep` (a locked class's room) are always included."""
+    """At most `limit` rooms for one class, spread evenly over all the rooms that fit (small and big), starting at a
+    different room for each class, so every room is offered to about as many classes as any other. (Taking only the
+    smallest rooms left big halls unused and made busy colleges impossible.) Fewer choices keep the model small enough
+    for a small server; rooms in `keep` (a locked class's room) are always included."""
     if not limit or len(rooms) <= limit:
         return rooms
-    shift = sum(map(ord, aid))
-    order = sorted(range(len(rooms)), key=lambda i: (rooms[i]["capacity"], (i + shift) % len(rooms)))
-    chosen = [rooms[i] for i in order[:limit]]
+    order = sorted(rooms, key=lambda r: (r["capacity"], r["id"]))
+    shift, step = zlib.crc32(aid.encode()), len(order) / limit
+    chosen = [order[(shift + int(k * step)) % len(order)] for k in range(limit)]
     return chosen + [r for r in rooms if r["id"] in keep and r not in chosen]
 
 

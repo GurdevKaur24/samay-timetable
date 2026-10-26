@@ -1141,7 +1141,10 @@ async function runGenerateLive() {
       job = await api(`/api/jobs/${job.id}`);
     }
     Object.assign(state, { genJob: null, genStopping: false });
-    if (job.status !== 'done') { state.generating = null; render(); toast(job.message); go('precheck'); return; }
+    if (job.status !== 'done') {  // the reason stays on the Check for problems page until the next try
+      Object.assign(state, { generating: null, genFailed: { message: job.message, at: new Date() } }); go('precheck'); return;
+    }
+    state.genFailed = null;
     state.generating = 3; render();
     await loadLatestTimetable();
     Object.assign(state, { generating: null, preview: null, history: [], applied: null, sim: null, page: 'timetable' });
@@ -4248,6 +4251,12 @@ function precheckPage() {
     <div class="flex h-10 w-10 items-center justify-center rounded-full ${errors ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'}">${icon(errors ? 'x' : 'check')}</div>
     <div><div class="font-medium">${errors ? `${errors} problem${errors > 1 ? 's' : ''} to fix before making the timetable` : 'Your data is ready: make your timetable'}</div>
     <div class="text-sm text-slate-500">${warns} warning${warns === 1 ? '' : 's'} · ${list.length} checks run</div></div></div>`, 'mb-4', 'data-tour="check-summary"')}
+  ${state.genFailed ? `<div class="mb-4 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-900">
+    <div class="flex flex-wrap items-start justify-between gap-3"><div class="min-w-0 flex-1">
+      <div class="font-display text-base font-bold">The timetable wasn't made (${state.genFailed.at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})</div>
+      <p class="mt-1">${esc(state.genFailed.message)}</p>
+      ${/time allowed|time limit/i.test(state.genFailed.message) ? '<p class="mt-2 text-xs text-red-800">Nothing below needs fixing: this college just needs more time than this server allows. Try again, or make it on a faster computer.</p>' : ''}</div>
+      <span class="flex gap-2">${btn('Try again', 'state.genFailed = null; runGenerate()', 'primary', 'bolt')}${btn('Hide', 'state.genFailed = null; render()')}</span></div></div>` : ''}
   <div class="space-y-2">${list.map((x, i) => `
     <div class="flex items-start justify-between gap-3 rounded-lg ${style[x.level][0]} px-4 py-3 text-sm">
       <div class="flex gap-3"><span class="mt-0.5 shrink-0 rounded bg-white/70 px-1.5 py-0.5 text-[11px] font-semibold">${style[x.level][1]}</span><span>${x.text}</span></div>

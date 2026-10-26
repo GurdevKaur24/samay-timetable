@@ -103,7 +103,8 @@ class JobRunner:
                 job.status, job.message = "failed", "Stopped before a timetable was found. Nothing was saved."
                 return
             if result["status"] not in ("optimal", "feasible"):
-                job.status, job.message = "failed", f"{result['message']} Run the pre-check to see what to change."
+                hint = " Run the pre-check to see what to change." if result["message"].startswith("No timetable can") else ""
+                job.status, job.message = "failed", result["message"] + hint
                 return
             violations = validate(data, result["entries"])
             if violations:  # never save a timetable the clash checker rejects

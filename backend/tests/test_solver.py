@@ -101,8 +101,9 @@ def test_each_class_gets_a_few_rooms_and_every_room_is_still_used():
     from solver.model import room_choices
     rooms = [{"id": f"R{i}", "capacity": 70} for i in range(10)] + [{"id": "BIG", "capacity": 200}]
     picks = [room_choices(rooms, f"A{n}", 4, set()) for n in range(40)]
-    assert all(len(p) == 4 and "BIG" not in {r["id"] for r in p} for p in picks)  # the smallest rooms that fit first
-    assert {r["id"] for p in picks for r in p} == {f"R{i}" for i in range(10)}  # rotated: every room gets used
+    assert all(len({r["id"] for r in p}) == 4 for p in picks)
+    counts = {r["id"]: sum(r in p for p in picks) for r in rooms}
+    assert min(counts.values()) >= 6  # spread: every room, the big one too (once never offered), is used by many classes
     assert "BIG" in {r["id"] for r in room_choices(rooms, "A1", 4, {"BIG"})}  # a locked class keeps its room
     assert room_choices(rooms, "A1", None, set()) == rooms
 

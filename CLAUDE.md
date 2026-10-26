@@ -24,7 +24,7 @@ Full product plan and roadmap: `docs/requirements.md`.
     objective, presolve off: fast), then improving it from that hint until it hasn't got better for
     `SAMAY_SOLVE_PATIENCE` seconds (default 10). The job reports `progress` (stage, found, better_pct);
     `POST /api/jobs/{id}/stop` stops and keeps the best so far. To keep memory small, each class may use at most
-    `SAMAY_MAX_ROOM_CHOICES` (6; 4 on Render) of the rooms that fit it (`room_choices`: smallest first, rotated so every room is used);
+    `SAMAY_MAX_ROOM_CHOICES` (6; 4 on Render) of the rooms that fit it (`room_choices`: spread evenly over all fitting rooms, big ones too, so every room is used; smallest-only made busy colleges impossible);
     `SAMAY_SOLVER_MEMORY_MB` (200 on Render, else none) caps the solver's memory, since the free plan's 512 MB limit
     otherwise stops the whole server. A timetable is saved only if the clash checker finds
     0 problems; versions are numbered per college and store the data they were built from.
