@@ -15,6 +15,8 @@ from .services.email import smtp_sender
 
 
 AUTO = object()
+# Raised when the page needs something new from the server; the page warns if the server it talks to is older.
+API_VERSION = 2
 
 
 def default_assistant():
@@ -79,7 +81,7 @@ def create_app(db_path: str | Path | None = None, seed_if_empty: bool = True, so
 
     @app.get("/api/health")
     def health():
-        return {"status": "ok", "app": "samay", "demo_login": app.state.demo_login, "signup": app.state.signup,
+        return {"status": "ok", "app": "samay", "api": API_VERSION, "demo_login": app.state.demo_login, "signup": app.state.signup,
                 "assistant": app.state.assistant_chat is not None, "email": app.state.send_email is not None}
 
     # The web page: same origin as the API, so the sign-in cookie just works. Mounted last so /api routes win.

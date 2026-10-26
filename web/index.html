@@ -1119,11 +1119,15 @@ async function reviseOnServer(g, what) {
   }
 }
 
+const API_VERSION = 2;  // the server version this page needs (see backend/app/main.py)
+const oldServerBanner = () => state.serverOld ? `<div class="no-print bg-amber-400 px-4 py-2 text-center text-sm font-medium text-navy-950">
+  This page is newer than the Samay server it talks to, so some things won't work. Restart the server (stop it with Ctrl+C and start it again), then reload this page.</div>` : '';
 async function boot() {
   if (location.protocol.startsWith('http')) {
     try {
       const h = await (await fetch('/api/health')).json();
       state.live = h.app === 'samay';
+      state.serverOld = state.live && (h.api || 1) < API_VERSION;  // e.g. the server wasn't restarted after an update
       state.signupEnabled = !!h.signup;
       state.assistantOn = !!h.assistant;  // the server has an AI assistant (Claude) switched on
       state.emailOn = !!h.email;  // the server can email invite and reset links
@@ -1693,14 +1697,14 @@ function syncBadge() {
 
 function layout() {
   if (state.booting) return `<div class="flex min-h-screen flex-col items-center justify-center gap-3 text-sm text-slate-500">${logo('h-12 w-12', 'h-7 w-7')}Loading Samay…</div>`;
-  if (!col()) return signInPage();
+  if (!col()) return oldServerBanner() + signInPage();
   const c = col(), coord = !isViewer(), items = navItems();
   const cur = coord ? items.find(x => x[3] && !x[3].done)?.[3] : null;
   const navBtn = ([id, label, ic, st]) => `<button onclick="go('${id}')" data-tour="nav-${id}" class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${state.page === id ? 'bg-white/10 font-semibold text-white shadow-[inset_3px_0_0_#94b2f7]' : 'text-indigo-100/80 hover:bg-white/5 hover:text-white'}">
       ${st ? stepBadge(st, st === cur, true) : icon(ic)}<span class="truncate text-left">${label}</span></button>`;
   const top = coord ? items.slice(0, 1) : items, stepsNav = coord ? items.slice(1) : [];
   const who = state.live && state.me ? state.me.name : 'Timetable Coordinator', role = state.live && state.me ? state.me.role_label : 'Timetable coordinator';
-  return `
+  return `${oldServerBanner()}
   <header class="no-print sticky top-0 z-30 flex h-[72px] items-center gap-3 border-b border-white/10 bg-navy-950 px-4 text-white shadow-lg shadow-navy-950/20 md:gap-4 md:px-6">
     <button onclick="go('${items[0][0]}')" class="flex shrink-0 items-center gap-3" aria-label="Home">${logo('h-10 w-10', 'h-6 w-6')}
       <span class="hidden leading-tight sm:block"><span class="block font-display text-xl font-bold tracking-tight">Samay</span><span class="block text-[11px] text-indigo-200">College timetables</span></span></button>
