@@ -43,7 +43,7 @@
   }
 </style>
 </head>
-<body class="bg-[#f6f7fb] text-slate-900 font-sans antialiased">
+<body class="bg-[#eef2f9] text-slate-900 font-sans antialiased">
 <div id="app"></div>
 <div id="tour"></div>
 
@@ -168,9 +168,9 @@ const ROOM_TYPE = { lecture: 'Lecture hall', classroom: 'Classroom', seminar_hal
   electronics_lab: 'Electronics lab', science_lab: 'Science lab', physics_lab: 'Physics lab', chemistry_lab: 'Chemistry lab',
   workshop: 'Workshop', drawing_hall: 'Drawing hall' };
 const KIND = {
-  theory: { label: 'Lecture', cls: 'bg-sky-50 border-sky-200 text-sky-950', dot: 'bg-sky-400' },
-  tutorial: { label: 'Tutorial', cls: 'bg-amber-50 border-amber-200 text-amber-950', dot: 'bg-amber-400' },
-  lab: { label: 'Lab', cls: 'bg-emerald-50 border-emerald-200 text-emerald-950', dot: 'bg-emerald-500' },
+  theory: { label: 'Lecture', cls: 'border-l-4 bg-blue-100/80 border-blue-200 border-l-blue-600 text-blue-950', dot: 'bg-blue-600' },
+  tutorial: { label: 'Tutorial', cls: 'border-l-4 bg-amber-100/80 border-amber-200 border-l-amber-500 text-amber-950', dot: 'bg-amber-500' },
+  lab: { label: 'Lab', cls: 'border-l-4 bg-emerald-100/80 border-emerald-200 border-l-emerald-600 text-emerald-950', dot: 'bg-emerald-600' },
 };
 
 /* ------------------------------ helpers ------------------------------ */
@@ -1157,10 +1157,10 @@ const ICONS = {
 const icon = (n, cls = 'w-5 h-5') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="${ICONS[n]}"/></svg>`;
 
 /* ------------------------------ brand ------------------------------ */
-const logo = (size = 'h-9 w-9', inner = 'h-5 w-5') => `<span class="flex ${size} shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-sm shadow-indigo-500/30">
+const logo = (size = 'h-9 w-9', inner = 'h-5 w-5') => `<span class="flex ${size} shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-400 to-indigo-700 text-white shadow-sm shadow-indigo-900/40 ring-1 ring-white/20">
   <svg class="${inner}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></span>`;
 const brand = (sub = 'Clash-free college timetables') => `<button type="button" onclick="goHome()" class="flex items-center gap-3 text-left" aria-label="Samay home">
-  ${logo('h-10 w-10', 'h-6 w-6')}<span class="leading-tight"><span class="block font-display text-lg font-bold tracking-tight text-slate-900">Samay</span><span class="block text-xs text-slate-500">${sub}</span></span></button>`;
+  ${logo('h-10 w-10', 'h-6 w-6')}<span class="leading-tight"><span class="block font-display text-lg font-bold tracking-tight text-white">Samay</span><span class="block text-xs text-indigo-200">${sub}</span></span></button>`;
 // A small "?" that explains a word when you point at it or tap it.
 const tip = text => `<span class="tip" tabindex="0" role="note" aria-label="${esc(text)}" data-tip="${esc(text)}">?</span>`;
 function goHome() {
@@ -1182,25 +1182,25 @@ const HERO_CLASSES = [
   [5, 1, 1, 'lec', 'Networks', 'LH-104'], [5, 2, 1, 'lec', 'Maths', 'LH-101'], [5, 5, 1, 'lec', 'Elective', 'LH-201'],
 ];
 function heroWeek() {
-  const tone = { lec: 'border-sky-200 bg-sky-50 text-sky-900', tut: 'border-amber-200 bg-amber-50 text-amber-900', lab: 'border-emerald-200 bg-emerald-50 text-emerald-900',
-                 moved: 'border-indigo-300 bg-indigo-50 text-indigo-900 ring-2 ring-indigo-400/60' };
+  const tone = { lec: 'border-l-4 border-blue-200 border-l-blue-600 bg-blue-100/80 text-blue-950', tut: 'border-l-4 border-amber-200 border-l-amber-500 bg-amber-100/80 text-amber-950',
+                 lab: 'border-l-4 border-emerald-200 border-l-emerald-600 bg-emerald-100/80 text-emerald-950', moved: 'border-l-4 border-blue-300 border-l-blue-600 bg-blue-100 text-blue-950 ring-2 ring-indigo-500' };
   const rows = { 1: 2, 2: 3, 4: 5, 5: 6 };  // period -> grid row (row 4 is lunch)
   const cell = ([d, p, len, kind, a, b]) => kind === 'split'
-    ? `<div class="grid grid-cols-2 gap-0.5" style="grid-column:${d + 1};grid-row:${rows[p]} / span ${len}">${[a, b].map(x => `<div class="flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-1 text-[9px] font-semibold leading-tight text-emerald-900">${x}</div>`).join('')}</div>`
+    ? `<div class="grid grid-cols-2 gap-0.5" style="grid-column:${d + 1};grid-row:${rows[p]} / span ${len}">${[a, b].map(x => `<div class="flex items-center rounded-md border border-l-4 border-emerald-200 border-l-emerald-600 bg-emerald-100/80 px-1 text-[9px] font-semibold leading-tight text-emerald-950">${x}</div>`).join('')}</div>`
     : `<div class="flex flex-col justify-center overflow-hidden rounded-md border px-1.5 ${tone[kind]}" style="grid-column:${d + 1};grid-row:${rows[p]} / span ${len}">
         <span class="truncate text-[10px] font-semibold leading-tight">${a}</span><span class="truncate text-[9px] opacity-70">${b}</span></div>`;
   return `<div class="relative">
-    <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-xl shadow-slate-900/10">
+    <div class="rounded-2xl border border-white/20 bg-white p-4 text-slate-900 shadow-2xl shadow-navy-950/50">
       <div class="mb-3 flex items-center justify-between"><div><div class="text-xs text-slate-500">Timetable · Section</div><div class="font-display text-sm font-bold">CSE-3A</div></div>
-        <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">${icon('check', 'w-3.5 h-3.5')}0 clashes · verified</span></div>
+        <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">${icon('check', 'w-3.5 h-3.5')}0 clashes · checked</span></div>
       <div class="grid gap-1" style="grid-template-columns:34px repeat(5,minmax(0,1fr));grid-template-rows:18px 40px 40px 18px 40px 40px">
-        ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map((d, i) => `<div class="text-center text-[10px] font-semibold text-slate-500" style="grid-column:${i + 2};grid-row:1">${d}</div>`).join('')}
+        ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map((d, i) => `<div class="rounded bg-navy-900 text-center text-[10px] font-bold leading-[18px] text-white" style="grid-column:${i + 2};grid-row:1">${d}</div>`).join('')}
         ${[['P1', 2], ['P2', 3], ['P3', 5], ['P4', 6]].map(([p, r]) => `<div class="flex items-center text-[10px] font-medium text-slate-400" style="grid-column:1;grid-row:${r}">${p}</div>`).join('')}
-        <div class="flex items-center justify-center rounded-md bg-slate-100 text-[9px] font-semibold uppercase tracking-widest text-slate-400" style="grid-column:1 / span 6;grid-row:4">Lunch</div>
+        <div class="flex items-center justify-center rounded-md bg-indigo-50 text-[9px] font-semibold uppercase tracking-widest text-indigo-400" style="grid-column:1 / span 6;grid-row:4">Lunch</div>
         ${HERO_CLASSES.map(cell).join('')}
       </div>
     </div>
-    <div class="absolute -bottom-16 left-6 hidden max-w-[16rem] rounded-xl border border-slate-200 bg-white p-3 shadow-lg sm:block">
+    <div class="absolute -bottom-16 left-6 hidden max-w-[16rem] rounded-xl border border-slate-200 bg-white p-3 text-slate-900 shadow-lg sm:block">
       <div class="flex items-start gap-2"><span class="mt-0.5 text-indigo-600">${icon('bot', 'w-4 h-4')}</span>
         <p class="text-xs leading-snug text-slate-600"><b class="text-slate-900">Assistant:</b> Moved DBMS to Thursday P2. Still 0 clashes.</p></div></div>
   </div>`;
@@ -1228,42 +1228,42 @@ function homeDemo() {
 }
 function homePage() {
   const signup = state.live && state.signupEnabled;
-  const link = (href, label) => `<a href="${href}" class="text-sm font-medium text-slate-600 hover:text-slate-900">${label}</a>`;
+  const link = (href, label) => `<a href="${href}" class="text-sm font-medium text-indigo-100 hover:text-white">${label}</a>`;
   const stepCard = (n, ic, title, text) => `<div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
     <div class="flex items-center gap-3"><span class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">${icon(ic)}</span>
       <span class="text-xs font-semibold uppercase tracking-wider text-indigo-600">Step ${n}</span></div>
     <div class="mt-3 font-display font-bold">${title}</div><p class="mt-1 text-sm leading-relaxed text-slate-600">${text}</p></div>`;
   const role = (ic, title, items) => `<div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-    <div class="flex items-center gap-3"><span class="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-600">${icon(ic)}</span><div class="font-display font-bold">${title}</div></div>
+    <div class="flex items-center gap-3"><span class="flex h-10 w-10 items-center justify-center rounded-xl bg-navy-900 text-white">${icon(ic)}</span><div class="font-display font-bold">${title}</div></div>
     <ul class="mt-3 space-y-1.5 text-sm text-slate-600">${items.map(x => `<li class="flex gap-2"><span class="mt-0.5 text-emerald-600">${icon('check', 'w-4 h-4')}</span>${x}</li>`).join('')}</ul></div>`;
   const feature = (ic, title, text) => `<div class="flex gap-4"><span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200">${icon(ic)}</span>
     <div><div class="font-display font-bold">${title}</div><p class="mt-1 text-sm leading-relaxed text-slate-600">${text}</p></div></div>`;
   return `<div class="${anim('home')}">
-  <header class="sticky top-0 z-30 border-b border-slate-200/70 bg-white/85 backdrop-blur">
-    <div class="mx-auto flex h-16 max-w-6xl items-center gap-6 px-4">
+  <header class="sticky top-0 z-30 border-b border-white/10 bg-navy-950/90 backdrop-blur">
+    <div class="mx-auto flex h-[72px] max-w-6xl items-center gap-6 px-4">
       ${brand()}
       <nav class="ml-6 hidden items-center gap-6 lg:flex">${link('#how', 'How it works')}${link('#who', "Who it's for")}${link('#features', 'Features')}</nav>
       <div class="ml-auto flex items-center gap-2">
-        ${state.live ? `<button onclick="state.studentMode = true; state.studentError = null; render()" class="hidden rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 sm:inline">I'm a student</button>
-        <button onclick="state.authView = 'signin'; state.signinError = null; render()" class="rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">Sign in</button>` : ''}
-        <button onclick="toDemo()" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-indigo-600/20 hover:bg-indigo-700">Try the demo</button>
+        ${state.live ? `<button onclick="state.studentMode = true; state.studentError = null; render()" class="hidden rounded-lg px-3 py-2 text-sm font-medium text-indigo-100 hover:bg-white/10 hover:text-white sm:inline">I'm a student</button>
+        <button onclick="state.authView = 'signin'; state.signinError = null; render()" class="rounded-lg px-3 py-2 text-sm font-medium text-white hover:bg-white/10">Sign in</button>` : ''}
+        <button onclick="toDemo()" class="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-navy-900 shadow-sm hover:bg-indigo-50">Try the demo</button>
       </div>
     </div>
   </header>
 
-  <section class="relative overflow-hidden">
-    <div class="pointer-events-none absolute inset-0 bg-gradient-to-b from-indigo-50/80 via-white to-transparent"></div>
+  <section class="relative overflow-hidden bg-gradient-to-br from-navy-950 via-navy-900 to-indigo-900 text-white">
+    <div class="pointer-events-none absolute -right-40 -top-40 h-[32rem] w-[32rem] rounded-full bg-indigo-500/20 blur-3xl"></div>
     <div class="relative mx-auto grid max-w-6xl items-center gap-12 px-4 pb-20 pt-14 lg:grid-cols-2 lg:pt-20">
       <div>
-        <span class="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-semibold text-indigo-700">${icon('shield', 'w-3.5 h-3.5')}Every timetable checked: no clashes</span>
-        <h1 class="mt-5 font-display text-4xl font-extrabold leading-tight tracking-tight text-slate-900 sm:text-5xl">Your college timetable <span class="block bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">made in minutes</span></h1>
-        <p class="mt-5 max-w-xl text-lg leading-relaxed text-slate-600">Samay plans the whole week for every section, teacher and room, and makes sure nobody is ever in two places at once. Then teachers and students see it on their phones.</p>
+        <span class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold text-indigo-100">${icon('shield', 'w-3.5 h-3.5')}Every timetable checked: no clashes</span>
+        <h1 class="mt-5 font-display text-4xl font-extrabold leading-tight tracking-tight text-white sm:text-5xl">Your college timetable <span class="block bg-gradient-to-r from-sky-300 to-indigo-300 bg-clip-text text-transparent">made in minutes</span></h1>
+        <p class="mt-5 max-w-xl text-lg leading-relaxed text-indigo-100">Samay plans the whole week for every section, teacher and room, and makes sure nobody is ever in two places at once. Then teachers and students see it on their phones.</p>
         <div class="mt-8 flex flex-wrap gap-3">
-          <button onclick="toDemo()" class="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-600/25 hover:bg-indigo-700">Try the demo, free</button>
-          ${signup ? `<button onclick="state.signupMode = true; state.signinError = null; render()" class="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50">Create your college</button>` : ''}
+          <button onclick="toDemo()" class="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-navy-900 shadow-lg shadow-navy-950/30 hover:bg-indigo-50">Try the demo, free</button>
+          ${signup ? `<button onclick="state.signupMode = true; state.signinError = null; render()" class="rounded-xl border border-white/30 px-5 py-3 text-sm font-semibold text-white hover:bg-white/10">Create your college</button>` : ''}
         </div>
-        <ul class="mt-8 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
-          ${['Works with your Excel sheets', 'Any days, periods and breaks', 'Lab groups and electives', 'Private to your college'].map(x => `<li class="flex items-center gap-2"><span class="text-emerald-600">${icon('check', 'w-4 h-4')}</span>${x}</li>`).join('')}
+        <ul class="mt-8 grid gap-2 text-sm text-indigo-100 sm:grid-cols-2">
+          ${['Works with your Excel sheets', 'Any days, periods and breaks', 'Lab groups and electives', 'Private to your college'].map(x => `<li class="flex items-center gap-2"><span class="text-emerald-400">${icon('check', 'w-4 h-4')}</span>${x}</li>`).join('')}
         </ul>
       </div>
       <div class="pb-10 lg:pl-6">${heroWeek()}</div>
@@ -1319,9 +1319,9 @@ function homePage() {
     </div>
   </section>
 
-  <footer class="border-t border-slate-200 bg-white">
-    <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-8 text-sm text-slate-500">
-      <div class="flex items-center gap-2">${logo('h-7 w-7', 'h-4 w-4')}<span class="font-display font-bold text-slate-800">Samay</span><span>· Clash-free college timetables</span></div>
+  <footer class="bg-navy-950">
+    <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-8 text-sm text-indigo-200">
+      <div class="flex items-center gap-2">${logo('h-7 w-7', 'h-4 w-4')}<span class="font-display font-bold text-white">Samay</span><span>· Clash-free college timetables</span></div>
       <p>Each college's data is private. Colleges can't see each other.</p>
     </div>
   </footer></div>`;
@@ -1346,9 +1346,9 @@ function steps(c) {
 }
 const firstEmptyList = c => DATA_LISTS.find(k => !(k === 'subjects' ? Object.keys(c.subjects).length : c[k].length)) || 'departments';
 function goData() { state.dataTab = firstEmptyList(col()); go('data'); }
-function stepBadge(s, current) {
-  return s.done ? `<span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white">${icon('check', 'w-3.5 h-3.5')}</span>`
-    : `<span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${current ? 'bg-indigo-600 text-white ring-4 ring-indigo-100' : 'bg-slate-100 text-slate-500'}">${s.n}</span>`;
+function stepBadge(s, current, dark = false) {
+  return s.done ? `<span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${dark ? 'bg-emerald-400 text-navy-950' : 'bg-emerald-500 text-white'}">${icon('check', 'w-3.5 h-3.5')}</span>`
+    : `<span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${current ? `bg-indigo-500 text-white ring-4 ${dark ? 'ring-indigo-500/30' : 'ring-indigo-100'}` : dark ? 'bg-white/10 text-indigo-200' : 'bg-slate-100 text-slate-500'}">${s.n}</span>`;
 }
 // "Done here? Next: ..." at the bottom of each step's page.
 function nextBar(pageId) {
@@ -1367,7 +1367,7 @@ function nextBar(pageId) {
 }
 function nextStepCard(c, s, g) {
   const cur = s.find(x => !x.done);
-  const box = (label, title, text, buttons) => `<div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 p-6 text-white shadow-lg shadow-indigo-600/20" data-tour="next-step">
+  const box = (label, title, text, buttons) => `<div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-navy-900 via-indigo-900 to-indigo-700 p-6 text-white shadow-lg shadow-navy-900/30" data-tour="next-step">
     <div class="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10"></div>
     <div class="relative"><div class="text-xs font-semibold uppercase tracking-wider text-indigo-100">${label}</div>
       <div class="mt-1 font-display text-2xl font-bold">${title}</div><p class="mt-2 max-w-2xl text-sm leading-relaxed text-indigo-50">${text}</p>
@@ -1581,7 +1581,7 @@ function signUpPage() {
     <input id="su-${id}" type="${type}" value="${type === 'password' ? '' : esc(f[id] || '')}" placeholder="${ph}" autocomplete="${auto}" class="${inputCls(false)}"/>
     ${hint ? `<p class="mt-1 text-xs text-slate-500">${hint}</p>` : ''}</label>`;
   return `
-  <div class="flex min-h-screen items-center justify-center p-4">
+  <div class="flex min-h-screen items-center justify-center bg-gradient-to-br from-navy-950 via-navy-900 to-indigo-900 p-4">
     <div class="w-full max-w-md ${anim('signup')}">
       <div class="mb-6">${brand('Clash-free college timetables')}</div>
       <form onsubmit="signUpLive(event)" class="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
@@ -1637,7 +1637,7 @@ function signInPage() {
   if (state.live && state.signupMode) return signUpPage();
   if (!state.live || state.authView !== 'signin') return homePage();
   return `
-  <div class="flex min-h-screen items-center justify-center p-4">
+  <div class="flex min-h-screen items-center justify-center bg-gradient-to-br from-navy-950 via-navy-900 to-indigo-900 p-4">
     <div class="w-full max-w-md ${anim('signin')}">
       <div class="mb-6">${brand('Clash-free college timetables')}</div>
       <form onsubmit="signInLive(event)" class="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
@@ -1658,17 +1658,17 @@ function signInPage() {
       <button onclick="state.studentMode = true; state.studentError = null; render()" class="mt-4 flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white p-4 text-left hover:border-indigo-300 hover:bg-indigo-50/40">
         <span><span class="block text-sm font-semibold">I'm a student</span><span class="block text-xs text-slate-500">See your class timetable with your college's code. No account needed.</span></span>
         <span class="text-indigo-600">→</span></button>
-      <p class="mt-4 text-center text-xs text-slate-400">Each college's data is private. Colleges can't see each other, or even which other colleges use Samay.</p>
+      <p class="mt-4 text-center text-xs text-indigo-200/80">Each college's data is private. Colleges can't see each other, or even which other colleges use Samay.</p>
     </div>
   </div>`;
 }
 
 function syncBadge() {
-  if (!state.live) return '<span class="hidden whitespace-nowrap rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 sm:inline" title="Opened without the Samay server: changes stay in this browser tab and are lost on reload">Try-out copy · not saved</span>';
+  if (!state.live) return '<span class="hidden whitespace-nowrap rounded-full bg-amber-400/15 px-2.5 py-1 text-xs font-medium text-amber-200 sm:inline" title="Opened without the Samay server: changes stay in this browser tab and are lost on reload">Try-out copy · not saved</span>';
   return {
-    saving: '<span class="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">Saving…</span>',
-    error: '<span class="rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700">Not saved</span>',
-  }[state.sync] || `<span class="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">${icon('check', 'w-3.5 h-3.5')}Saved</span>`;
+    saving: '<span class="rounded-full bg-white/10 px-2.5 py-1 text-xs font-medium text-indigo-100">Saving…</span>',
+    error: '<span class="rounded-full bg-red-500/20 px-2.5 py-1 text-xs font-medium text-red-200">Not saved</span>',
+  }[state.sync] || `<span class="hidden items-center gap-1 rounded-full bg-emerald-400/15 px-2.5 py-1 text-xs font-medium text-emerald-300 sm:inline-flex">${icon('check', 'w-3.5 h-3.5')}Saved</span>`;
 }
 
 function layout() {
@@ -1676,42 +1676,50 @@ function layout() {
   if (!col()) return signInPage();
   const c = col(), coord = !isViewer(), items = navItems();
   const cur = coord ? items.find(x => x[3] && !x[3].done)?.[3] : null;
-  const navBtn = ([id, label, ic, st]) => `<button onclick="go('${id}')" data-tour="nav-${id}" class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm ${state.page === id ? 'bg-indigo-50 font-semibold text-indigo-700' : 'text-slate-600 hover:bg-slate-100'}">
-      ${st ? stepBadge(st, st === cur) : icon(ic)}<span class="truncate text-left">${label}</span></button>`;
+  const navBtn = ([id, label, ic, st]) => `<button onclick="go('${id}')" data-tour="nav-${id}" class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${state.page === id ? 'bg-white/10 font-semibold text-white shadow-[inset_3px_0_0_#94b2f7]' : 'text-indigo-100/80 hover:bg-white/5 hover:text-white'}">
+      ${st ? stepBadge(st, st === cur, true) : icon(ic)}<span class="truncate text-left">${label}</span></button>`;
   const top = coord ? items.slice(0, 1) : items, stepsNav = coord ? items.slice(1) : [];
-  const who = state.live && state.me ? state.me.name : 'Timetable Coordinator';
+  const who = state.live && state.me ? state.me.name : 'Timetable Coordinator', role = state.live && state.me ? state.me.role_label : 'Timetable coordinator';
   return `
-  <header class="no-print sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-slate-200/80 bg-white/90 px-4 backdrop-blur">
-    <button onclick="go('${items[0][0]}')" class="flex shrink-0 items-center gap-2.5" aria-label="Home">${logo()}<span class="hidden font-display text-lg font-bold tracking-tight sm:inline">Samay</span></button>
-    <div class="ml-1 hidden h-7 w-px bg-slate-200 sm:block"></div>
-    <div class="min-w-0 leading-tight"><div class="truncate text-sm font-semibold">${esc(c.name)}</div>${c.term ? `<div class="truncate text-xs text-slate-500">${esc(c.term)}</div>` : ''}</div>
-    <div class="relative ml-auto flex shrink-0 items-center gap-2">
+  <header class="no-print sticky top-0 z-30 flex h-[72px] items-center gap-3 border-b border-white/10 bg-navy-950 px-4 text-white shadow-lg shadow-navy-950/20 md:gap-4 md:px-6">
+    <button onclick="go('${items[0][0]}')" class="flex shrink-0 items-center gap-3" aria-label="Home">${logo('h-10 w-10', 'h-6 w-6')}
+      <span class="hidden leading-tight sm:block"><span class="block font-display text-xl font-bold tracking-tight">Samay</span><span class="block text-[11px] text-indigo-200">College timetables</span></span></button>
+    <div class="hidden h-10 w-px bg-white/15 sm:block"></div>
+    <div class="flex min-w-0 items-center gap-3">
+      <span class="hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-indigo-100 md:flex">${icon('building')}</span>
+      <div class="min-w-0 leading-tight"><div class="truncate text-[15px] font-semibold">${esc(c.name)}</div>${c.term ? `<div class="truncate text-xs text-indigo-200">${esc(c.term)}</div>` : ''}</div>
+    </div>
+    <div class="relative ml-auto flex shrink-0 items-center gap-2 md:gap-3">
       ${isTeacher() || isStudent() ? '' : syncBadge()}
-      <span class="hidden rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 lg:inline">${esc(state.live && state.me ? state.me.role_label : 'Timetable coordinator')}</span>
       ${hasTour() ? `<button onclick="startTour(true)" data-tour="help" title="Show me around this page" aria-label="Show me around this page"
-        class="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-bold text-slate-600 hover:border-indigo-300 hover:text-indigo-700">?</button>` : ''}
-      <button onclick="state.menu = !state.menu; render()" class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-slate-700 to-slate-900 text-xs font-semibold text-white hover:opacity-90" aria-label="Account menu">${esc(initials(who))}</button>
-      ${state.menu ? `<div class="absolute right-0 top-11 w-60 rounded-xl border border-slate-200 bg-white p-1 shadow-lg ${anim('menu')}">
-        <div class="px-3 py-2 text-xs text-slate-500">${state.live && state.me ? `<div class="truncate text-sm font-medium text-slate-900">${esc(state.me.name)}</div><div class="mb-1 truncate">${esc(state.me.email)}</div>` : ''}Signed in to<div class="truncate text-sm font-medium text-slate-900">${esc(c.name)}</div></div>
+        class="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-base font-bold text-white ring-1 ring-white/15 hover:bg-white/20">?</button>` : ''}
+      <div class="hidden h-10 w-px bg-white/15 md:block"></div>
+      <button onclick="state.menu = !state.menu; render()" aria-label="Account menu" aria-expanded="${!!state.menu}" class="flex items-center gap-3 rounded-full py-1 pl-1 pr-1 hover:bg-white/10 md:pr-3">
+        <span class="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-indigo-400 to-indigo-700 text-sm font-semibold text-white ring-2 ring-white/20">${esc(initials(who))}</span>
+        <span class="hidden max-w-[11rem] text-left leading-tight md:block"><span class="block truncate text-sm font-semibold">${esc(who)}</span><span class="block truncate text-xs text-indigo-200">${esc(role)}</span></span>
+        <span class="hidden text-xs text-indigo-200 md:inline">▾</span></button>
+      ${state.menu ? `<div class="absolute right-0 top-14 w-64 rounded-xl border border-slate-200 bg-white p-1 text-slate-900 shadow-xl ${anim('menu')}">
+        <div class="px-3 py-2.5 text-xs text-slate-500">${state.live && state.me ? `<div class="truncate text-sm font-semibold text-slate-900">${esc(state.me.name)}</div><div class="mb-1.5 truncate">${esc(state.me.email)}</div>` : ''}Signed in to<div class="truncate text-sm font-medium text-slate-900">${esc(c.name)}</div></div>
+        <div class="my-1 h-px bg-slate-100"></div>
         ${hasTour() ? `<button onclick="state.menu = false; render(); startTour(true)" class="w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">Show me around this page</button>` : ''}
         <button onclick="signOut()" class="w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">${isStudent() ? 'Change college' : 'Sign out'}</button>
       </div>` : ''}
     </div>
   </header>
   <div class="flex">
-    <aside class="no-print sticky top-16 hidden h-[calc(100vh-4rem)] w-64 shrink-0 flex-col overflow-y-auto border-r border-slate-200/80 bg-white p-3 md:flex">
+    <aside class="no-print sticky top-[72px] hidden h-[calc(100vh-72px)] w-64 shrink-0 flex-col overflow-y-auto bg-navy-900 p-3 md:flex">
       <nav class="space-y-1">${top.map(navBtn).join('')}</nav>
-      ${stepsNav.length ? `<div class="mb-1 mt-5 px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Make your timetable</div>
+      ${stepsNav.length ? `<div class="mb-1.5 mt-6 px-3 text-[11px] font-semibold uppercase tracking-wider text-indigo-300/70">Make your timetable</div>
         <nav class="space-y-1">${stepsNav.map(navBtn).join('')}</nav>` : ''}
-      ${coord ? `<button onclick="toggleDrawer(true)" data-tour="assistant" class="mt-5 flex w-full items-center gap-3 rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2.5 text-sm font-medium text-indigo-700 hover:bg-indigo-50">${icon('bot')}Ask the assistant</button>` : ''}
-      <div class="mt-auto rounded-xl bg-slate-50 p-3 text-xs leading-relaxed text-slate-500">
-        <div class="mb-1 flex items-center gap-1.5 font-medium text-slate-700">${icon('shield', 'w-4 h-4')}Private to your college</div>
+      ${coord ? `<button onclick="toggleDrawer(true)" data-tour="assistant" class="mt-6 flex w-full items-center gap-3 rounded-xl bg-indigo-600 px-3 py-2.5 text-sm font-semibold text-white shadow-lg shadow-navy-950/30 hover:bg-indigo-500">${icon('bot')}Ask the assistant</button>` : ''}
+      <div class="mt-auto rounded-xl bg-white/5 p-3 text-xs leading-relaxed text-indigo-200 ring-1 ring-white/10">
+        <div class="mb-1 flex items-center gap-1.5 font-medium text-white">${icon('shield', 'w-4 h-4')}Private to your college</div>
         Only people from ${esc(c.name)} can see this. Other colleges can't.
       </div>
     </aside>
     <main class="min-w-0 flex-1 px-4 py-5 md:px-8 md:py-7 ${state.drawer ? 'lg:pr-[400px]' : ''}">
       <div class="no-print -mx-4 mb-5 flex gap-2 overflow-x-auto px-4 pb-1 md:hidden">
-        ${items.map(([id, label, , st]) => `<button onclick="go('${id}')" data-tour="nav-${id}" class="whitespace-nowrap rounded-full px-3 py-1.5 text-sm ${state.page === id ? 'bg-indigo-600 font-medium text-white' : 'border border-slate-200 bg-white text-slate-600'}">${st ? `${st.done ? '✓' : st.n + '.'} ` : ''}${label}</button>`).join('')}
+        ${items.map(([id, label, , st]) => `<button onclick="go('${id}')" data-tour="nav-${id}" class="whitespace-nowrap rounded-full px-3 py-1.5 text-sm ${state.page === id ? 'bg-navy-900 font-medium text-white' : 'border border-slate-200 bg-white text-slate-600'}">${st ? `${st.done ? '✓' : st.n + '.'} ` : ''}${label}</button>`).join('')}
       </div>
       <div class="mx-auto max-w-6xl ${anim('page:' + state.page)}">${page()}</div>
     </main>
@@ -2244,13 +2252,13 @@ function timetable() {
   ${editBar(c, g)}
   <div class="no-print mb-4 flex flex-wrap items-center gap-3">
     <div class="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm" data-tour="tt-views">
-      ${[['section', 'Section'], ['teacher', 'Teacher'], ['room', 'Room']].map(([id, l]) => `<button onclick="setView('${id}')" class="rounded-md px-3 py-1.5 text-sm ${state.view === id ? 'bg-indigo-600 font-medium text-white' : 'text-slate-600 hover:bg-slate-50'}">${l}</button>`).join('')}
+      ${[['section', 'Section'], ['teacher', 'Teacher'], ['room', 'Room']].map(([id, l]) => `<button onclick="setView('${id}')" class="rounded-md px-3.5 py-1.5 text-sm ${state.view === id ? 'bg-navy-900 font-semibold text-white' : 'text-slate-600 hover:bg-slate-50'}">${l}</button>`).join('')}
     </div>
     <select onchange="setKey(this.value)" data-tour="tt-pick" aria-label="Which one" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
       ${optionsHtml(options, state.key)}
     </select>
     <div class="ml-auto flex flex-wrap items-center gap-3 text-xs text-slate-600">
-      ${Object.values(KIND).map(k => `<span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm ${k.dot}"></span>${k.label}</span>`).join('')}
+      ${Object.values(KIND).map(k => `<span class="inline-flex items-center gap-1.5 font-medium"><span class="h-3 w-3 rounded ${k.dot}"></span>${k.label}</span>`).join('')}
       <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm ring-2 ring-red-500"></span>Clash</span>
     </div>
   </div>
@@ -2299,14 +2307,14 @@ function grid(c, entries, bad) {
   const ix = idx(c), S = c.scheme;
   const at = (d, p) => entries.filter(e => e.day === d && e.period === p && inView(c, e));
   const sig = items => items.map(e => `${e.a}@${e.room}${e.preview ? 'p' : ''}${e.ghost ? 'g' : ''}`).sort().join(',');
-  let head = '<th class="w-14"></th>';
+  let head = '<th class="w-12"></th>';
   ix.P.forEach(p => {
     const [l, s, e] = S.periods[p - 1];
-    head += `<th class="px-1 pb-1 text-left font-normal"><div class="text-xs font-semibold text-slate-700">${l}</div><div class="text-[10px] text-slate-400">${s}–${e}</div></th>`;
+    head += `<th class="px-1 pb-1.5 text-left font-normal"><div class="text-xs font-bold text-navy-900">${l}</div><div class="text-[10px] font-medium text-slate-500">${s}–${e}</div></th>`;
     if (ix.breaksAfter.has(p) && p < ix.P.length) head += `<th class="w-7"></th>`;
   });
   const rows = S.days.map(d => {
-    let html = `<th class="pr-2 text-left align-middle text-sm font-semibold text-slate-700">${d}</th>`;
+    let html = `<th class="pr-1 text-left align-middle"><span class="inline-flex w-11 justify-center rounded-lg bg-navy-900 py-1.5 text-xs font-bold text-white">${d}</span></th>`;
     let p = 1;
     while (p <= ix.P.length) {
       const items = at(d, p), s = sig(items);
@@ -2317,7 +2325,7 @@ function grid(c, entries, bad) {
       if (ix.breaksAfter.has(last) && last < ix.P.length) {
         const b = ix.breaksAfter.get(last);
         html += d === S.days[0]
-          ? `<td rowspan="${S.days.length}" class="rounded-md bg-slate-100 align-middle"><div class="vtext mx-auto text-[10px] font-medium uppercase tracking-wider text-slate-400">${b.label} · ${b.time}</div></td>`
+          ? `<td rowspan="${S.days.length}" class="rounded-lg bg-indigo-50 align-middle"><div class="vtext mx-auto text-[10px] font-semibold uppercase tracking-wider text-indigo-400">${b.label} · ${b.time}</div></td>`
           : '';
       }
       p = last + 1;
@@ -2377,7 +2385,7 @@ function block(c, e, bad) {
   const note = e.preview ? '<span class="text-[10px] font-semibold text-amber-700">New</span>' : e.ghost ? '<span class="text-[10px] font-semibold text-slate-500">Moving</span>'
     : locked ? `<span class="text-slate-500" title="Locked in place">${icon('lock', 'w-3 h-3')}</span>` : '';
   const clickable = g && !e.ghost && !e.preview && !state.preview && !state.viewing && !isViewer();
-  return `<div ${clickable ? `onclick="pickSession(${e.a}, '${e.day}')" role="button" tabindex="0"` : ''} class="tt-cell rounded-lg border px-2 py-1.5 ${KIND[s.kind].cls}${extra}${clickable ? ' cursor-pointer hover:brightness-95' : ''}" title="${esc(s.name)} · ${KIND[s.kind].label}${locked ? ' · locked' : ''}">
+  return `<div ${clickable ? `onclick="pickSession(${e.a}, '${e.day}')" role="button" tabindex="0"` : ''} class="tt-cell rounded-lg border px-2 py-1.5 shadow-sm ${KIND[s.kind].cls}${extra}${clickable ? ' cursor-pointer transition hover:-translate-y-px hover:shadow-md' : ''}" title="${esc(s.name)} · ${KIND[s.kind].label}${locked ? ' · locked' : ''}">
     <div class="flex items-center justify-between gap-1"><span class="truncate text-[13px] font-semibold ${e.ghost ? 'line-through' : ''}">${tag}${G.elective ? esc(G.label) : s.short}</span>${note}</div>
     <div class="truncate text-[11px] opacity-75">${line2}</div></div>`;
 }
@@ -3058,7 +3066,7 @@ function setStudentSection(id) { state.studentSection = id; storage.set('samay.s
 
 /* ---- forgot password, and opening an invite or reset link ---- */
 const authShell = (key, inner) => `
-  <div class="flex min-h-screen items-center justify-center p-4">
+  <div class="flex min-h-screen items-center justify-center bg-gradient-to-br from-navy-950 via-navy-900 to-indigo-900 p-4">
     <div class="w-full max-w-md ${anim(key)}">
       <div class="mb-6">${brand('Clash-free college timetables')}</div>${inner}</div></div>`;
 const backToSignIn = `<p class="mt-4 border-t border-slate-100 pt-4 text-center text-sm text-slate-600">
@@ -3128,7 +3136,7 @@ async function setPasswordFromLink(ev) {
 
 function studentCodePage() {
   return `
-  <div class="flex min-h-screen items-center justify-center p-4">
+  <div class="flex min-h-screen items-center justify-center bg-gradient-to-br from-navy-950 via-navy-900 to-indigo-900 p-4">
     <div class="w-full max-w-md ${anim('student-code')}">
       <div class="mb-6">${brand('Your college timetable')}</div>
       <form onsubmit="openStudent(event)" class="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
@@ -3141,7 +3149,7 @@ function studentCodePage() {
         <p class="mt-4 border-t border-slate-100 pt-4 text-center text-sm text-slate-600">College staff?
           <button type="button" onclick="Object.assign(state, { studentMode: false, authView: 'signin' }); render()" class="font-medium text-indigo-600 hover:underline">Sign in here</button></p>
       </form>
-      <p class="mt-4 text-center text-xs text-slate-400">No account needed. You can only view your college's published timetable.</p>
+      <p class="mt-4 text-center text-xs text-indigo-200/80">No account needed. You can only view your college's published timetable.</p>
     </div>
   </div>`;
 }
