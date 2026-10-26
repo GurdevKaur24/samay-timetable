@@ -108,7 +108,8 @@ Open the live demo link above and click **Try the demo**. **Demo Engineering Col
 is already generated and published, so every role shows it straight away. Pick **Coordinator**, **Head of department**,
 **Teacher** or **Student** (students use the code **DEMO-2026**); inside, the **Demo** bar switches role in one click.
 To see what a new college sees on day one, click **Start with an empty college**: a private, empty college just for
-you (no sign-up), deleted after a day.
+you (no sign-up), deleted after a day. Its bar lets you see it as coordinator, head of department, teacher or student
+too, once it has a department, a teacher and a published timetable.
 
 The free hosting plan restarts the demo database now and then, so changes you make online may not last.
 
@@ -161,7 +162,8 @@ The coordinator's menu is Home plus five numbered steps (a green tick when each 
 8. Print, save as PDF or export to Excel from the Timetable page (**More**).
 
 The first time anyone opens a page, a short guide dims the page and points an arrow at each button with a one-line
-explanation (Next / Skip). The **?** in the top bar shows it again. Every role has its own guides.
+explanation (Next / Skip). The **?** in the top bar shows it again. Every role has its own guides, and each account
+(real, demo or practice) sees them the first time it opens a page in a browser.
 
 **Head of department:** keep your department's data complete under **Department data** (other departments' records are
 view-only), then click **Mark as ready**. The coordinator sees each department's status on the dashboard. Ask the

@@ -1,6 +1,7 @@
 import json
 import secrets
 import time
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
@@ -8,7 +9,7 @@ from pydantic import BaseModel, Field
 from ..auth import COOKIE_NAME, ROLES, CurrentUser, current_user, get_db, user_from_row
 from ..db import SESSION_SECONDS, Database
 from ..schema import CollegeData
-from ..security import DUMMY_HASH, verify_password
+from ..security import DUMMY_HASH, new_student_code, verify_password
 from ..seed import DEMO_USERS
 from ..services import demo
 from ..services.links import email_link
@@ -121,6 +122,62 @@ def practice(request: Request, response: Response, db: Database = Depends(get_db
     db.add_college(college_id, data["name"], data)
     email = f"{college_id}@{PRACTICE_DOMAIN}"
     db.add_user(email, "You", "coordinator", college_id, None)
+    return start_session(db.find_user_by_email(email), request, response, db)
+
+
+class PracticeSwitchIn(BaseModel):
+    role: Literal["coordinator", "hod", "teacher", "student"]
+
+
+@router.post("/practice/switch")
+def practice_switch(body: PracticeSwitchIn, request: Request, response: Response, db: Database = Depends(get_db)):
+    """In your own practice college only: look at it as its coordinator, a head of department, a teacher or a student."""
+    from .students import STUDENT_COOKIE  # here: the students router imports this module's neighbours
+    staff_token, student_token = request.cookies.get(COOKIE_NAME), request.cookies.get(STUDENT_COOKIE)
+    row = db.user_for_token(staff_token) if staff_token else None
+    college = db.college_for_student_token(student_token) if student_token and row is None else None
+    college_id = row["college_id"] if row else college["id"] if college else None
+    if not college_id or not college_id.startswith("practice-"):
+        raise HTTPException(404, "Not found")
+    data = db.get_college_data(college_id) or {}
+    if body.role == "student":
+        if db.published(college_id) is None:
+            raise HTTPException(409, "Publish a timetable first (step 5): students only see a published timetable.")
+        if db.student_code(college_id) is None:  # your own practice college: its student access turns on by itself
+            db.set_student_code(college_id, new_student_code())
+        token = db.create_student_session(college_id)
+        response.set_cookie(STUDENT_COOKIE, token, max_age=SESSION_SECONDS, httponly=True, samesite="lax", secure=request.app.state.cookie_secure, path="/")
+        if staff_token:
+            db.delete_session(staff_token)
+        response.delete_cookie(COOKIE_NAME, path="/")
+        return {"student": True, "college": {"name": data.get("name", "")}}
+    dept = teacher = None
+    if body.role == "hod":
+        dept = next(iter(data.get("departments", [])), None)
+        if dept is None:
+            raise HTTPException(409, "Add a department first (College data → Departments), then look at it as its head.")
+    if body.role == "teacher":
+        info = db.published(college_id)
+        published = db.get_timetable(college_id, info["version"]) if info else None
+        teaching = {a["teacher"] for a in (published or {}).get("data", {}).get("assignments", [])}
+        teachers = data.get("teachers", [])
+        teacher = next((t for t in teachers if t["id"] in teaching), next(iter(teachers), None))
+        if teacher is None:
+            raise HTTPException(409, "Add a teacher first (College data → Teachers), then look at Samay as them.")
+    suffix = "" if body.role == "coordinator" else "+" + body.role
+    email = f"{college_id}{suffix}@{PRACTICE_DOMAIN}"
+    user = db.find_user_by_email(email)
+    stale = user is not None and ((dept and user["dept_id"] != dept["id"]) or (teacher and user["teacher_id"] != teacher["id"]))
+    if stale:
+        db.delete_user(college_id, user["id"])
+    if user is None or stale:
+        name = "You" if body.role == "coordinator" else f"Head of {dept['name']}" if dept else teacher["name"]
+        db.add_user(email, name, body.role, college_id, None, teacher["id"] if teacher else None, dept["id"] if dept else None)
+    if student_token:
+        db.delete_student_session(student_token)
+        response.delete_cookie(STUDENT_COOKIE, path="/")
+    if staff_token:
+        db.delete_session(staff_token)
     return start_session(db.find_user_by_email(email), request, response, db)
 
 

@@ -1077,16 +1077,21 @@ async function switchDemoStudent(code) {
   await openStudent(null, code);
 }
 function demoBar() {
-  if (isPractice()) return `<div class="no-print border-b border-white/10 bg-indigo-800 px-4 py-2 text-white md:px-6">
+  const chip = (label, on, click) => `<button onclick="${click}" ${on ? 'aria-current="true"' : ''} class="shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${on ? 'bg-white text-navy-900' : 'bg-white/10 text-white hover:bg-white/20'}">${label}</button>`;
+  if (isPractice()) {
+    const role = isStudent() ? 'student' : state.me.role;
+    return `<div class="no-print border-b border-white/10 bg-indigo-800 px-4 py-2 text-white md:px-6">
     <div class="no-scrollbar flex items-center gap-2 overflow-x-auto">
       <span class="shrink-0 rounded bg-amber-300 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-navy-950">Practice</span>
-      <span class="shrink-0 whitespace-nowrap text-xs text-indigo-100">An empty college just for you. It's deleted after a day.</span>
-      <button onclick="signOut()" class="shrink-0 whitespace-nowrap rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white hover:bg-white/20">Back to the demo colleges</button></div></div>`;
+      <span class="shrink-0 whitespace-nowrap text-xs text-indigo-100">Your own college, deleted after a day. See it as</span>
+      ${[['coordinator', 'Coordinator'], ['hod', 'Head of department'], ['teacher', 'Teacher'], ['student', 'Student']].map(([r, l]) => chip(l, r === role, `switchPractice('${r}')`)).join('')}
+      <span class="mx-1 h-4 w-px shrink-0 bg-white/25"></span>
+      <button onclick="signOut()" class="shrink-0 whitespace-nowrap text-xs font-semibold text-indigo-100 underline-offset-2 hover:text-white hover:underline">Back to the demo</button></div></div>`;
+  }
   if (!isDemoSession()) return '';
   const college = isStudent() ? col().name : demoCollegeOf(), mine = demoColleges().find(g => g[0] === college);
   if (!mine) return '';
   const role = isStudent() ? 'student' : state.me.role, code = state.demoCodes?.[college];
-  const chip = (label, on, click) => `<button onclick="${click}" ${on ? 'aria-current="true"' : ''} class="shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${on ? 'bg-white text-navy-900' : 'bg-white/10 text-white hover:bg-white/20'}">${label}</button>`;
   const roles = mine[2].map(a => chip(DEMO_ROLE[a.role] || a.role_label, a.role === role, `switchDemo('${esc(a.email)}')`)).join('')
     + (code ? chip('Student', role === 'student', `switchDemoStudent('${esc(code)}')`) : '');
   return `<div class="no-print border-b border-white/10 bg-indigo-800 px-4 py-2 text-white md:px-6">
@@ -1182,7 +1187,7 @@ async function boot() {
         await loadStudent();
         // The demo college's student view opens only from its Student button, not by itself on the next visit
         // (a real college's students do go straight to their timetable).
-        if (isDemoSession()) Object.assign(state, { liveCollege: null, gen: {}, role: 'coordinator', me: null, page: 'dashboard' });
+        if (isDemoSession() || isPractice()) Object.assign(state, { liveCollege: null, gen: {}, role: 'coordinator', me: null, page: 'dashboard' });
       } catch (e) {  // this phone used a code before, but it no longer works (changed or turned off)
         if (e.status === 401 && storage.get('samay.student')) Object.assign(state, { studentMode: true, studentError: 'Your college changed its student code. Ask for the new one.' });
       }
@@ -1350,7 +1355,19 @@ const practiceCard = () => `<div class="mx-auto mt-5 flex max-w-5xl flex-wrap it
       <div><div class="font-display text-lg font-bold">Start with an empty college</div>
         <p class="text-sm text-slate-600">See Samay as a new college does on day one: set your week, add or import data, and make your first timetable. Just for you; nothing to sign up for.</p></div></div>
     <button onclick="startPractice()" ${state.signingIn ? 'disabled' : ''} class="rounded-xl bg-navy-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-navy-800 disabled:opacity-60">Start empty →</button></div>`;
-const isPractice = () => state.live && /@practice\.samay$/.test(state.me?.email || '');
+const isPractice = () => state.live && (/@practice\.samay$/.test(state.me?.email || '') || (isStudent() && /^practice-/.test(col()?.id || '')));
+// In your own practice college: look at it as each role (the server makes those accounts for you).
+async function switchPractice(role) {
+  if (state.signingIn) return;
+  state.signingIn = true; render();
+  try {
+    const r = await api('/api/auth/practice/switch', { method: 'POST', body: { role } });
+    signedOutState(); state.replaceRoute = true;
+    if (r.student) await loadStudent(); else await loadSignedIn(r);
+    state.signingIn = false; render();
+    toast(role === 'student' ? 'Now you see it as a student.' : `Now you see it as the ${DEMO_ROLE[role].toLowerCase()}.`);
+  } catch (e) { state.signingIn = false; render(); toast(e.message); }
+}
 async function startPractice() {
   if (!state.live) {  // the copy that runs in the browser: an empty college with the usual week
     const base = COLLEGES[0], c = { ...JSON.parse(JSON.stringify(base)), id: 'practice', name: 'Your College (practice)', place: '', term: '', kind: '',
@@ -1370,6 +1387,10 @@ async function startPractice() {
 const scrollToId = id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
 function homePage() {
   const signup = state.live && state.signupEnabled;
+  const demo = !state.live || !!state.demoAccounts?.length;  // a real deployment has no demo colleges
+  const primary = (label, cls) => demo ? `<button onclick="toDemo()" class="${cls}">${label}</button>`
+    : signup ? `<button onclick="state.signupMode = true; state.signinError = null; render()" class="${cls}">Create your college</button>`
+    : `<button onclick="state.authView = 'signin'; state.signinError = null; render()" class="${cls}">Sign in</button>`;
   const link = (id, label) => `<button type="button" onclick="scrollToId('${id}')" class="text-sm font-medium text-indigo-100 hover:text-white">${label}</button>`;
   const stepCard = (n, ic, title, text) => `<div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
     <div class="flex items-center gap-3"><span class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">${icon(ic)}</span>
@@ -1384,11 +1405,11 @@ function homePage() {
   <header class="sticky top-0 z-30 border-b border-white/10 bg-navy-950/90 backdrop-blur">
     <div class="mx-auto flex h-[72px] max-w-6xl items-center gap-6 px-4">
       ${brand()}
-      <nav class="ml-6 hidden items-center gap-6 lg:flex">${link('how', 'How it works')}${link('who', "Who it's for")}${link('features', 'Features')}${link('demo', 'Demo')}</nav>
+      <nav class="ml-6 hidden items-center gap-6 lg:flex">${link('how', 'How it works')}${link('who', "Who it's for")}${link('features', 'Features')}${demo ? link('demo', 'Demo') : ''}</nav>
       <div class="ml-auto flex items-center gap-2">
         ${state.live ? `<button onclick="state.studentMode = true; state.studentError = null; render()" class="hidden rounded-lg px-3 py-2 text-sm font-medium text-indigo-100 hover:bg-white/10 hover:text-white sm:inline">I'm a student</button>
         <button onclick="state.authView = 'signin'; state.signinError = null; render()" class="rounded-lg px-3 py-2 text-sm font-medium text-white hover:bg-white/10">Sign in</button>` : ''}
-        <button onclick="toDemo()" class="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-navy-900 shadow-sm hover:bg-indigo-50">Try the demo</button>
+        ${primary('Try the demo', 'rounded-lg bg-white px-4 py-2 text-sm font-semibold text-navy-900 shadow-sm hover:bg-indigo-50')}
       </div>
     </div>
   </header>
@@ -1402,8 +1423,8 @@ function homePage() {
         <p class="mt-5 max-w-xl text-lg leading-relaxed text-indigo-100">Samay plans the whole week for every section, teacher and room, and makes sure nobody is ever in two places at once.
           Teachers and students see it on their phones, and everyone has an assistant for questions and changes.</p>
         <div class="mt-8 flex flex-wrap gap-3">
-          <button onclick="toDemo()" class="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-navy-900 shadow-lg shadow-navy-950/30 hover:bg-indigo-50">Try the demo, free</button>
-          ${signup ? `<button onclick="state.signupMode = true; state.signinError = null; render()" class="rounded-xl border border-white/30 px-5 py-3 text-sm font-semibold text-white hover:bg-white/10">Create your college</button>` : ''}
+          ${primary('Try the demo, free', 'rounded-xl bg-white px-5 py-3 text-sm font-semibold text-navy-900 shadow-lg shadow-navy-950/30 hover:bg-indigo-50')}
+          ${signup && demo ? `<button onclick="state.signupMode = true; state.signinError = null; render()" class="rounded-xl border border-white/30 px-5 py-3 text-sm font-semibold text-white hover:bg-white/10">Create your college</button>` : ''}
         </div>
         <ul class="mt-8 grid gap-2 text-sm text-indigo-100 sm:grid-cols-2">
           ${['A first timetable in seconds', 'An assistant for every role', 'Changes for one day or for good', 'Works with your Excel sheets', 'Labs, electives and tutorials', 'Private to your college'].map(x => `<li class="flex items-center gap-2"><span class="text-emerald-400">${icon('check', 'w-4 h-4')}</span>${x}</li>`).join('')}
@@ -1461,7 +1482,12 @@ function homePage() {
     </div>
   </section>
 
-  <section id="demo" class="scroll-mt-20 py-20">
+  ${demo ? '' : `<section class="py-16"><div class="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div><div class="font-display text-xl font-bold">Ready to start?</div><p class="text-sm text-slate-600">${signup ? 'Create your college in a minute: you become its timetable coordinator.' : 'Sign in with the account your college gave you.'}</p></div>
+    <div class="flex flex-wrap gap-2">${signup ? `<button onclick="state.signupMode = true; render()" class="rounded-xl bg-navy-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-navy-800">Create your college</button>` : ''}
+      <button onclick="state.authView = 'signin'; render()" class="rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50">Sign in</button>
+      <button onclick="state.studentMode = true; render()" class="rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50">I'm a student</button></div></div></section>`}
+  <section id="demo" class="scroll-mt-20 py-20 ${demo ? '' : 'hidden'}">
     <div class="mx-auto max-w-6xl px-4">
       <div class="mx-auto mb-10 max-w-2xl text-center"><div class="text-sm font-semibold text-indigo-600">Try it now</div>
         <h2 class="mt-2 font-display text-3xl font-bold tracking-tight">See Samay as each person at college</h2>
@@ -1628,6 +1654,14 @@ TOURS['teacher:timetable'] = TOURS['student:timetable'] = TOURS['hod:timetable']
 let TOUR = null, tourTimer = null, tourFrame = 0;
 const roleKey = () => isStudent() ? 'student' : isTeacher() ? 'teacher' : isHod() ? 'hod' : 'coordinator';
 const tourKey = () => `${roleKey()}:${state.page}${state.page === 'timetable' && !current() ? '-empty' : ''}`;
+// Seen guides are remembered for each account in this browser (not shared between accounts or browsers).
+const accountKey = () => {
+  const who = isStudent() ? `student:${col()?.id}` : state.me?.email || `offline:${col()?.id}`;
+  let h = 5381;
+  for (const ch of who) h = ((h * 33) ^ ch.charCodeAt(0)) >>> 0;
+  return h.toString(36);
+};
+const seenKey = key => `samay.tour.${accountKey()}.${key}`;
 const hasTour = () => !!TOURS[tourKey()];
 const tourTarget = id => [...document.querySelectorAll(`#app [data-tour="${id}"]`)].find(el => el.getClientRects().length && el.offsetWidth > 0);
 const tourBusy = () => state.booting || !col() || state.modal || state.drawer || state.generating !== null || state.viewing || state.menu;
@@ -1640,13 +1674,13 @@ function startTour(force) {
 }
 function maybeTour() {
   if (TOUR) { placeTour(); return; }
-  if (tourBusy() || !hasTour() || storage.get('samay.tour.' + tourKey())) return;
+  if (tourBusy() || !hasTour() || storage.get(seenKey(tourKey()))) return;
   const key = tourKey();
   clearTimeout(tourTimer);
   tourTimer = setTimeout(() => { if (!TOUR && !tourBusy() && tourKey() === key) startTour(); }, 700);
 }
 function endTour() {
-  if (TOUR) storage.set('samay.tour.' + TOUR.key, '1');
+  if (TOUR) storage.set(seenKey(TOUR.key), '1');
   TOUR = null;
   document.getElementById('tour').innerHTML = '';
 }
@@ -1810,7 +1844,7 @@ function signInPage() {
         ${state.signinError ? `<p class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">${esc(state.signinError)}</p>` : ''}
         <button type="submit" ${state.signingIn ? 'disabled' : ''} class="mt-4 w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60">
           ${state.signingIn ? 'Signing in…' : 'Sign in'}</button>
-        <p class="mt-4 text-center text-sm text-slate-600">Just looking? <button type="button" onclick="toDemo()" class="font-medium text-indigo-600 hover:underline">Try the demo</button></p>
+        ${state.demoAccounts?.length ? `<p class="mt-4 text-center text-sm text-slate-600">Just looking? <button type="button" onclick="toDemo()" class="font-medium text-indigo-600 hover:underline">Try the demo</button></p>` : ''}
         ${state.signupEnabled ? `<p class="mt-4 border-t border-slate-100 pt-4 text-center text-sm text-slate-600">New college?
           <button type="button" onclick="state.signupMode = true; state.signinError = null; render()" class="font-medium text-indigo-600 hover:underline">Create an account</button></p>` : ''}
       </form>
@@ -3337,7 +3371,7 @@ async function openStudent(ev, code) {
   }
 }
 async function leaveStudent() {
-  const demo = isDemoSession();
+  const demo = isDemoSession() || isPractice();
   await api('/api/student/leave', { method: 'POST' }).catch(() => {});
   storage.set('samay.student', '');
   signedOutState();

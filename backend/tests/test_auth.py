@@ -139,3 +139,36 @@ def test_practice_is_only_for_demo_servers_and_limited(app, make_client):
     for _ in range(5):
         assert make_client().post("/api/auth/practice").status_code == 201
     assert make_client().post("/api/auth/practice").status_code == 429
+
+
+def test_a_practice_college_can_be_seen_as_each_role(app, make_client):
+    from solver.college import load_college
+    from .test_timetables import generate
+    you = make_client()
+    you.post("/api/auth/practice")
+    switch = lambda role: you.post("/api/auth/practice/switch", json={"role": role})  # noqa: E731
+    r = switch("hod")
+    assert r.status_code == 409 and "department first" in r.json()["detail"]
+    assert switch("teacher").status_code == 409 and switch("student").status_code == 409
+    # fill it with the demo college's data, make and publish a timetable
+    body = you.get("/api/college/data").json()
+    demo = load_college("demo-eng")
+    data = {**demo, "id": body["data"]["id"], "name": body["data"]["name"]}
+    assert you.put("/api/college/data", json={"version": body["version"], "data": data}).status_code == 200
+    generate(you)
+    you.post("/api/timetables/1/publish")
+    me = switch("hod").json()
+    assert me["user"]["role"] == "hod" and you.get("/api/published").status_code == 200
+    me = switch("teacher").json()
+    assert me["user"]["role"] == "teacher" and you.get("/api/teacher").json()["me"]["id"]
+    assert switch("student").json()["student"] is True
+    r = you.get("/api/student/timetable")
+    assert r.status_code == 200, (r.status_code, r.json(), dict(you.cookies))
+    assert r.json()["published"]["version"] == 1
+    assert you.get("/api/auth/me").status_code == 401  # the staff session ended
+    assert switch("coordinator").json()["user"]["role"] == "coordinator"
+
+
+def test_only_practice_colleges_can_switch_roles(eng, make_client):
+    assert eng.post("/api/auth/practice/switch", json={"role": "hod"}).status_code == 404
+    assert make_client().post("/api/auth/practice/switch", json={"role": "hod"}).status_code == 404

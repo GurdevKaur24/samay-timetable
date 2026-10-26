@@ -9,7 +9,8 @@ Full product plan and roadmap: `docs/requirements.md`.
   - `solver/`: generator, clash checker, scorecard. Pure Python; reads college dicts in the schema format.
   - `data/colleges/*.json`: the demo college `demo-eng` (a full example). An empty one is made on request:
     `POST /api/auth/practice` (demo servers only) creates a private `practice-…` college with a passwordless coordinator
-    and signs in; practice colleges older than a day are deleted. `tests/data/` holds a test-only second
+    and signs in; practice colleges older than a day are deleted. `POST /api/auth/practice/switch` (own practice college
+    only) signs in as its head of department, a teacher or a student (accounts made on the fly). `tests/data/` holds a test-only second
     college (`city-arts`, with `test_users.json`) that `tests/conftest.py` adds, so privacy tests always have two colleges.
   - `app/db.py`: SQLite (`data/samay.db`, git-ignored, created and seeded on first start). Tables: colleges, users,
     sessions, college_data (one validated JSON document per college), timetables.
@@ -74,7 +75,9 @@ Full product plan and roadmap: `docs/requirements.md`.
   Signed out, it shows a home page (`homePage`, with the demo colleges under **Try the demo**); sign-in is `authView: 'signin'`.
   The coordinator's menu is Home plus the five steps from `steps(c)` (Your week, College data, Check for problems, Make
   the timetable, Publish & share), each page ending with `nextBar`. First-visit guides: `TOURS['role:page']` lists
-  `[data-tour id, title, text]`; elements carry `data-tour="..."`; seen guides are remembered in localStorage; `?` replays.
+  `[data-tour id, title, text]`; elements carry `data-tour="..."`; seen guides are remembered in localStorage for each
+  account (`seenKey`); `?` replays. Without demo accounts (a real deployment) the home page shows sign-up and sign-in
+  instead of the demo section.
   Every screen has an address (`#/timetable`, `#/data/teachers`, `#/signin`; `routeOf`/`applyRoute`), so Back,
   Forward and refresh work. Signed in with a demo account, a Demo bar switches role in one click (`switchDemo`); the
   public demo student code (DEMO-2026) comes with `/api/auth/demo-accounts`, never a college's own code.
