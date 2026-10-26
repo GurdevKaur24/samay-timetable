@@ -441,10 +441,11 @@ function precheck(c) {
   const ix = idx(c), S = c.scheme, slots = S.days.length * ix.P.length, out = [];
   const tl = {};
   A(c).forEach(a => tl[a.teacher] = (tl[a.teacher] || 0) + a.periods);
-  c.teachers.forEach(t => {
+  c.teachers.forEach((t, i) => {
     const cap = tMax(c, t) * S.days.length - (t.off || []).length, l = tl[t.id] || 0;
-    if (l > cap) out.push({ level: 'error', text: `${t.name} has ${l} periods a week but can teach at most ${cap}.`, fix: 'Teachers' });
-    else if (l > 0.6 * cap) out.push({ level: 'warn', text: `${t.name} has a heavy load: ${l} of a possible ${cap} periods a week.`, fix: 'Teachers' });
+    const edit = { fix: 'Teachers', label: `Edit ${t.name}`, action: `openForm('teachers', ${i})` };
+    if (l > cap) out.push({ level: 'error', text: `${t.name} has ${l} periods a week but can teach at most ${cap} (${tMax(c, t)} a day${(t.off || []).length ? ", minus the periods they can't teach" : ''}). Raise their "Max periods a day", or give some of their classes to another teacher in Teaching assignments.`, ...edit });
+    else if (l > 0.85 * cap) out.push({ level: 'warn', text: `${t.name} is close to their limit: ${l} of ${cap} periods a week. That's allowed, but leaves little room to fit their classes. If they can take more, raise their "Max periods a day".`, ...edit });
   });
   c.sections.forEach(s => {
     const whole = A(c).filter(a => a.group === s.id).reduce((x, a) => x + a.periods, 0);
@@ -3471,7 +3472,7 @@ function precheckPage() {
   <div class="space-y-2">${list.map(x => `
     <div class="flex items-start justify-between gap-3 rounded-lg ${style[x.level][0]} px-4 py-3 text-sm">
       <div class="flex gap-3"><span class="mt-0.5 shrink-0 rounded bg-white/70 px-1.5 py-0.5 text-[11px] font-semibold">${style[x.level][1]}</span><span>${x.text}</span></div>
-      ${x.fix ? `<button onclick="go('data')" class="shrink-0 font-medium underline-offset-2 hover:underline">Fix in ${x.fix}</button>` : ''}
+      ${x.fix ? `<button onclick="${x.action || `state.dataTab = '${x.fix.toLowerCase()}'; go('data')`}" class="shrink-0 font-medium underline-offset-2 hover:underline">${esc(x.label || `Fix in ${x.fix}`)}</button>` : ''}
     </div>`).join('')}</div>`;
 }
 

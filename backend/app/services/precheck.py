@@ -34,9 +34,11 @@ def precheck(data: dict) -> list[dict]:
     for tid, t in c.teachers.items():
         cap = t["max_per_day"] * days - len(c.unavailable.get(tid, ()))
         if load[tid] > cap:
-            out.append({"level": "error", "text": f"{t['name']} has {load[tid]} periods a week but can teach at most {cap}.", "fix": "teachers"})
-        elif load[tid] > 0.6 * cap:
-            out.append({"level": "warn", "text": f"{t['name']} has a heavy load: {load[tid]} of a possible {cap} periods a week.", "fix": "teachers"})
+            out.append({"level": "error", "text": f"{t['name']} has {load[tid]} periods a week but can teach at most {cap}. Raise their "
+                        "\"Max periods a day\", or give some of their classes to another teacher.", "fix": "teachers"})
+        elif load[tid] > 0.85 * cap:
+            out.append({"level": "warn", "text": f"{t['name']} is close to their limit: {load[tid]} of {cap} periods a week. If they can "
+                        "take more, raise their \"Max periods a day\".", "fix": "teachers"})
 
     for section, subs in c.subsections.items():
         whole = sum(a["periods"] for a in c.assignments.values() if a["group"] == section)
