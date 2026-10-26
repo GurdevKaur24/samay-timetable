@@ -203,7 +203,7 @@ function weekly(c, subjectId, override) {
   return s.kind === 'lab' ? R.labSessionsPerWeek * c.scheme.labBlock : R.lecturesPerWeek;
 }
 function A(c) {
-  return c._A || (c._A = [...c.assignments.map((a, i) => ({ i, subject: a[0], group: a[1], teacher: a[2], periods: weekly(c, a[0], a[3]) })),
+  return c._A || (c._A = [...c.assignments.map((a, i) => ({ i, subject: a[0], group: a[1], teacher: a[2], periods: weekly(c, a[0], a[3]), auto: !!a[4] })),
     ...electiveBatches(c).map((b, k) => ({ i: c.assignments.length + k, subject: b.subject, group: b.id, teacher: b.teacher, periods: b.periods, elective: b.elective, id: b.id }))]);
 }
 // Each elective subject as batches of at most the elective class size (ids match the server's: GROUP~SUBJECT~N).
@@ -446,6 +446,9 @@ function precheck(c) {
   const ix = idx(c), S = c.scheme, slots = S.days.length * ix.P.length, out = [];
   const tl = {};
   A(c).forEach(a => tl[a.teacher] = (tl[a.teacher] || 0) + a.periods);
+  c.assignments.forEach(a => {
+    if (!ix.teachers[a[2]]) out.push({ level: 'error', text: `${c.subjects[a[0]]?.short || a[0]} for ${gLabel(c, a[1])} has no teacher: nobody teaches ${c.subjects[a[0]]?.short || a[0]} yet. Tick it under a teacher's "Subjects they can teach", or choose a teacher.`, fix: 'Assignments' });
+  });
   c.teachers.forEach((t, i) => {
     const cap = tMax(c, t) * S.days.length - (t.off || []).length, l = tl[t.id] || 0;
     const edit = { fix: 'Teachers', label: `Edit ${t.name}`, action: `openForm('teachers', ${i})` };
@@ -600,6 +603,8 @@ async function stopGenerating() {
   try { state.genJob = await api(`/api/jobs/${state.genJob.id}/stop`, { method: 'POST' }); } catch (e) { toast(e.message); }
 }
 function runGenerate() {
+  const missing = col().assignments.filter(a => !idx(col()).teachers[a[2]]).length;
+  if (missing) { toast(`${missing} class${missing === 1 ? ' has' : 'es have'} no teacher yet. See Check for problems.`); go('precheck'); return; }
   const steps = ['Checking data and rules', 'Placing labs side by side', 'Placing lectures and tutorials', 'Verifying: no clashes'];
   window._steps = steps;
   if (state.live) { window._steps = LIVE_STEPS; runGenerateLive(); return; }
@@ -897,12 +902,15 @@ function fromServer(d) {
     courses: (d.courses || []).map(x => ({ ...x })),
     rooms: d.rooms.map(r => ({ id: r.id, type: r.type, cap: r.capacity, owner: r.owner })),
     teachers: d.teachers.map(t => ({ id: t.id, name: t.name, dept: t.dept, ...(t.max_per_day ? { max: t.max_per_day } : {}), ...(t.email ? { email: t.email } : {}),
+      ...(t.subjects?.length ? { subjects: [...t.subjects] } : {}),
                                      ...(t.unavailable?.length ? { off: t.unavailable.map(x => [...x]) } : {}) })),
     sections: d.sections.map(s => ({ id: s.id, dept: s.dept, course: s.course, sem: s.sem, strength: s.strength,
                                      subs: (s.lab_groups || []).map(g => ({ label: g.label, strength: g.strength })) })),
     subjects: Object.fromEntries(d.subjects.map(s => [s.id, { short: s.short, name: s.name, kind: s.kind, ...(s.dept ? { dept: s.dept } : {}),
                                                             ...(s.room_type ? { room: s.room_type } : {}), ...(s.per_week != null ? { perWeek: s.per_week } : {}) }])),
-    assignments: d.assignments.map(a => a.periods != null ? [a.subject, a.group, a.teacher, a.periods] : [a.subject, a.group, a.teacher]),
+    // [subject, group, teacher, periods (optional), true if Samay picked the teacher]
+    assignments: d.assignments.map(a => a.auto ? [a.subject, a.group, a.teacher, a.periods ?? undefined, true]
+      : a.periods != null ? [a.subject, a.group, a.teacher, a.periods] : [a.subject, a.group, a.teacher]),
     electives: (d.electives || []).map(e => JSON.parse(JSON.stringify(e))),
     reserved: (d.reserved || []).map(r => JSON.parse(JSON.stringify(r))),
     _ids: d.assignments.map(a => a.id),
@@ -923,10 +931,10 @@ function toServer(c) {
     courses: (c.courses || []).map(x => clean({ id: x.id, name: x.name, dept: x.dept, years: x.years })),
     sections: c.sections.map(s => clean({ id: s.id, dept: s.dept, course: s.course, sem: s.sem, strength: s.strength,
                                           lab_groups: s.subs.map(u => ({ label: u.label, strength: u.strength })) })),
-    teachers: c.teachers.map(t => clean({ id: t.id, name: t.name, dept: t.dept, max_per_day: t.max, unavailable: t.off || [], email: t.email })),
+    teachers: c.teachers.map(t => clean({ id: t.id, name: t.name, dept: t.dept, max_per_day: t.max, unavailable: t.off || [], email: t.email, subjects: t.subjects?.length ? t.subjects : undefined })),
     rooms: c.rooms.map(r => ({ id: r.id, type: r.type, capacity: r.cap, owner: r.owner })),
     subjects: Object.entries(c.subjects).map(([id, s]) => clean({ id, short: s.short, name: s.name, kind: s.kind, dept: s.dept, room_type: s.room, per_week: s.perWeek })),
-    assignments: c.assignments.map((a, i) => clean({ id: assignmentId(i), subject: a[0], group: a[1], teacher: a[2], periods: a[3] })),
+    assignments: c.assignments.map((a, i) => clean({ id: assignmentId(i), subject: a[0], group: a[1], teacher: a[2], periods: a[3], auto: a[4] ? true : undefined })),
     electives: (c.electives || []).map(e => clean({ id: e.id, name: e.name, sections: e.sections, periods: e.periods,
       options: e.options.map(o => clean({ subject: o.subject, students: o.students, teachers: o.teachers, batches: o.batches })) })),
     reserved: (c.reserved || []).map(r => ({ id: r.id, name: r.name, sections: r.sections, slots: r.slots })),
@@ -1673,13 +1681,19 @@ function startTour(force) {
   showTourStep();
 }
 function maybeTour() {
-  if (TOUR) { placeTour(); return; }
+  if (TOUR) {
+    // A form or the assistant opened over a guide: put the guide away (it shows again next time).
+    if (state.modal || state.drawer) { TOUR = null; document.getElementById('tour').innerHTML = ''; }
+    else placeTour();
+    return;
+  }
   if (tourBusy() || !hasTour() || storage.get(seenKey(tourKey()))) return;
   const key = tourKey();
   clearTimeout(tourTimer);
   tourTimer = setTimeout(() => { if (!TOUR && !tourBusy() && tourKey() === key) startTour(); }, 700);
 }
 function endTour() {
+  clearTimeout(tourTimer);
   if (TOUR) storage.set(seenKey(TOUR.key), '1');
   TOUR = null;
   document.getElementById('tour').innerHTML = '';
@@ -2874,7 +2888,7 @@ const COLUMNS = {
   departments: [['Code', 'code'], ['Name', 'name'], ['Head of department', 'hod']],
   courses: [['Course code', 'code'], ['Course name', 'name'], ['Department', 'dept'], ['Duration (years)', 'years']],
   sections: [['Section', 'name'], ['Course', 'course'], ['Semester', 'sem'], ['Students', 'strength'], ['Lab groups', 'groups']],
-  teachers: [['Name', 'name'], ['Department', 'dept'], ['Max periods a day', 'max'], ['Unavailable', 'off'], ['Email', 'email']],
+  teachers: [['Name', 'name'], ['Department', 'dept'], ['Max periods a day', 'max'], ['Unavailable', 'off'], ['Email', 'email'], ['Subjects', 'subjects']],
   rooms: [['Room', 'name'], ['Type', 'type'], ['Capacity', 'cap'], ['Owner', 'owner']],
   subjects: [['Code', 'code'], ['Name', 'name'], ['Short name', 'short'], ['Type', 'kind'], ['Room needed', 'room'], ['Lectures per week', 'perWeek'], ['Offered by', 'dept']],
   assignments: [['Subject code', 'subject'], ['Taught to', 'group'], ['Teacher', 'teacher'], ['Periods per week', 'periods']],
@@ -2916,6 +2930,48 @@ function dataChanged(c, message, affectsTimetable = true) {
   if (state.live) saveToServer(c);
 }
 
+/* ---- Samay picks teachers ----
+   A class can say "Let Samay choose". Samay then picks someone who can teach its subject (they list it, or already teach
+   it), keeping every teacher's week within what they can teach and as balanced as possible, preferring the subject's
+   department, and giving a section's lab groups different teachers so their labs can run side by side. */
+function canTeach(c, subject) {
+  const teaching = new Set(c.assignments.filter(a => a[0] === subject && !a[4]).map(a => a[2]));
+  return c.teachers.filter(t => (t.subjects || []).includes(subject) || teaching.has(t.id));
+}
+const teacherWeek = (c, t) => tMax(c, t) * c.scheme.days.length - (t.off || []).length;
+function pickTeachers(c, again = false, only = () => true) {
+  delete c._ix; delete c._A;
+  const todo = c.assignments.map((a, i) => i).filter(i => {
+    const a = c.assignments[i];
+    return a[4] && only(a) && (again || !a[2] || !canTeach(c, a[0]).some(t => t.id === a[2]));
+  });
+  if (!todo.length) return 0;
+  const skip = new Set(todo), load = {};
+  A(c).forEach(x => { if (!skip.has(x.i) && x.teacher) load[x.teacher] = (load[x.teacher] || 0) + x.periods; });
+  const per = i => weekly(c, c.assignments[i][0], c.assignments[i][3]);
+  todo.sort((x, y) => per(y) - per(x));
+  let picked = 0;
+  for (const i of todo) {
+    const a = c.assignments[i], s = c.subjects[a[0]], hours = per(i), section = a[1].split('/')[0];
+    const siblings = new Set(c.assignments.filter((b, j) => j !== i && b[0] === a[0] && b[1] !== a[1] && b[1].split('/')[0] === section && b[2]).map(b => b[2]));
+    let best = null, bestScore = Infinity;
+    for (const t of canTeach(c, a[0])) {
+      const week = Math.max(1, teacherWeek(c, t)), after = (load[t.id] || 0) + hours;
+      const score = after / week + (after > week ? 10 : 0) + (siblings.has(t.id) ? 0.5 : 0) - (s?.dept && t.dept === s.dept ? 0.05 : 0);
+      if (score < bestScore - 1e-9) { best = t; bestScore = score; }
+    }
+    if (!best) continue;  // nobody can teach it yet: the check for problems says so
+    a[2] = best.id; load[best.id] = (load[best.id] || 0) + hours; picked++;
+  }
+  delete c._ix; delete c._A;
+  return picked;
+}
+function pickAgain() {
+  const c = col(), own = isHod() ? a => groupDept(c, a[1]) === state.me.dept : () => true;
+  const n = pickTeachers(c, true, own);
+  dataChanged(c, n ? `Samay picked teachers again for ${n} class${n === 1 ? '' : 'es'}, balancing everyone's week.` : 'No classes are set to "Let Samay choose".');
+}
+
 /* ---- current record → form values (strings, as typed) ---- */
 function toValues(c, entity, ref) {
   if (entity === 'electives') return electiveValues(c, ref);
@@ -2938,8 +2994,8 @@ function toValues(c, entity, ref) {
   }
   if (entity === 'teachers') {
     const t = ref != null ? c.teachers[ref] : null;
-    return t ? { name: t.name, dept: t.dept, max: String(tMax(c, t)), off: (t.off || []).map(x => [...x]), email: t.email || '' }
-             : { name: '', dept: filterDept || c.departments[0]?.id || '', max: String(c.scheme.rules.teacherMaxPerDay), off: [], email: '' };
+    return t ? { name: t.name, dept: t.dept, max: String(tMax(c, t)), off: (t.off || []).map(x => [...x]), email: t.email || '', subjects: [...(t.subjects || [])] }
+             : { name: '', dept: filterDept || c.departments[0]?.id || '', max: String(c.scheme.rules.teacherMaxPerDay), off: [], email: '', subjects: [] };
   }
   if (entity === 'rooms') {
     const r = ref != null ? c.rooms[ref] : null;
@@ -2952,8 +3008,8 @@ function toValues(c, entity, ref) {
              : { code: '', name: '', short: '', kind: 'theory', room: '', perWeek: '', dept: filterDept || '' };
   }
   const a = ref != null ? c.assignments[ref] : null;
-  return a ? { subject: a[0], group: a[1], teacher: a[2], periods: a[3] != null ? String(a[3]) : '' }
-           : { subject: '', group: '', teacher: '', periods: '' };
+  return a ? { subject: a[0], group: a[1], teacher: a[4] ? '' : a[2], picked: a[4] ? a[2] : '', periods: a[3] != null ? String(a[3]) : '' }
+           : { subject: '', group: '', teacher: '', picked: '', periods: '' };
 }
 
 /* ---- the one place where every rule for good data lives ---- */
@@ -3023,13 +3079,15 @@ function validateValues(c, entity, v, ref, seen = new Set()) {
     if (!deptIds.includes(v.dept)) err.dept = v.dept ? `No department "${v.dept}". Use one of: ${deptIds.join(', ')}.` : 'Choose a department.';
     if (!isInt(max, 1, ix.P.length)) err.max = `Enter 1–${ix.P.length} periods.`;
     if (v.offError) err.off = v.offError;
+    if (v.subjectsError) err.subjects = v.subjectsError;
     const email = String(v.email || '').trim().toLowerCase();
     if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) err.email = 'Enter a valid email, or leave it empty.';
     else if (email && (c.teachers.some((t, i) => i !== ref && (t.email || '').toLowerCase() === email) || seen.has(`email:${email}`))) err.email = `${email} is already another teacher's email.`;
     if (!Object.keys(err).length) {
       let id = ref != null ? c.teachers[ref].id : null;
       for (let n = c.teachers.length + 1; !id; n++) if (!ix.teachers[`T${n}`]) id = `T${n}`;
-      record = { id, name, dept: v.dept, max, off: v.off.length ? v.off : undefined, email: email || undefined };
+      const can = (v.subjects || []).filter(x => c.subjects[x]);
+      record = { id, name, dept: v.dept, max, off: v.off.length ? v.off : undefined, email: email || undefined, subjects: can.length ? can : undefined };
     }
   }
 
@@ -3075,13 +3133,15 @@ function validateValues(c, entity, v, ref, seen = new Set()) {
     else if (s && s.kind === 'theory' && G.isSub) err.group = 'Lectures are taught to the whole section. (Tutorials can go to a lab group.)';
     else if (s && G && c.assignments.some((a, i) => i !== ref && a[0] === v.subject && (G.isSub ? a[1] === G.section : a[1].startsWith(`${v.group}/`))))
       err.group = `${s.short} is already given to ${G.isSub ? `the whole section ${G.section}` : 'a lab group of this section'}. Use one or the other, not both.`;
-    if (!v.teacher) err.teacher = 'Choose a teacher.';
+    // No teacher chosen: Samay picks one who can teach the subject.
+    if (!v.teacher) { if (s && !canTeach(c, v.subject).length) err.teacher = `Nobody teaches ${s.short} yet. Tick ${s.short} under "Subjects they can teach" for a teacher, or choose a teacher here.`; }
     else if (!ix.teachers[v.teacher]) err.teacher = `No teacher called "${v.teacher}".`;
     if (s && G && c.assignments.some((a, i) => i !== ref && a[0] === v.subject && a[1] === v.group)) err.subject = `${s.short} is already assigned to ${gLabel(c, v.group)}.`;
     if (s && G && seen.has(`${v.subject}|${v.group}`.toLowerCase())) err.subject = `${s.short} for ${gLabel(c, v.group)} appears twice in this file.`;
     if (per !== null && !isInt(per, 1, S.days.length * ix.P.length)) err.periods = 'Enter a whole number of periods, or leave blank.';
     if (per !== null && s?.kind === 'lab' && per % S.labBlock) err.periods = `Labs run in blocks of ${S.labBlock} periods, so use a multiple of ${S.labBlock}.`;
-    if (!Object.keys(err).length) record = per === null ? [v.subject, v.group, v.teacher] : [v.subject, v.group, v.teacher, per];
+    if (!Object.keys(err).length) record = !v.teacher ? [v.subject, v.group, v.picked || '', per ?? undefined, true]
+      : per === null ? [v.subject, v.group, v.teacher] : [v.subject, v.group, v.teacher, per];
   }
   // A head of department adds and changes only their own department's records (the server checks this again).
   if (record && isHod()) {
@@ -3591,6 +3651,12 @@ function mv(field, value, rerender) {
   if (field === 'subject' && state.modal.entity === 'assignments') state.modal.values.group = '';
   if (rerender) render();
 }
+function toggleTeachSubject(k) {
+  const v = state.modal.values, list = v.subjects ||= [];
+  const i = list.indexOf(k);
+  i >= 0 ? list.splice(i, 1) : list.push(k);
+  render();
+}
 function toggleOff(day, period) {
   const off = state.modal.values.off, i = off.findIndex(([d, p]) => d === day && p === period);
   i >= 0 ? off.splice(i, 1) : off.push([day, period]);
@@ -3602,7 +3668,9 @@ function saveForm() {
   // Editing a department's name, head or status (but not its code) doesn't change the timetable.
   const affects = !(m.entity === 'departments' && m.ref != null && record.id === c.departments[m.ref].id);
   saveRecord(c, m.entity, record, m.ref);
-  dataChanged(c, `${ENT[m.entity].one[0].toUpperCase() + ENT[m.entity].one.slice(1)} ${m.ref == null ? 'added' : 'saved'}.`, affects);
+  if (['assignments', 'teachers'].includes(m.entity)) pickTeachers(c);
+  const picked = m.entity === 'assignments' && record[4] ? ` Samay picked ${idx(c).teachers[record[2]]?.name || 'a teacher'}.` : '';
+  dataChanged(c, `${ENT[m.entity].one[0].toUpperCase() + ENT[m.entity].one.slice(1)} ${m.ref == null ? 'added' : 'saved'}.${picked}`, affects);
 }
 function askDelete(entity, ref) {
   const c = col();
@@ -3710,6 +3778,10 @@ function normalizeRow(c, entity, raw) {
   }
   if (entity === 'sections' && v.groups === '') v.groups = '0';
   if (entity === 'teachers') {
+    const codes = String(v.subjects || '').split(/[;,]/).map(x => x.trim()).filter(Boolean);
+    v.subjects = codes.map(x => Object.keys(c.subjects).find(k => k.toLowerCase() === x.toLowerCase() || c.subjects[k].short.toLowerCase() === x.toLowerCase() || c.subjects[k].name.toLowerCase() === x.toLowerCase()) || null);
+    if (v.subjects.includes(null)) v.subjectsError = `Unknown subject in "${codes[v.subjects.indexOf(null)]}". Use subject codes, separated by commas.`;
+    v.subjects = v.subjects.filter(Boolean);
     if (v.max === '') v.max = String(c.scheme.rules.teacherMaxPerDay);
     const text = v.off;
     v.off = [];
@@ -3732,7 +3804,8 @@ function normalizeRow(c, entity, raw) {
     v.subject = v.subject.toUpperCase();
     const g = v.group.replace(/\s+/g, ' ');
     v.group = Object.keys(ix.groups).find(id => id.toLowerCase() === g.toLowerCase() || gLabel(c, id).toLowerCase() === g.toLowerCase()) ?? v.group;
-    v.teacher = c.teachers.find(t => t.name.toLowerCase() === v.teacher.toLowerCase() || t.id.toLowerCase() === v.teacher.toLowerCase())?.id ?? v.teacher;
+    v.teacher = !v.teacher || /^(any|auto|samay)/i.test(v.teacher) ? ''  // empty: Samay picks
+      : c.teachers.find(t => t.name.toLowerCase() === v.teacher.toLowerCase() || t.id.toLowerCase() === v.teacher.toLowerCase())?.id ?? v.teacher;
   }
   return v;
 }
@@ -3786,8 +3859,8 @@ function exampleRows(c, entity) {
       { Section: `${s0.dept}-9A`, Course: course0?.id, Semester: 19, Students: 'sixty', 'Lab groups': 2 },
     ],
     teachers: [
-      { Name: 'Dr. Jaspreet Kaur', Department: d, 'Max periods a day': 4, Unavailable: `${c.scheme.days[0]} P1` },
-      { Name: 'Mr. Rohit Bhalla', Department: d, 'Max periods a day': 5, Unavailable: '' },
+      { Name: 'Dr. Jaspreet Kaur', Department: d, 'Max periods a day': 4, Unavailable: `${c.scheme.days[0]} P1`, Subjects: sub0 ? sub0[0] : '' },
+      { Name: 'Mr. Rohit Bhalla', Department: d, 'Max periods a day': 5, Unavailable: '', Subjects: Object.keys(c.subjects).slice(0, 2).join(', ') },
       { Name: t0.name, Department: t0.dept, 'Max periods a day': 4, Unavailable: '' },
       { Name: 'Ms. Anjali Verma', Department: d, 'Max periods a day': 5, Unavailable: 'Someday P9' },
       { Name: '', Department: d, 'Max periods a day': 4, Unavailable: '' },
@@ -3807,7 +3880,7 @@ function exampleRows(c, entity) {
     ],
     assignments: [
       { 'Subject code': Object.keys(c.subjects).find(k => c.subjects[k].kind === 'tutorial') || sub0[0], 'Taught to': sLast.id, Teacher: tLast.name, 'Periods per week': '' },
-      { 'Subject code': sub0[0], 'Taught to': s0.id, Teacher: t0.name, 'Periods per week': '' },
+      { 'Subject code': sub0[0], 'Taught to': s0.id, Teacher: '', 'Periods per week': '' },
       { 'Subject code': Object.keys(c.subjects).find(k => c.subjects[k].kind === 'lab'), 'Taught to': labGroup ? labGroup.id : s0.id, Teacher: t0.name, 'Periods per week': '' },
       { 'Subject code': sub0[0], 'Taught to': s0.id, Teacher: 'Dr. Nobody', 'Periods per week': '' },
     ],
@@ -3823,6 +3896,7 @@ function commitImport() {
     good.forEach(r => { let n = c.teachers.length + 1; while (used.has(`T${n}`)) n++; r.record = { ...r.record, id: `T${n}` }; used.add(`T${n}`); });
   }
   good.forEach(r => saveRecord(c, m.entity, r.record, null));
+  if (['assignments', 'teachers'].includes(m.entity)) pickTeachers(c);
   const skipped = m.results.length - good.length;
   dataChanged(c, `Imported ${good.length} ${good.length === 1 ? ENT[m.entity].one : ENT[m.entity].label.toLowerCase()}${skipped ? `, skipped ${skipped} row(s) with problems` : ''}.`);
 }
@@ -3910,6 +3984,11 @@ function formBody(c, m) {
     return `${fInput(m, 'name', 'Full name', { placeholder: 'Dr. Jaspreet Kaur' })}
       <div class="grid grid-cols-2 gap-3">${fSelect(m, 'dept', 'Department', depts)}${fInput(m, 'max', 'Max periods a day', { type: 'number' })}</div>
       ${fInput(m, 'email', 'Email (optional)', { type: 'email', placeholder: 'jaspreet.kaur@yourcollege.edu', hint: 'Used to invite them to sign in and see their own timetable.' })}
+      <div><span class="mb-1 block text-sm font-medium text-slate-700">Subjects they can teach${tip('Classes set to "Let Samay choose" get a teacher from these, balancing everyone\'s week.')}</span>
+        ${Object.keys(c.subjects).length ? `<div class="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto rounded-lg border border-slate-200 p-2">${Object.entries(c.subjects).map(([k, x]) => {
+          const on = (v.subjects || []).includes(k);
+          return `<button type="button" onclick="toggleTeachSubject('${esc(k)}')" aria-pressed="${on}" title="${esc(x.name)}" class="rounded-full border px-2.5 py-1 text-xs font-medium ${on ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-300'}">${esc(x.short)}</button>`; }).join('')}</div>`
+          : '<p class="text-xs text-slate-500">Add subjects first; then tick the ones this teacher can teach.</p>'}${fieldErr(m, 'subjects')}</div>
       <div><span class="mb-1 block text-sm font-medium text-slate-700">When can't they teach?</span>
         <p class="mb-2 text-xs text-slate-500">Tick the periods this teacher is not available. The generator will never place a class there.</p>
         <div class="overflow-x-auto rounded-lg border border-slate-200 p-2"><table class="text-xs"><thead><tr><th></th>
@@ -3948,7 +4027,9 @@ function formBody(c, m) {
     ? `<div class="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-900"><b>Guest teaching:</b> ${esc(T.name)} from ${esc(deptName(c, T.dept))} will teach ${esc(gLabel(c, v.group))} (${esc(deptName(c, studentsDept))}). That's fine: the generator makes sure ${esc(T.name)} is never in two departments at the same time.</div>` : '';
   return `${fSelect(m, 'subject', 'Subject', subjectOpts, { rerender: true })}
     ${s ? fSelect(m, 'group', s.kind === 'lab' ? 'Lab group' : 'Section', groups, { rerender: true, hint: s.kind === 'lab' ? 'Labs are taught to one lab group at a time.' : 'Lectures are taught to the whole section. Any department\'s section can take this subject.' }) : ''}
-    ${fSelect(m, 'teacher', 'Teacher', teacherOptions(c, studentsDept), { rerender: true, hint: 'Teachers from any department can teach here.' })}
+    ${fSelect(m, 'teacher', 'Teacher', [['', 'Let Samay choose'], ...teacherOptions(c, studentsDept)], { rerender: true, hint: !v.teacher
+      ? (s ? (canTeach(c, v.subject).length ? `Samay picks one of ${canTeach(c, v.subject).length} teacher${canTeach(c, v.subject).length === 1 ? '' : 's'} who teach ${esc(s.short)}, balancing everyone's week.${v.picked && ix.teachers[v.picked] ? ` Now: ${esc(ix.teachers[v.picked].name)}.` : ''}` : `Nobody teaches ${esc(s.short)} yet: tick it under a teacher's "Subjects they can teach".`) : 'Samay picks a teacher who teaches the subject.')
+      : 'Teachers from any department can teach here.' })}
     ${guestNote}
     ${s ? fInput(m, 'periods', 'Periods a week', { type: 'number', placeholder: `Default: ${def}`, hint: `Leave blank to use ${def} (from the ${s.perWeek != null ? 'subject' : 'college rule'}).` }) : ''}`;
 }
@@ -4088,9 +4169,10 @@ function dataPage() {
     sections: () => [['Section', 'Course', 'Semester', 'Students', 'Lab groups'], list.sections.map(([s, i]) => `<tr>${td(esc(s.id), 'font-medium')}
       ${td(`${deptBadge(s.dept)} ${esc(courseOf(c, s.course)?.name || '–')}`)}${td(s.sem ?? '–')}${td(s.strength)}
       ${td(s.subs.length ? s.subs.map(u => `<span class="mr-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs">${esc(u.label)} · ${u.strength}</span>`).join('') : '<span class="text-xs text-slate-400">None (no labs)</span>')}${actions(i)}</tr>`)],
-    teachers: () => [['Name', 'Department', 'Teaches students of', 'Periods a week', 'Max a day', 'Unavailable'], list.teachers.map(([t, i]) => {
+    teachers: () => [['Name', 'Department', 'Can teach', 'Teaches students of', 'Periods a week', 'Max a day', 'Unavailable'], list.teachers.map(([t, i]) => {
       const other = [...(teachesIn[t.id] || [])].filter(d => d !== t.dept);
       return `<tr>${td(esc(t.name) + (f && t.dept !== f ? guestBadge(t.dept) : '') + (t.email ? `<div class="text-xs font-normal text-slate-500">${esc(t.email)}</div>` : ''), 'font-medium')}${td(deptBadge(t.dept))}
+        ${td((t.subjects || []).length ? t.subjects.map(x => `<span class="mr-1 inline-block rounded bg-indigo-50 px-1.5 py-0.5 text-xs text-indigo-700">${esc(c.subjects[x]?.short || x)}</span>`).join('') : '<span class="text-xs text-slate-400">–</span>')}
         ${td(teachesIn[t.id] ? deptChips(teachesIn[t.id]) + (other.length ? ' <span class="text-[11px] text-indigo-700">cross-department</span>' : '') : '<span class="text-xs text-slate-400">No classes yet</span>')}
         ${td(load[t.id] || 0)}${td(tMax(c, t))}${td(t.off ? fmtOff(t.off) : '<span class="text-slate-400">–</span>')}${actions(i)}</tr>`;
     })],
@@ -4105,7 +4187,7 @@ function dataPage() {
     assignments: () => [['Subject', 'Taught to', 'Teacher', 'Periods a week'], list.assignments.map(a => {
       const own = c.assignments[a.i][3] != null, T = ix.teachers[a.teacher], sd = groupDept(c, a.group);
       return `<tr>${td(`${esc(subj(c, a).name)} <span class="text-xs text-slate-400">${KIND[subj(c, a).kind].label}</span>`)}${td(`${deptBadge(sd)} ${esc(gLabel(c, a.group))}`)}
-        ${td(esc(T.name) + (T.dept !== sd ? guestBadge(T.dept) : ''))}${td(`${a.periods} <span class="text-xs ${own ? 'text-amber-700' : 'text-slate-400'}">${own ? 'set here' : 'default'}</span>`)}${actions(a.i)}</tr>`;
+        ${td(!T ? '<span class="text-sm font-medium text-red-700">Nobody teaches this yet</span>' : esc(T.name) + (T.dept !== sd ? guestBadge(T.dept) : '') + (a.auto ? ' <span class="ml-1 rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700" title="Samay picked this teacher. Choose one in Edit to fix it.">picked by Samay</span>' : ''))}${td(`${a.periods} <span class="text-xs ${own ? 'text-amber-700' : 'text-slate-400'}">${own ? 'set here' : 'default'}</span>`)}${actions(a.i)}</tr>`;
     })],
   };
   views.electives = () => [['Code', 'Elective group', 'Taken by', 'Subjects (students → batches)', 'Periods a week'], list.electives.map(([e, i]) => `<tr>
@@ -4124,7 +4206,7 @@ function dataPage() {
     courses: 'Courses (programmes) belong to a department, like B.Tech CSE or MCA. Sections belong to a course and semester.',
     reserved: 'Times kept free for some sections, for example an open elective that another department teaches at fixed times. No class of these sections is placed then.',
     electives: `Subjects students choose between, like Departmental Elective-I or an open elective. Type how many students chose each one: a subject with more than ${c.scheme.rules.electiveClassSize || 70} students is split into batches. While an elective runs, its sections have no other class.`,
-    assignments: `Who teaches what to whom. Lectures go to a whole section; labs go to one lab group; tutorials go to either. A teacher from another department is marked "Guest". Default: ${c.scheme.rules.lecturesPerWeek} lectures a week per subject.`,
+    assignments: `What each section studies. Lectures go to a whole section; labs go to one lab group; tutorials go to either. Leave the teacher as "Let Samay choose" and Samay picks someone who teaches the subject (ticked under the teacher's "Subjects they can teach"), balancing everyone's week; or choose one yourself. Default: ${c.scheme.rules.lecturesPerWeek} lectures a week per subject.`,
   }[tab];
   return `
   <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -4133,6 +4215,7 @@ function dataPage() {
     <div class="flex flex-wrap gap-2">
       ${tab !== 'departments' && !isHod() ? `<select onchange="state.deptFilter = this.value; render()" aria-label="Filter by department" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
         ${optionsHtml([['all', 'All departments'], ...c.departments.map(d => [d.id, d.name])], f || 'all')}</select>` : ''}
+      ${tab === 'assignments' && c.assignments.some(a => a[4]) ? btn('Pick teachers again', 'pickAgain()', 'secondary', 'users') : ''}
       ${COLUMNS[tab] ? btn('Import from Excel', `openImport('${tab}')`, 'secondary', 'table', 'data-tour="data-import"') : ''}${btn(`Add ${ENT[tab].one}`, `openForm('${tab}')`, 'primary', '', 'data-tour="data-add"')}</div>
   </div>
   <div class="mb-3 flex gap-1 overflow-x-auto border-b border-slate-200" data-tour="data-tabs">

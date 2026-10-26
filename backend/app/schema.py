@@ -119,6 +119,7 @@ class Teacher(Model):
     max_per_day: int | None = Field(None, ge=1)
     unavailable: list[tuple[str, int]] = []
     email: str | None = Field(None, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", description="For inviting them to sign in.")
+    subjects: list[str] = Field([], description="Subjects they can teach: Samay picks teachers for classes from these.")
 
 
 class Room(Model):
@@ -144,6 +145,7 @@ class Assignment(Model):
     group: str = Field(description='A section id ("CSE-3A") for lectures, or a lab group ("CSE-3A/A1") for labs.')
     teacher: str
     periods: int | None = Field(None, ge=1)
+    auto: bool = Field(False, description="The teacher was picked by Samay (from who teaches the subject), not chosen by hand.")
 
 
 class ElectiveOption(Model):
@@ -233,6 +235,8 @@ class CollegeData(Model):
             for day, period in t.unavailable:
                 if day not in self.scheme.days or not 1 <= period <= n_periods:
                     problems.append(f"{t.name} is marked unavailable on {day} P{period}, which isn't in the college week.")
+            if unknown := [x for x in t.subjects if x not in subjects]:
+                problems.append(f"{t.name} can teach {', '.join(unknown)}, but there's no such subject.")
         for r in self.rooms:
             if r.owner != "Shared" and r.owner not in depts:
                 problems.append(f"Room {r.id} belongs to an unknown department {r.owner}.")

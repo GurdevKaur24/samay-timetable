@@ -56,3 +56,25 @@ def test_gap_between_periods_must_be_a_break():
 
 def test_unknown_department_is_reported():
     assert "unknown department" in broken(lambda d: d["teachers"][0].update(dept="XYZ"))
+
+
+def test_teachers_list_the_subjects_they_can_teach():
+    d = load_college("demo-eng")
+    d["teachers"][0]["subjects"] = ["NOPE"]
+    with pytest.raises(ValidationError) as err:
+        CollegeData.model_validate(d)
+    assert "no such subject" in str(err.value)
+    d["teachers"][0]["subjects"] = [d["subjects"][0]["id"]]
+    d["assignments"][0]["auto"] = True
+    CollegeData.model_validate(d)
+
+
+def test_who_can_teach_what_and_auto_picks_dont_make_a_timetable_out_of_date():
+    from app.services.fingerprint import schedule_fingerprint
+    d = load_college("demo-eng")
+    before = schedule_fingerprint(d)
+    d["teachers"][0]["subjects"] = [d["subjects"][0]["id"]]
+    d["assignments"][0]["auto"] = True
+    assert schedule_fingerprint(d) == before
+    d["assignments"][0]["teacher"] = d["teachers"][1]["id"]
+    assert schedule_fingerprint(d) != before

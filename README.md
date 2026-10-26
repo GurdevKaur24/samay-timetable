@@ -146,7 +146,10 @@ The coordinator's menu is Home plus five numbered steps (a green tick when each 
 
 1. **Your week:** check working days, period times, breaks, lectures per subject a week, lab length and elective class size.
 2. **College data:** add (or import from Excel) departments, courses, sections with lab groups, teachers (with times they can't
-   teach), rooms and labs, subjects, and **teaching assignments** (who teaches which subject to which section or lab group).
+   teach, and the **subjects they can teach**), rooms and labs, subjects, and **teaching assignments** (which subject each
+   section or lab group studies). Leave the teacher as **Let Samay choose** (or the sheet's Teacher column empty) and Samay
+   picks someone who teaches the subject, balancing everyone's week; or choose a teacher yourself. **Pick teachers again**
+   rebalances the classes Samay picked.
    Add **Electives** and **Reserved times** if you have them.
 3. **Check for problems:** fix anything marked red.
 4. **Make the timetable:** Samay first finds a timetable with 0 clashes (seconds for a small college, about 20 s for one
