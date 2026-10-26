@@ -18,8 +18,8 @@ services:
         value: "1"
       - key: SAMAY_DEMO_READY      # at each start: generate + publish the demo college's timetable, student code DEMO-2026
         value: "1"
-      - key: SAMAY_SOLVE_SECONDS   # the free plan's CPU is small: big colleges need longer
-        value: "180"
+      - key: SAMAY_SOLVE_SECONDS   # the free plan's CPU is small: big colleges need longer (it stops sooner once done)
+        value: "600"
       - key: SAMAY_SOLVER_WORKERS  # the free plan has a small share of one CPU
         value: "2"
       - key: ANTHROPIC_API_KEY     # optional: turns on the AI assistant; leave empty to keep it off

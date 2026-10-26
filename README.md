@@ -26,9 +26,11 @@ Built for **Hackathon 1, Punjab Jobs AI Bootcamp (J-PAL South Asia)**, individua
 - [Project structure](#project-structure)
 
 ## Screenshots
-| Sign-in with one-click demo accounts | Fixing a clash: preview before anything is saved | A student's phone |
-|---|---|---|
-| ![Sign-in](docs/screenshots/sign-in.jpg) | ![Fix preview](docs/screenshots/fix-preview.jpg) | ![Student phone view](docs/screenshots/student-phone.jpg) |
+| Home page | The coordinator's Home: five guided steps |
+|---|---|
+| ![Home page](docs/screenshots/home.jpg) | ![Coordinator's Home](docs/screenshots/dashboard.jpg) |
+| **Fixing a clash: preview before anything is saved** | **A student's phone** |
+| ![Fix preview](docs/screenshots/fix-preview.jpg) | ![Student phone view](docs/screenshots/student-phone.jpg) |
 
 ## The problem
 Most colleges still build timetables by hand each semester. Departments fit their sections, labs and teachers into the
@@ -75,6 +77,9 @@ Each college sees only its own data and never learns which other colleges use Sa
   templates: one file per list, or one workbook with a sheet per list (each Data tab picks its sheet by name).
 - Timetable by **section, teacher or room**: colour-coded, lab blocks merged, lab groups side by side, reserved times greyed out.
 - **Print / save as PDF** (A4) and **Excel export**: one sheet per section and per teacher, plus every class in one list.
+- **Samay picks the teachers:** give each teacher the subjects they can teach, leave a class's teacher as **Let Samay
+  choose**, and Samay assigns someone, balancing everyone's week within their limits.
+- **Start with an empty college:** a private practice college (no sign-up) to try everything from day one.
 - Works on phones.
 
 **Editing, sharing and the AI assistant**
@@ -130,8 +135,8 @@ python -m venv .venv
 ```bash
 .\.venv\Scripts\python -m uvicorn app.main:app --port 8000
 ```
-Open **http://localhost:8000**. The first start creates a local database with two demo colleges and their demo
-accounts (one-click on the sign-in page). On macOS/Linux use `.venv/bin/python` instead of `.\.venv\Scripts\python`.
+Open **http://localhost:8000**. The first start creates a local database with the demo college and its demo
+accounts (one-click under **Try the demo**). On macOS/Linux use `.venv/bin/python` instead of `.\.venv\Scripts\python`.
 
 - **Start over with clean demo data:** stop the server, then run `.\.venv\Scripts\python -m app.seed --reset`.
 - **Turn on the AI assistant (optional):** set your Anthropic API key in the terminal before starting the server, e.g.
@@ -227,9 +232,9 @@ Set as environment variables before starting the server.
 | `SAMAY_DEMO_LOGIN` | `1` | One-click demo accounts on the sign-in page. **Set `0` for a real college.** |
 | `SAMAY_SIGNUP` | `1` | Lets new colleges create an account |
 | `SAMAY_COOKIE_SECURE` | `0` | Set `1` when served over HTTPS |
-| `SAMAY_SOLVE_SECONDS` | `120` | The most one generation run takes (a college of about 25 sections and 50 teachers has a first timetable in about 20 s) |
+| `SAMAY_SOLVE_SECONDS` | `120` (`600` on Render) | The most one generation run takes (a college of about 25 sections and 50 teachers has a first timetable in about 20 s) |
 | `SAMAY_SOLVE_PATIENCE` | `10` | Stop improving once the timetable hasn't got better for this many seconds |
-| `SAMAY_MAX_ROOM_CHOICES` | `6` (`4` on Render) | Rooms each class may be placed in (the smallest that fit, rotated): smaller and faster to solve |
+| `SAMAY_MAX_ROOM_CHOICES` | `6` (`4` on Render) | Rooms each class may be placed in (spread over all rooms that fit, big ones too): uses less memory and solves faster |
 | `SAMAY_SOLVER_MEMORY_MB` | `200` on Render, else none | Most memory the generator may use; it then stops and keeps its best timetable |
 | `SAMAY_SOLVER_WORKERS` | `8` | CPU threads per run (use 1–2 on small servers) |
 | `ANTHROPIC_API_KEY` | – | Turns on the AI assistant (`SAMAY_ASSISTANT=0` turns it off again) |
@@ -253,7 +258,7 @@ for a demo; a real college needs a paid plan with a disk (set `SAMAY_DB` to a pa
 cd backend
 .\.venv\Scripts\python -m pytest
 ```
-236 tests cover:
+266 tests cover:
 - the clash checker (a passing and a failing case for every rule);
 - the generator on both demo colleges, electives, reserved times and locks;
 - the pre-check and the data checks;

@@ -2507,7 +2507,7 @@ function dashboard() {
     ${card(`<div class="mb-3 flex items-center justify-between"><div class="font-medium">Departments${tip('Heads of department mark their department ready when its data is complete. You can change it here too.')}</div><span class="text-xs text-slate-500">Click a status to change it</span></div>
       <ul class="divide-y divide-slate-100">${c.departments.map(d => `
         <li class="flex items-center justify-between gap-2 py-2 text-sm"><span><span class="font-medium">${esc(d.name)}</span>
-          <span class="block text-xs text-slate-500">${(c.courses || []).filter(x => x.dept === d.id).length} courses · ${c.sections.filter(x => x.dept === d.id).length} sections · ${c.teachers.filter(t => t.dept === d.id).length} teachers</span></span>
+          <span class="block text-xs text-slate-500">${[[(c.courses || []).filter(x => x.dept === d.id).length, 'course'], [c.sections.filter(x => x.dept === d.id).length, 'section'], [c.teachers.filter(t => t.dept === d.id).length, 'teacher']].map(([n, w]) => `${n} ${w}${n === 1 ? '' : 's'}`).join(' · ')}</span></span>
         <button onclick="toggleDeptStatus('${esc(d.id)}')" title="Click to change" class="shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${d.status === 'review' ? 'bg-amber-50 text-amber-800 hover:bg-amber-100' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}">${d.status === 'review' ? 'Needs review' : 'Ready'}</button></li>`).join('')
         || `<li class="py-3 text-sm text-slate-500">No departments yet. <button onclick="state.dataTab = 'departments'; go('data')" class="font-medium text-indigo-600 hover:underline">Add one</button></li>`}</ul>`)}
     ${card(`<div class="mb-3 font-medium">Your week</div>
