@@ -74,6 +74,9 @@ Full product plan and roadmap: `docs/requirements.md`.
   The coordinator's menu is Home plus the five steps from `steps(c)` (Your week, College data, Check for problems, Make
   the timetable, Publish & share), each page ending with `nextBar`. First-visit guides: `TOURS['role:page']` lists
   `[data-tour id, title, text]`; elements carry `data-tour="..."`; seen guides are remembered in localStorage; `?` replays.
+  Every screen has an address (`#/timetable`, `#/data/teachers`, `#/signin`; `routeOf`/`applyRoute`), so Back,
+  Forward and refresh work. Signed in with a demo account, a Demo bar switches role in one click (`switchDemo`); the
+  public demo student code (DEMO-2026) comes with `/api/auth/demo-accounts`, never a college's own code.
 - `services/demo.py`: with `SAMAY_DEMO_READY` (on by default when `RENDER` is set) the server generates and publishes
   demo-eng's timetable in the background at start and turns on student code DEMO-2026, since the free plan starts empty.
 - **render.yaml**: deploys one free Render web service (API + page on one address, HTTPS cookies, 2 solver threads).

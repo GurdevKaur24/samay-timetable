@@ -96,3 +96,12 @@ def test_passwords_and_session_tokens_are_not_stored_in_plain_text(app, eng):
         stored_tokens = [r[0] for r in conn.execute("SELECT token_hash FROM sessions")]
     assert DEMO["demo-eng"]["password"] not in stored_password and stored_password.startswith("scrypt$")
     assert eng.cookies[COOKIE_NAME] not in stored_tokens
+
+
+def test_demo_accounts_show_only_the_fixed_public_student_code(app, eng, make_client):
+    visitor = make_client()
+    assert visitor.get("/api/auth/demo-accounts").json()["student_codes"] == {}  # no code turned on yet
+    app.state.db.set_student_code("demo-eng", "DEMO2026")
+    assert visitor.get("/api/auth/demo-accounts").json()["student_codes"] == {"Demo Engineering College": "DEMO-2026"}
+    eng.post("/api/student-access")  # the coordinator makes a new, private code: it is never listed
+    assert visitor.get("/api/auth/demo-accounts").json()["student_codes"] == {}

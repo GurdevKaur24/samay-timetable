@@ -8,6 +8,7 @@ from ..db import SESSION_SECONDS, Database
 from ..schema import CollegeData
 from ..security import DUMMY_HASH, verify_password
 from ..seed import DEMO_USERS
+from ..services import demo
 from ..services.links import email_link
 from ..services.new_college import college_id_for, empty_college
 
@@ -57,14 +58,18 @@ def demo_users(request: Request) -> list[dict]:
 
 @router.get("/demo-accounts")
 def demo_accounts(request: Request, db: Database = Depends(get_db)):
-    out = []
+    out, student_codes = [], {}
     for u in demo_users(request):
         row = db.find_user_by_email(u["email"])
         data = db.get_college_data(row["college_id"]) if row else None
         if data:
             out.append({"email": u["email"], "role": u["role"], "role_label": ROLES.get(u["role"], u["role"]), "name": u["name"],
-                        "college": data["name"], "place": data.get("place", "")})
-    return {"accounts": out}
+                        "college": data["name"], "place": data.get("place", ""), "published": db.published(row["college_id"]) is not None})
+            # The fixed public demo code (e.g. DEMO-2026), so visitors can try the student view; never a college's own code.
+            fixed = demo.READY.get(row["college_id"])
+            if fixed and db.student_code(row["college_id"]) == fixed:
+                student_codes[data["name"]] = f"{fixed[:4]}-{fixed[4:]}"
+    return {"accounts": out, "student_codes": student_codes}
 
 
 class DemoIn(BaseModel):

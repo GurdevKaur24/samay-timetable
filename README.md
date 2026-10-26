@@ -104,7 +104,7 @@ Each college sees only its own data and never learns which other colleges use Sa
 
 ## Try it
 ### Online
-Open the live demo link above and click **Try the demo**. Pick a college, then **Coordinator**, **Head of department** or
+Open the live demo link above and click **Try the demo**. Pick a college, then **Coordinator**, **Head of department**, **Student** or
 **Teacher**. **Demo Engineering College** is a full example: its timetable is already generated and published, so every
 role shows it straight away. **Guru Nanak Dev Engineering College (demo)** is almost empty, so you can try entering a real
 college's data. **Students:** tap **I'm a student** and enter the code **DEMO-2026** (Demo Engineering College). 
@@ -175,7 +175,8 @@ today's classes, or open **All timetables** for any section, teacher or room. Mo
 Ask the assistant simple questions like "Where is my next class?".
 
 ## 5-minute demo
-1. **Home page:** what Samay is, then **Try the demo** → **Demo Engineering College → Coordinator**.
+1. **Home page:** what Samay is, then **Try the demo** → **Demo Engineering College → Coordinator**. Once inside, the
+   **Demo** bar at the top switches between Coordinator, Head of department, Teacher and Student in one click.
 2. **Home:** the next step card, the five steps and department status. Follow the quick guide (or click **?**).
 3. **Timetable:**
    - Switch Section / Teacher / Room. Notice A1/A2 doing different labs at the same time, and the green "0 clashes · checked" badge.
